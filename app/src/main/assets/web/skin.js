@@ -7,7 +7,8 @@
 (function () {
   'use strict';
   if (window.top !== window) return;
-  if (window.MoaSkin && window.MoaSkin.version === '3.0.0') return;
+  if (window.MoaSkin && window.MoaSkin.version === '3.0.1') return;
+  if (window.MoaSkin && typeof window.MoaSkin.disable === 'function') window.MoaSkin.disable();
 
   var themes = {
     mail: { noun: '주제함', name: '메일함' },
@@ -341,15 +342,32 @@
       row.setAttribute('data-moa-row','true'); row.setAttribute('data-moa-renderer','3');
       data.original.setAttribute('data-moa-list-source','true'); row.appendChild(entry); rows.set(row,state);
       if (current.theme === 'sheet') {
-        state.sheetScroll = function () { if (current && current.theme === 'sheet') syncSheetScroll(row.scrollLeft); };
+        state.sheetScroll = function () { if (current && current.theme === 'sheet') receiveSheetScroll(row); };
         row.addEventListener('scroll',state.sheetScroll,{passive:true});
       }
     });
   }
 
+  // Scroll events caused by synchronizing another row arrive asynchronously.
+  // Do not replay those writes as a fresh drag after the user moves a new row.
+  var sheetScrollWrites = new WeakMap();
+  function receiveSheetScroll(source) {
+    var expected = sheetScrollWrites.get(source);
+    if (expected !== undefined && Math.abs(source.scrollLeft-expected) <= 1) return;
+    sheetScrollWrites.delete(source);
+    syncSheetScroll(source.scrollLeft);
+  }
+
   function syncSheetScroll(left) {
-    if (sheetHeader && Math.abs(sheetHeader.scrollLeft-left) > 1) sheetHeader.scrollLeft = left;
-    rows.forEach(function (state,row) { if (Math.abs(row.scrollLeft-left) > 1) row.scrollLeft = left; });
+    function move(target) {
+      if (!target || Math.abs(target.scrollLeft-left) <= 1) return;
+      target.scrollLeft = left;
+      // Read back the browser-clamped position rather than assuming it accepted
+      // the requested offset (a fold/resize can change the available width).
+      sheetScrollWrites.set(target,target.scrollLeft);
+    }
+    move(sheetHeader);
+    rows.forEach(function (state,row) { move(row); });
   }
 
   function updatePresentation() {
@@ -440,7 +458,7 @@
       var columns = node('div','moa-sheet-columns');
       ['#','A · 제목','B · 작성자','C · 댓글','D · 조회'].forEach(function (label) { columns.appendChild(node('span','',label)); });
       sheetHeader.appendChild(columns); list.parentNode.insertBefore(sheetHeader,list);
-      sheetHeader.addEventListener('scroll',function () { if (current && current.theme === 'sheet') syncSheetScroll(sheetHeader.scrollLeft); },{passive:true});
+      sheetHeader.addEventListener('scroll',function () { if (current && current.theme === 'sheet') receiveSheetScroll(sheetHeader); },{passive:true});
     }
     renderEntries(list);
   }
@@ -450,6 +468,48 @@
     rows.forEach(function (state,row) { restoreRow(row,state); });
     ownedNodes.forEach(function (element) { element.remove(); });
     ownedNodes.clear(); rows.clear(); pageHeader = null; listHeading = null; sheetHeader = null;
+  }
+
+  // This is not an ad blocker. It invokes only the site's verified close
+  // control for its fixed footer slot, and only when explicitly requested.
+  // Ordinary sponsor links, no-close slots and authored content are untouched.
+  function availableAdCloses() {
+    if (!pageType() || typeof window.$ !== 'function') return [];
+    var handled = new Set();
+    var closePattern = /^\s*\$\s*\(\s*this\s*\)\s*\.\s*closest\s*\(\s*(['"])\.adv-group\1\s*\)\s*\.\s*hide\s*\(\s*\)\s*;?\s*(?:return\s+false\s*;?\s*)?$/;
+    return Array.from(document.querySelectorAll('section.adv-group.pwlink a[onclick]')).filter(function (button) {
+      var slot = button.closest('section.adv-group.pwlink');
+      var wrapper = button.parentElement;
+      if (!slot || !wrapper || wrapper.parentElement !== slot || handled.has(slot)) return false;
+      if (button.closest('.thum-txtin,#textbox,[contenteditable],.all-comment-lst,#writeForm,#comment_write,.gall-detail-lnktb,.moa-entry')) return false;
+      if (!wrapper.querySelector('#footer_bottom_overlay') || getComputedStyle(wrapper).position !== 'fixed') return false;
+      if (!closePattern.test(button.getAttribute('onclick') || '')) return false;
+      if (!/^(?:#|javascript\s*:\s*;?)?$/i.test((button.getAttribute('href') || '').trim())) return false;
+      if (!button.isConnected || button.ownerDocument !== document) return false;
+      for (var ancestor = button; ancestor; ancestor = ancestor.parentElement) {
+        var style = getComputedStyle(ancestor);
+        if (style.display === 'none' || style.visibility === 'hidden' || Number(style.opacity) === 0) return false;
+      }
+      var bounds = button.getBoundingClientRect();
+      if (bounds.width <= 0 || bounds.height <= 0) return false;
+      handled.add(slot); return true;
+    });
+  }
+
+  function closeAvailableAds() {
+    var candidates = availableAdCloses();
+    var requested = 0, closed = 0;
+    candidates.forEach(function (button) {
+      // Revalidate after each source callback; another control can have been
+      // replaced or hidden by the site's own close handler.
+      if (availableAdCloses().indexOf(button) < 0) return;
+      var slot = button.closest('section.adv-group.pwlink');
+      try {
+        button.click(); requested++;
+        if (!slot.isConnected || getComputedStyle(slot).display === 'none' || getComputedStyle(slot).visibility === 'hidden') closed++;
+      } catch (_) { }
+    });
+    return {available:candidates.length,requested:requested,closed:closed};
   }
 
   function observe() {
@@ -555,7 +615,7 @@
   }
 
   window.MoaSkin = Object.freeze({
-    version: '3.0.0', apply: apply, disable: disable,
+    version: '3.0.1', apply: apply, disable: disable, closeAvailableAds: closeAvailableAds,
     status: function () { return Object.assign({}, lastStatus); }
   });
 })();

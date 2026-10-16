@@ -11,7 +11,7 @@ html[data-moa-theme="post"] { --moa-bg:#fff; --moa-accent:#17191c; --moa-tint:#f
 html[data-moa-theme="photogram"] { --moa-bg:#faf9fc; --moa-accent:#a336a6; --moa-tint:#fff0f5; --moa-radius:18px; --moa-mark:'▣'; }
 html[data-moa-theme="sheet"] { --moa-bg:#f2f5f3; --moa-accent:#18794e; --moa-tint:#e8f3ec; --moa-line:#cbded2; --moa-radius:0px; --moa-mark:'▦'; --moa-shadow:none; }
 html[data-moa-theme="cafe"] { --moa-bg:#f2f7f3; --moa-accent:#16823e; --moa-tint:#e6f6eb; --moa-radius:14px; --moa-mark:'♧'; }
-html[data-moa-theme="ebook"] { --moa-bg:#f5f0e5; --moa-paper:#fffcf4; --moa-ink:#40372f; --moa-muted:#88786a; --moa-line:#e5dccb; --moa-accent:#826247; --moa-tint:#eee5d3; --moa-radius:4px; --moa-mark:'▥'; --moa-shadow:none; }
+html[data-moa-theme="ebook"] { --moa-bg:#f5f0e5; --moa-paper:#fffcf4; --moa-ink:#40372f; --moa-muted:#75665a; --moa-line:#e5dccb; --moa-accent:#826247; --moa-tint:#eee5d3; --moa-radius:4px; --moa-mark:'▥'; --moa-shadow:none; }
 html[data-moa-theme="magazine"] { --moa-bg:#f7f5f0; --moa-ink:#242424; --moa-accent:#b53f35; --moa-tint:#fbebe7; --moa-radius:0px; --moa-mark:'▤'; --moa-shadow:none; }
 html[data-moa-theme][data-moa-dark="true"] { --moa-bg:#101318; --moa-paper:#1b2027; --moa-ink:#edf0f4; --moa-muted:#a5b0bf; --moa-line:#343c47; --moa-tint:#263344; --moa-accent:#9dbaff; --moa-on-accent:#14223f; --moa-shadow:none; color-scheme:dark; }
 html[data-moa-theme="post"][data-moa-dark="true"] { --moa-bg:#080a0d; --moa-paper:#101215; --moa-accent:#f0f2f5; --moa-on-accent:#111; --moa-tint:#24272c; }
@@ -477,4 +477,99 @@ html[data-moa-theme="magazine"][data-moa-layout="app"][data-moa-dark="true"] { -
   html[data-moa-theme="magazine"][data-moa-layout="app"] .gall-detail-lst { padding-left:16px; padding-right:16px; }
   html[data-moa-theme="ebook"][data-moa-layout="app"] .gall-detail-lst > li[data-moa-row],
   html[data-moa-theme="magazine"][data-moa-layout="app"] .gall-detail-lst > li[data-moa-row] { padding-left:0; padding-right:0; }
+}
+
+/* Complete the original site's control palette. These selectors deliberately
+   target navigation/forms, never ad creatives or author-formatted article text.
+   Paper is the reading/form surface; bg is the outer gutter; tint identifies a
+   selected group. Source night CSS uses !important, so these scoped overrides
+   must do the same without resetting the document or recreating live controls. */
+html[data-moa-theme][data-moa-layout="app"] { --moa-action-ink:var(--moa-accent); --moa-action-fill:var(--moa-accent); --moa-action-on:var(--moa-on-accent); }
+html[data-moa-theme="post"][data-moa-layout="app"] { --moa-action-ink:#0969ab; --moa-action-fill:#0969ab; --moa-action-on:#fff; }
+html[data-moa-theme="post"][data-moa-layout="app"][data-moa-dark="true"] { --moa-action-ink:#55b5f5; }
+html[data-moa-theme="cafe"][data-moa-layout="app"]:not([data-moa-dark="true"]) { --moa-action-ink:#087c49; --moa-action-fill:#087c49; }
+
+html[data-moa-theme][data-moa-layout="app"] .con-search-box {
+  padding:4px 0 12px; background:var(--moa-paper) !important; border-color:var(--moa-line) !important; color:var(--moa-ink) !important;
+}
+html[data-moa-theme][data-moa-layout="app"] .con-search-box .con-search-inner {
+  align-items:center; min-width:0; min-height:48px; border:1px solid var(--moa-line) !important; border-radius:12px;
+  background:var(--moa-paper) !important; color:var(--moa-ink) !important;
+}
+html[data-moa-theme][data-moa-layout="app"] .con-search-box .sel-box { background:var(--moa-paper) !important; color:var(--moa-ink) !important; flex:0 0 auto; }
+html[data-moa-theme][data-moa-layout="app"] .con-search-box .con-search-inner .ipt-sch {
+  min-width:0; min-height:48px; padding:10px 52px 10px 8px; font-size:calc(14px * var(--moa-font-scale));
+  background:var(--moa-paper) !important; color:var(--moa-ink) !important; border-color:var(--moa-line) !important;
+}
+html[data-moa-theme][data-moa-layout="app"] .con-search-box .con-search-inner .sel {
+  width:112px; min-height:48px; padding:10px 24px 10px 10px; font-size:calc(13px * var(--moa-font-scale));
+  background:var(--moa-paper) !important; color:var(--moa-ink) !important; border-color:var(--moa-line) !important;
+}
+html[data-moa-theme][data-moa-layout="app"] .con-search-box .con-search-inner .rt { top:50%; transform:translateY(-50%); display:flex; }
+html[data-moa-theme][data-moa-layout="app"] .con-search-box .sp-btn-sch {
+  position:relative; min-width:48px; min-height:48px; color:var(--moa-action-ink) !important; background:none !important;
+}
+html[data-moa-theme][data-moa-layout="app"] .con-search-box .sp-btn-sch::after {
+  content:''; position:absolute; width:14px; height:14px; top:14px; left:13px; border:2px solid currentColor; border-radius:50%;
+  background:none !important; color:inherit; transform:none; box-sizing:border-box;
+}
+html[data-moa-theme][data-moa-layout="app"] .con-search-box .sp-btn-sch::before {
+  content:''; position:absolute; width:9px; height:2px; top:29px; left:25px; background:currentColor; transform:rotate(45deg); border-radius:1px;
+}
+html[data-moa-theme][data-moa-layout="app"] .con-search-box .sel-box::after,
+html[data-moa-theme][data-moa-layout="app"] .all-comment-tit .sel-box::after {
+  content:''; width:7px; height:7px; top:50%; right:10px; border-right:1.5px solid var(--moa-muted); border-bottom:1.5px solid var(--moa-muted);
+  background:none !important; transform:translateY(-65%) rotate(45deg); pointer-events:none;
+}
+html[data-moa-theme][data-moa-layout="app"] .con-search-box .ipt-sch::placeholder,
+html[data-moa-theme][data-moa-layout="app"] .comment-write :is(.ipt,.comment-caption)::placeholder { color:var(--moa-muted) !important; opacity:1; }
+html[data-moa-theme][data-moa-layout="app"] :is(.con-search-box,.comment-write) :is(input,textarea,select,button):focus-visible {
+  outline:2px solid var(--moa-action-ink); outline-offset:-3px;
+}
+
+html[data-moa-theme][data-moa-layout="app"] .paging.alg-full {
+  display:flex; align-items:center; gap:6px; padding:12px; background:var(--moa-paper) !important; color:var(--moa-ink) !important;
+}
+html[data-moa-theme][data-moa-layout="app"] .paging.alg-full .paging-inner { display:flex; align-items:center; justify-content:center; flex:1; min-width:0; width:auto; height:auto; padding:0; }
+html[data-moa-theme][data-moa-layout="app"] .paging.alg-full .paging-inner a { display:flex; align-items:center; justify-content:center; min-height:48px; min-width:30px; color:var(--moa-ink) !important; }
+html[data-moa-theme][data-moa-layout="app"] .paging.alg-full .paging-inner strong { width:auto; font-size:calc(14px * var(--moa-font-scale)); color:var(--moa-action-ink) !important; }
+html[data-moa-theme][data-moa-layout="app"] .paging.alg-full :is(.prev,.next,.sch-move) {
+  position:relative; inset:auto; display:block; flex:0 0 48px; width:48px; height:48px; margin:0; border:1px solid var(--moa-line) !important; border-radius:10px;
+  background:var(--moa-paper) !important; color:var(--moa-action-ink) !important; box-sizing:border-box;
+}
+html[data-moa-theme][data-moa-layout="app"] .paging.alg-full :is(.prev,.next)::after {
+  content:''; position:absolute; left:19px; top:18px; width:9px; height:9px; margin:0;
+  border-top:2px solid currentColor; border-right:2px solid currentColor; background:none !important; color:inherit; transform:rotate(45deg);
+}
+html[data-moa-theme][data-moa-layout="app"] .paging.alg-full .prev::after { left:21px; transform:rotate(-135deg); }
+html[data-moa-theme][data-moa-layout="app"] .paging.alg-full .sch-move { background:var(--moa-accent) !important; color:var(--moa-on-accent) !important; }
+html[data-moa-theme][data-moa-layout="app"] .paging.alg-full .sch-move::after {
+  content:'↗'; position:absolute; inset:0; display:flex; align-items:center; justify-content:center; width:auto; height:auto; margin:0;
+  font:24px/1 system-ui,sans-serif; color:inherit; background:none !important; transform:none;
+}
+html[data-moa-theme][data-moa-layout="app"] .btn-justify-area { background:var(--moa-paper) !important; border-color:var(--moa-line) !important; }
+html[data-moa-theme][data-moa-layout="app"] .btn-justify-area :is(.btn-jusline-gray,.btn-jusline-blue) {
+  min-height:48px; height:auto; padding:10px 8px; border-color:var(--moa-line) !important; background:var(--moa-paper) !important; color:var(--moa-ink) !important;
+}
+html[data-moa-theme][data-moa-layout="app"] :is(.btn-justify-area .btn-jusline-inblue,.comment-write .btn-comment-write) {
+  min-height:48px; height:auto; padding:10px 12px; background:var(--moa-action-fill) !important; color:var(--moa-action-on) !important; border-color:var(--moa-action-fill) !important;
+}
+
+html[data-moa-theme][data-moa-layout="app"] .all-comment .all-comment-tit,
+html[data-moa-theme][data-moa-layout="app"] .all-comment .all-comment-tit :is(.tit-box,.tit,.ct,.box a,.sel-box,.sel) {
+  color:var(--moa-ink) !important; background:var(--moa-paper) !important; border-color:var(--moa-line) !important;
+}
+html[data-moa-theme][data-moa-layout="app"] .all-comment .all-comment-tit .sel-box { height:auto; }
+html[data-moa-theme][data-moa-layout="app"] .all-comment .all-comment-tit .sel-box .sel { min-height:48px; padding-right:24px; }
+html[data-moa-theme][data-moa-layout="app"] :is(#comment_write,.comment-write) :is(.who,.who-txt,.who-lst,.ipt,.code,.comment-caption,.btm-wrt-btns) {
+  background:var(--moa-paper) !important; color:var(--moa-ink) !important; border-color:var(--moa-line) !important;
+}
+html[data-moa-theme][data-moa-layout="app"] :is(#comment_write,.comment-write) .who-lst li { border-color:var(--moa-line) !important; }
+html[data-moa-theme][data-moa-layout="app"] .comment-write .who-txt { padding:12px 16px; }
+html[data-moa-theme][data-moa-layout="app"] .comment-write .btm-wrt-btns { height:auto; min-height:48px; }
+html[data-moa-theme][data-moa-layout="app"] .comment-write .btm-wrt-btns .lt button { color:var(--moa-ink); }
+@media(max-width:360px) {
+  html[data-moa-theme][data-moa-layout="app"] .con-search-box .con-search-inner { margin-inline:8px; }
+  html[data-moa-theme][data-moa-layout="app"] .con-search-box .con-search-inner .sel { width:94px; font-size:12px; padding-left:7px; }
+  html[data-moa-theme][data-moa-layout="app"] .con-search-box .con-search-inner .ipt-sch { font-size:13px; }
 }

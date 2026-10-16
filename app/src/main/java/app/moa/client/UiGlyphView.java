@@ -101,6 +101,10 @@ final class UiGlyphView extends View {
                 canvas.drawCircle(10.5f, 10.5f, 6.8f, paint);
                 canvas.drawLine(15.6f, 15.6f, 21, 21, paint);
                 break;
+            case "close":
+                canvas.drawLine(6, 6, 18, 18, paint);
+                canvas.drawLine(18, 6, 6, 18, paint);
+                break;
             case "edit":
                 canvas.drawRoundRect(new RectF(3, 5, 19, 21), 3, 3, paint);
                 path.moveTo(10, 14); path.lineTo(11, 10); path.lineTo(19, 2);

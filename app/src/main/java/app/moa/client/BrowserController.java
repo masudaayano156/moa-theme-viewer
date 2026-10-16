@@ -85,6 +85,8 @@ public final class BrowserController {
     private String css = "", script = "", favoritesScript = "", draftScript = "", recoveryUrl = "", draftOwner = "";
     private int lastDraftPromptGeneration = -1;
     private AlertDialog draftDialog, permissionDialog;
+    private NavigationCheck navigationCheck;
+    private PageContext approvedNavigationContext;
     private ScriptHandler documentScript;
     private ValueCallback<Uri[]> fileCallback;
     private WebView fileOwner, permissionOwner;
@@ -118,6 +120,7 @@ public final class BrowserController {
     }
 
     public View getView() { return container; }
+
     public void openAccountFavorites() {
         navigationIntentGeneration++;
         openFavoritesPending = true;
@@ -252,6 +255,7 @@ public final class BrowserController {
     }
 
     public void setTheme(ThemeSpec theme, boolean dark) {
+        cancelNavigationGuard();
         this.theme = theme == null ? ThemeSpec.MAIL : theme;
         this.dark = dark;
         container.setBackgroundColor(this.theme.palette(dark).background);
@@ -276,7 +280,7 @@ public final class BrowserController {
             listener.onError("먼저 글을 작성할 곳을 열어 주세요."); return;
         }
         // Use the site's own visible action, preserving server routing and permissions.
-        String find = "(()=>{const es=[...document.querySelectorAll('a,button,input[type=button]')];"
+        String find = "(()=>{if(document.querySelector('#writeForm'))return 'already-open';const es=[...document.querySelectorAll('a,button,input[type=button]')];"
             + "const el=es.find(e=>e.getClientRects().length && /^(글쓰기|글 쓰기)$/.test((e.innerText||e.value||e.getAttribute('aria-label')||'').trim()));"
             + "if(el){el.click();return 'opened';}return document.querySelector('#writeForm')?'already-open':'missing';})()";
         web.evaluateJavascript(find, result -> {
@@ -354,6 +358,7 @@ public final class BrowserController {
                 return;
             }
             loading = false;
+            if (UrlPolicy.canTheme(url)) view.evaluateJavascript(draftScript, null);
             applyTheme();
             listener.onPageState(view.getTitle(), url, false);
             offerDraftRestore(url);
@@ -558,6 +563,7 @@ public final class BrowserController {
     }
 
     private void cancelPageRequests(WebView view) {
+        if (view == web) cancelNavigationGuard();
         SiteDialog siteDialog = siteDialogs.get(view);
         if (siteDialog != null) siteDialog.finish(false);
         if (fullscreenOwner == view) hideFullscreen();
@@ -668,9 +674,8 @@ public final class BrowserController {
         try {
             if (!WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) return;
             if (documentScript != null) { documentScript.remove(); documentScript = null; }
-            if (!original && !script.isEmpty()) {
-                documentScript = WebViewCompat.addDocumentStartJavaScript(web, skinSource(), Collections.singleton("https://m.dcinside.com"));
-            }
+            String source = draftScript + ((!original && !script.isEmpty()) ? "\n" + skinSource() : "");
+            documentScript = WebViewCompat.addDocumentStartJavaScript(web, source, Collections.singleton("https://m.dcinside.com"));
         } catch (RuntimeException | LinkageError unavailableProvider) {
             // Older or unavailable providers still receive the onPageFinished skin.
             documentScript = null;
@@ -816,6 +821,7 @@ public final class BrowserController {
 
     private void updateDraftOwner(String owner) {
         if (draftOwner.equals(owner)) return;
+        cancelNavigationGuard();
         invalidatePendingDownload("계정 정보가 변경되어 저장을 취소했습니다. 파일을 다시 선택해 주세요.");
         draftOwner = owner;
         accountGeneration++;
@@ -828,15 +834,130 @@ public final class BrowserController {
         if (draftDialog != null) { draftDialog.dismiss(); draftDialog = null; }
     }
 
+    /** Native navigation checks the actual editor; opening a writer once is not a dirty flag. */
+    public void guardNavigation(Runnable action) {
+        guardNavigation(action, null);
+    }
+
+    public void guardNavigation(Runnable action, Runnable stay) {
+        if (destroyed || action == null || activity.isFinishing() || activity.isDestroyed()) return;
+        if (navigationCheck != null) return;
+        if (!UrlPolicy.canTheme(getUrl())) { action.run(); return; }
+        NavigationCheck check = new NavigationCheck(action, stay);
+        navigationCheck = check;
+        handler.postDelayed(check.timeout, 1500);
+        try {
+            check.context.source.evaluateJavascript(draftScript + ";JSON.stringify(window.MoaDrafts?window.MoaDrafts.navigationState("
+                    + JSONObject.quote(check.context.url) + "):{state:'unknown'})", result -> {
+                String state = "unknown";
+                try {
+                    Object decoded = new org.json.JSONTokener(result == null ? "null" : result).nextValue();
+                    state = new JSONObject(decoded instanceof String ? (String) decoded : "{}").optString("state", "unknown");
+                } catch (Exception ignored) { }
+                check.answer(state);
+            });
+        } catch (RuntimeException unavailableRenderer) { check.answer("unknown"); }
+    }
+
+    public void cancelNavigationGuard() {
+        NavigationCheck check = navigationCheck;
+        navigationCheck = null;
+        if (check == null) return;
+        handler.removeCallbacks(check.timeout);
+        if (check.dialog != null) { check.dialog.dismiss(); check.dialog = null; }
+    }
+
+    private final class NavigationCheck {
+        final PageContext context = new PageContext();
+        final Runnable action;
+        final Runnable stay;
+        final Runnable timeout = () -> answer("unknown");
+        boolean answered;
+        AlertDialog dialog;
+        NavigationCheck(Runnable action, Runnable stay) { this.action = action; this.stay = stay; }
+        boolean isCurrent() {
+            return navigationCheck == this && context.isCurrent() && !activity.isFinishing() && !activity.isDestroyed();
+        }
+        void answer(String state) {
+            if (navigationCheck != this || answered) return;
+            if (!isCurrent()) { cancelNavigationGuard(); return; }
+            answered = true;
+            handler.removeCallbacks(timeout);
+            if ("clean".equals(state)) { approve(); return; }
+            boolean dirty = "dirty".equals(state);
+            dialog = new AlertDialog.Builder(activity, dark ? android.R.style.Theme_DeviceDefault_Dialog_Alert
+                    : android.R.style.Theme_Material_Light_Dialog_Alert)
+                    .setTitle(dirty ? "작성 중인 내용을 두고 이동할까요?" : "현재 페이지에서 이동할까요?")
+                    .setMessage(dirty ? "아직 등록하지 않은 글·댓글 또는 첨부파일이 있습니다. 이동하면 작성 내용이 사라질 수 있어요."
+                            : "현재 작성 상태를 확인하지 못했습니다. 입력하거나 첨부한 내용이 있다면 이동할 때 사라질 수 있어요.")
+                    .setNegativeButton(dirty ? "계속 작성" : "머무르기", (d, w) -> {
+                        if (!isCurrent()) return;
+                        cancelNavigationGuard();
+                        if (stay != null) stay.run();
+                    })
+                    .setPositiveButton("이동", (d, w) -> approve()).create();
+            dialog.setOnDismissListener(ignored -> {
+                if (navigationCheck == this) cancelNavigationGuard();
+            });
+            dialog.show();
+            int accent = theme.palette(dark).accent;
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setTextColor(accent);
+            dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setTextColor(accent);
+        }
+        void approve() {
+            if (!isCurrent()) {
+                if (navigationCheck == this) cancelNavigationGuard();
+                return;
+            }
+            boolean explicitlyApproved = dialog != null;
+            cancelNavigationGuard();
+            approvedNavigationContext = explicitlyApproved ? context : null;
+            try { action.run(); }
+            finally { approvedNavigationContext = null; }
+        }
+    }
+
+    /** Only a deliberate user action invokes the site's existing close buttons. */
+    public void closeDismissibleAds() {
+        if (destroyed) return;
+        if (!UrlPolicy.canTheme(getUrl())) {
+            Toast.makeText(activity, "이 화면에는 닫기 버튼이 있는 광고가 없어요", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        PageContext context = new PageContext();
+        context.source.evaluateJavascript(script + ";JSON.stringify(window.MoaSkin?window.MoaSkin.closeAvailableAds():{available:0,requested:0,closed:0})", result -> {
+            if (!context.isCurrent()) return;
+            int requested = 0;
+            try {
+                Object decoded = new org.json.JSONTokener(result == null ? "null" : result).nextValue();
+                requested = Math.max(0, new JSONObject(decoded instanceof String ? (String) decoded : "{}").optInt("requested", 0));
+            } catch (Exception ignored) { }
+            Toast.makeText(activity, requested > 0 ? "닫기 버튼이 있는 광고 " + requested + "개에 닫기를 실행했어요"
+                    : "이 화면에는 닫기 버튼이 있는 광고가 없어요", Toast.LENGTH_SHORT).show();
+        });
+    }
+
     /** Text drafts are scoped to the verified account and document, never passwords/tokens. */
     public void snapshotDraft(Runnable after) {
         if (destroyed) return;
         if (!UrlPolicy.canTheme(getUrl()) || draftOwner.isEmpty()) { if (after != null) after.run(); return; }
         PageContext context = new PageContext();
+        boolean allowTimedNavigation = after != null && approvedNavigationContext != null && approvedNavigationContext.isCurrent();
+        boolean[] completed = {false};
+        Runnable proceed = () -> {
+            if (completed[0]) return;
+            completed[0] = true;
+            if (after != null && context.isCurrent()) after.run();
+        };
+        // Only an explicit discard/move confirmation may proceed when the renderer
+        // stops answering. Ordinary background snapshots never get that permission.
+        if (allowTimedNavigation) handler.postDelayed(proceed, 1000);
         String capture = draftScript + ";JSON.stringify(window.MoaDrafts?window.MoaDrafts.capture(" + JSONObject.quote(context.url)
             + "):{eligible:false,fields:[]})";
         context.source.evaluateJavascript(capture, result -> {
-            if (!context.isCurrent()) return;
+            if (completed[0]) return;
+            handler.removeCallbacks(proceed);
+            if (!context.isCurrent()) { completed[0] = true; return; }
             try {
                 Object decoded = new org.json.JSONTokener(result).nextValue();
                 JSONObject snapshot = new JSONObject(decoded instanceof String ? (String) decoded : "{}");
@@ -847,7 +968,7 @@ public final class BrowserController {
                     else drafts.edit().remove(key).commit();
                 }
             } catch (Exception ignored) { }
-            if (after != null && context.isCurrent()) after.run();
+            proceed.run();
         });
     }
     private void offerDraftRestore(String url) {
@@ -893,6 +1014,7 @@ public final class BrowserController {
     }
     public void onPause() {
         if (!destroyed) {
+            cancelNavigationGuard();
             hideFullscreen(); snapshotDraft(null); CookieManager.getInstance().flush(); web.onPause();
             for (WebView popup : new ArrayList<>(popups.keySet())) popup.onPause();
         }
@@ -905,6 +1027,7 @@ public final class BrowserController {
     }
     public void destroy() {
         if (destroyed) return;
+        cancelNavigationGuard();
         destroyed = true; handler.removeCallbacksAndMessages(null);
         for (SiteDialog request : new ArrayList<>(siteDialogs.values())) request.finish(false);
         pendingDownload = null;

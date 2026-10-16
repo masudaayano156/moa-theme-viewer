@@ -1,8 +1,27 @@
 /* Theme-specific article renderers. This stylesheet only lays out generated
    community entries. Source advertising and notice rows are never selected. */
 html[data-moa-layout="app"] .moa-list-heading { background:var(--moa-paper); }
-html[data-moa-theme="post"][data-moa-layout="app"] { --moa-accent:#1d9bf0; --moa-on-accent:#fff; }
-html[data-moa-theme="post"][data-moa-layout="app"][data-moa-dark="true"] { --moa-bg:#000; --moa-paper:#000; --moa-line:#2f3336; --moa-tint:#16181c; --moa-accent:#1d9bf0; --moa-on-accent:#fff; }
+/* Match ThemeSpec.palette: the WebView and native toolbar share the same
+   background, reading surface, type and action colors in every theme. Tints
+   remain local selected-state fills, not a second unrelated page palette. */
+html[data-moa-theme][data-moa-layout="app"]:not([data-moa-dark="true"]) { --moa-ink:#20252c; --moa-muted:#5e6977; }
+html[data-moa-theme="mail"][data-moa-layout="app"]:not([data-moa-dark="true"]) { --moa-bg:#f6f8fc; --moa-paper:#fff; --moa-line:#dde3eb; --moa-accent:#255bb7; --moa-on-accent:#fff; }
+html[data-moa-theme="post"][data-moa-layout="app"]:not([data-moa-dark="true"]) { --moa-bg:#fff; --moa-paper:#fff; --moa-line:#eff3f4; --moa-accent:#1d9bf0; --moa-on-accent:#fff; }
+html[data-moa-theme="photogram"][data-moa-layout="app"]:not([data-moa-dark="true"]) { --moa-bg:#fff; --moa-paper:#fff; --moa-line:#dbdbdb; --moa-accent:#b52f71; --moa-on-accent:#fff; }
+html[data-moa-theme="sheet"][data-moa-layout="app"]:not([data-moa-dark="true"]) { --moa-bg:#f1f7f3; --moa-paper:#fff; --moa-line:#d2e5d9; --moa-accent:#147a4b; --moa-on-accent:#fff; }
+html[data-moa-theme="cafe"][data-moa-layout="app"]:not([data-moa-dark="true"]) { --moa-bg:#f6f7f8; --moa-paper:#fff; --moa-line:#e5e7e9; --moa-accent:#087d3e; --moa-on-accent:#fff; --moa-action-ink:var(--moa-accent); --moa-action-fill:var(--moa-accent); }
+html[data-moa-theme="ebook"][data-moa-layout="app"]:not([data-moa-dark="true"]) { --moa-bg:#f7f0e5; --moa-paper:#fffaf2; --moa-line:#e2d4c1; --moa-accent:#845536; --moa-on-accent:#fff; }
+html[data-moa-theme="magazine"][data-moa-layout="app"]:not([data-moa-dark="true"]) { --moa-bg:#fff8f3; --moa-paper:#fff; --moa-line:#eedad1; --moa-accent:#b74632; --moa-on-accent:#fff; }
+html[data-moa-theme][data-moa-layout="app"][data-moa-dark="true"] { --moa-bg:#101419; --moa-paper:#1b222a; --moa-ink:#f0f2f5; --moa-muted:#b0bbc7; --moa-line:#35404c; }
+html[data-moa-theme="mail"][data-moa-layout="app"][data-moa-dark="true"] { --moa-accent:#a8c7fa; --moa-on-accent:#15335e; }
+html[data-moa-theme="post"][data-moa-layout="app"][data-moa-dark="true"],
+html[data-moa-theme="photogram"][data-moa-layout="app"][data-moa-dark="true"] { --moa-bg:#000; --moa-paper:#000; --moa-ink:#f2f2f2; --moa-muted:#a0a0a0; --moa-line:#292929; }
+html[data-moa-theme="post"][data-moa-layout="app"][data-moa-dark="true"] { --moa-tint:#16181c; --moa-accent:#1d9bf0; --moa-on-accent:#fff; }
+html[data-moa-theme="photogram"][data-moa-layout="app"][data-moa-dark="true"] { --moa-accent:#ff9fb9; --moa-on-accent:#47172d; }
+html[data-moa-theme="sheet"][data-moa-layout="app"][data-moa-dark="true"] { --moa-accent:#71d8a5; --moa-on-accent:#0d3524; }
+html[data-moa-theme="cafe"][data-moa-layout="app"][data-moa-dark="true"] { --moa-accent:#64e298; --moa-on-accent:#06331c; }
+html[data-moa-theme="ebook"][data-moa-layout="app"][data-moa-dark="true"] { --moa-bg:#1e1b18; --moa-paper:#29241f; --moa-line:#494039; --moa-accent:#eac59c; --moa-on-accent:#38291d; }
+html[data-moa-theme="magazine"][data-moa-layout="app"][data-moa-dark="true"] { --moa-accent:#ffaa98; --moa-on-accent:#481e17; }
 html[data-moa-theme][data-moa-layout="app"] .gall-detail-lst > li[data-moa-renderer="3"] {
   display:block; position:relative; box-sizing:border-box; min-width:0;
   margin:0; padding:0; border:0; border-bottom:1px solid var(--moa-line);
@@ -186,13 +205,14 @@ html[data-moa-layout="app"] .moa-sheet-columns { display:grid; grid-template-col
 html[data-moa-layout="app"] .moa-sheet-columns > * { padding:7px 10px; border-right:1px solid var(--moa-line); border-bottom:1px solid var(--moa-line); text-align:center; }
 
 /* E-BOOK: numbered contents with a serif title and reading link. */
-html[data-moa-layout="app"] .moa-book-entry { display:grid; grid-template-columns:26px minmax(0,1fr); align-items:start; gap:16px; padding:25px 0 17px; background:var(--moa-bg); }
+html[data-moa-layout="app"] .moa-book-entry { display:grid; grid-template-columns:26px minmax(0,1fr); align-items:start; gap:16px; padding:25px 0 17px; background:var(--moa-paper); }
 html[data-moa-layout="app"] .moa-book-entry > .moa-entry-key { margin-top:5px; color:var(--moa-accent); font-family:Georgia,serif; font-size:15px; }
 html[data-moa-layout="app"] .moa-book-entry .moa-entry-category { color:var(--moa-muted); font-size:10px; letter-spacing:.08em; }
 html[data-moa-layout="app"] .moa-book-entry .moa-entry-title { padding:4px 0 12px; font-family:Georgia,'Noto Serif KR','Batang',serif; font-size:calc(21px * var(--moa-font-scale)); font-weight:400; line-height:1.6; }
 html[data-moa-layout="app"] .moa-book-entry .moa-entry-meta { gap:3px 10px; font-size:11px; }
 html[data-moa-layout="app"] .moa-book-entry .moa-entry-comments { margin-top:3px; color:var(--moa-accent); font-size:11px; }
-html[data-moa-theme="ebook"][data-moa-layout="app"] .gall-detail-lst > li[data-moa-renderer="3"] { background:var(--moa-bg); }
+html[data-moa-theme="ebook"][data-moa-layout="app"] .gall-detail-lst,
+html[data-moa-theme="ebook"][data-moa-layout="app"] .gall-detail-lst > li[data-moa-renderer="3"] { background:var(--moa-paper); }
 
 /* MAGAZINE: editorial numbering, a large headline and compact byline. */
 html[data-moa-layout="app"] .moa-mag-entry { display:grid; grid-template-columns:32px minmax(0,1fr); gap:12px; padding:24px 0 18px; }

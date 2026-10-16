@@ -663,13 +663,7 @@ public final class MainActivity extends Activity implements BrowserController.Li
     }
 
     private void guardComposerNavigation(Runnable action) {
-        String url = browser.getUrl();
-        String lower = url == null ? "" : url.toLowerCase(Locale.ROOT);
-        if (lower.contains("/write") || lower.contains("mode=write")) {
-            dialogBuilder().setTitle("작성 화면에서 이동할까요?")
-                    .setMessage("새 페이지를 열면 아직 등록하지 않은 내용이 사라질 수 있어요. 테마 변경과 홈 화면 전환은 작성 화면을 그대로 유지해요.")
-                    .setNegativeButton("계속 작성", null).setPositiveButton("이동", (d, w) -> action.run()).show();
-        } else action.run();
+        browser.guardNavigation(action, () -> setBrowserVisible(true));
     }
 
     private void compose() {
@@ -965,6 +959,7 @@ public final class MainActivity extends Activity implements BrowserController.Li
             menu.getMenu().add(0, 3, 2, browser.isOriginalMode() ? "테마 화면 보기" : "원본 화면 보기");
             menu.getMenu().add(0, 4, 3, "현재 페이지 저장");
             menu.getMenu().add(0, 5, 4, "페이지 주소 공유");
+            menu.getMenu().add(0, 11, 5, "닫을 수 있는 광고 닫기");
         }
         menu.getMenu().add(0, 6, 5, "로그인");
         menu.getMenu().add(0, 7, 6, "화면 스타일");
@@ -989,6 +984,7 @@ public final class MainActivity extends Activity implements BrowserController.Li
                 case 8: showSettings(); break;
                 case 9: showAbout(); break;
                 case 10: compose(); break;
+                case 11: browser.closeDismissibleAds(); break;
                 default: return false;
             }
             return true;
@@ -1030,6 +1026,7 @@ public final class MainActivity extends Activity implements BrowserController.Li
             });
             addDrawerAction(panel, dialog, "bookmark", "현재 페이지 저장", this::saveCurrent);
             addDrawerAction(panel, dialog, "share", "페이지 주소 공유", this::shareCurrent);
+            addDrawerAction(panel, dialog, "close", "닫을 수 있는 광고 닫기", browser::closeDismissibleAds);
         }
         addDrawerAction(panel, dialog, "grid", "화면 스타일", this::showThemes);
         addDrawerAction(panel, dialog, "settings", "환경 설정", this::showSettings);
@@ -1087,6 +1084,7 @@ public final class MainActivity extends Activity implements BrowserController.Li
             toast("홈 화면에 저장했어요");
         }));
         dialog.show();
+        tintDialogActions(dialog);
     }
 
     private void renameFavorite(Favorite favorite) {
@@ -1322,6 +1320,7 @@ public final class MainActivity extends Activity implements BrowserController.Li
             if (dismissed != null) dismissed.run();
         });
         dialog.show();
+        tintDialogActions(dialog);
         // Android's regular floating dialog width is too generous in a split
         // window and unnecessarily wide on tablets. Keep a readable form width.
         if (dialog.getWindow() != null) dialog.getWindow().setLayout(
@@ -1336,7 +1335,19 @@ public final class MainActivity extends Activity implements BrowserController.Li
 
     private AlertDialog.Builder dialogBuilder() {
         return new AlertDialog.Builder(this, dark ? android.R.style.Theme_DeviceDefault_Dialog_Alert
-                : android.R.style.Theme_Material_Light_Dialog_Alert);
+                : android.R.style.Theme_Material_Light_Dialog_Alert) {
+            @Override public AlertDialog show() {
+                AlertDialog dialog = super.show();
+                tintDialogActions(dialog);
+                return dialog;
+            }
+        };
+    }
+
+    private void tintDialogActions(AlertDialog dialog) {
+        for (int which : new int[]{AlertDialog.BUTTON_POSITIVE, AlertDialog.BUTTON_NEGATIVE, AlertDialog.BUTTON_NEUTRAL}) {
+            if (dialog.getButton(which) != null) dialog.getButton(which).setTextColor(colors.accent);
+        }
     }
 
     private LinearLayout horizontal() {

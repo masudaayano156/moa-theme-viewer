@@ -173,19 +173,21 @@ html[data-moa-theme][data-moa-detail="sheet"] #textbox { min-height:320px !impor
 
 /* Reader and editorial layouts have different headline scales, margins,
    bylines and conversation treatments rather than only another palette. */
-html[data-moa-theme][data-moa-detail="ebook"] .gallview-tit-box { display:flex; flex-direction:column; gap:24px; padding:40px 28px 24px; border:0; text-align:center; background:var(--moa-bg); }
+html[data-moa-theme][data-moa-detail="ebook"] .gallview-tit-box { display:flex; flex-direction:column; gap:24px; padding:40px 28px 24px; border:0; text-align:center; background:var(--moa-paper); }
 html[data-moa-theme][data-moa-detail="ebook"] .gallview-tit-box > .tit { font:400 calc(29px * var(--moa-font-scale))/1.55 Georgia,'Noto Serif KR',serif; }
 html[data-moa-theme][data-moa-detail="ebook"] .gallview-tit-box .btm { justify-content:center; margin:0; }
 html[data-moa-theme][data-moa-detail="ebook"] .gallview-tit-box .btm::before { display:none; }
 html[data-moa-theme][data-moa-detail="ebook"] .gallview-tit-box .btm .rt { margin:0; }
 html[data-moa-theme][data-moa-detail="ebook"] .moa-detail-destination { width:100%; text-align:center; }
-html[data-moa-theme][data-moa-detail="ebook"] .thum-txtin { padding:32px 28px 48px; background:var(--moa-bg); font:400 calc(18px * var(--moa-font-scale))/2.05 Georgia,'Noto Serif KR',serif; }
-html[data-moa-theme][data-moa-detail="ebook"] .all-comment-lst > li.comment { padding:18px 16px; margin:12px; border:0; border-left:2px solid var(--moa-accent); border-radius:0; background:var(--moa-bg); }
+html[data-moa-theme][data-moa-detail="ebook"] .thum-txtin { padding:32px 28px 48px; background:var(--moa-paper); font:400 calc(18px * var(--moa-font-scale))/2.05 Georgia,'Noto Serif KR',serif; }
+html[data-moa-theme][data-moa-detail="ebook"] .all-comment,
+html[data-moa-theme][data-moa-detail="ebook"] .all-comment-lst { background:var(--moa-paper); }
+html[data-moa-theme][data-moa-detail="ebook"] .all-comment-lst > li.comment { padding:18px 16px; margin:12px; border:0; border-left:2px solid var(--moa-accent); border-radius:0; background:var(--moa-paper); }
 html[data-moa-theme][data-moa-detail="ebook"] .all-comment-lst > li.comment::before { display:none; }
 html[data-moa-theme][data-moa-detail="ebook"] .moa-detail-compose-heading { font:400 24px/1.5 Georgia,'Noto Serif KR',serif; }
 html[data-moa-theme][data-moa-detail="ebook"] .moa-detail-subject-label { text-align:center; padding-top:28px; }
 html[data-moa-theme][data-moa-detail="ebook"] #writeForm #subject { text-align:center; font:400 calc(28px * var(--moa-font-scale))/1.5 Georgia,'Noto Serif KR',serif; padding-block:24px; }
-html[data-moa-theme][data-moa-detail="ebook"] #textbox { min-height:440px !important; padding:32px 28px; font:400 calc(18px * var(--moa-font-scale))/2.05 Georgia,'Noto Serif KR',serif; background:var(--moa-bg); }
+html[data-moa-theme][data-moa-detail="ebook"] #textbox { min-height:440px !important; padding:32px 28px; font:400 calc(18px * var(--moa-font-scale))/2.05 Georgia,'Noto Serif KR',serif; background:var(--moa-paper); }
 html[data-moa-theme][data-moa-detail="magazine"] .gallview-tit-box { display:flex; flex-direction:column; padding:28px 22px; gap:20px; border-top:3px solid var(--moa-ink); border-bottom:1px solid var(--moa-ink); }
 html[data-moa-theme][data-moa-detail="magazine"] .moa-detail-kicker { color:var(--moa-accent); font:700 11px/1.5 system-ui,sans-serif; letter-spacing:.2em; }
 html[data-moa-theme][data-moa-detail="magazine"] .gallview-tit-box > .tit { font:700 calc(34px * var(--moa-font-scale))/1.23 Georgia,'Noto Serif KR',serif; letter-spacing:-.7px; }
