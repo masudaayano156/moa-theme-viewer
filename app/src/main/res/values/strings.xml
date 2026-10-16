@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">모아</string>
+    <string name="theme_mail">메일함</string>
+    <string name="theme_post">포스트</string>
+    <string name="theme_photogram">포토그램</string>
+    <string name="theme_sheet">스프레드 시트</string>
+    <string name="theme_cafe">카페</string>
+    <string name="theme_ebook">E-book</string>
+    <string name="theme_magazine">매거진</string>
+</resources>
