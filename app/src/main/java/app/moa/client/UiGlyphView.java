@@ -27,6 +27,39 @@ final class UiGlyphView extends View {
         canvas.scale(getWidth() / 24f, getHeight() / 24f);
         Path path = new Path();
         switch (kind) {
+            case "back":
+                path.moveTo(11, 4); path.lineTo(3, 12); path.lineTo(11, 20);
+                canvas.drawPath(path, paint); canvas.drawLine(3, 12, 21, 12, paint);
+                break;
+            case "bookmark":
+                path.moveTo(6, 3); path.lineTo(18, 3); path.lineTo(18, 21);
+                path.lineTo(12, 17); path.lineTo(6, 21); path.close();
+                canvas.drawPath(path, paint);
+                break;
+            case "folder":
+                path.moveTo(2, 7); path.lineTo(2, 4); path.lineTo(9, 4);
+                path.lineTo(12, 7); path.lineTo(22, 7); path.lineTo(22, 20);
+                path.lineTo(2, 20); path.close(); canvas.drawPath(path, paint);
+                break;
+            case "grid":
+                canvas.drawRect(3, 3, 21, 21, paint);
+                canvas.drawLine(3, 9, 21, 9, paint); canvas.drawLine(3, 15, 21, 15, paint);
+                canvas.drawLine(9, 3, 9, 21, paint); canvas.drawLine(15, 3, 15, 21, paint);
+                break;
+            case "refresh":
+                canvas.drawArc(new RectF(4, 4, 20, 20), 25, 300, false, paint);
+                path.moveTo(15, 3); path.lineTo(21, 4); path.lineTo(20, 10); canvas.drawPath(path, paint);
+                break;
+            case "page":
+                canvas.drawRoundRect(new RectF(5, 2, 19, 22), 2, 2, paint);
+                canvas.drawLine(8, 7, 16, 7, paint); canvas.drawLine(8, 12, 16, 12, paint);
+                canvas.drawLine(8, 17, 14, 17, paint);
+                break;
+            case "share":
+                canvas.drawCircle(18, 4, 3, paint); canvas.drawCircle(5, 12, 3, paint);
+                canvas.drawCircle(18, 20, 3, paint); canvas.drawLine(8, 10, 15, 6, paint);
+                canvas.drawLine(8, 14, 15, 18, paint);
+                break;
             case "account":
                 canvas.drawCircle(12, 12, 10, paint);
                 canvas.drawCircle(12, 9, 3, paint);

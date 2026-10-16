@@ -1,12 +1,13 @@
 /*
  * MOA presentation layer. The host supplies window.__MOA_SKIN_CSS from skin.css,
- * evaluates this file, then calls MoaSkin.apply(options). No network calls,
- * native bridge, form submission, page reload, or content reconstruction.
+ * evaluates this file, then calls MoaSkin.apply(options). Original service
+ * nodes remain intact. Independent list templates use only supplied page data;
+ * there is no article prefetch, native bridge, or automatic form submission.
  */
 (function () {
   'use strict';
   if (window.top !== window) return;
-  if (window.MoaSkin && window.MoaSkin.version === '2.0.0') return;
+  if (window.MoaSkin && window.MoaSkin.version === '3.0.0') return;
 
   var themes = {
     mail: { noun: '주제함', name: '메일함' },
@@ -32,6 +33,7 @@
   var rows = new Map();
   var pageHeader = null;
   var listHeading = null;
+  var sheetHeader = null;
   var lastStatus = { applied: false, reason: 'not-applied', pageType: 'original' };
 
   // User content is never traversed for naming. Even an exact UI phrase in a
@@ -195,6 +197,161 @@
     return link;
   }
 
+  var adSelector = '.adv-group,.adv-groupin,.adv-inner,.ntc-line-ad,ins.adsbygoogle,iframe[src*="doubleclick.net"],iframe[src*="googlesyndication.com"]';
+
+  function sourceLink(className, target, value) {
+    var link = node('a', className, value);
+    var href = target.getAttribute('href');
+    link.href = href && !/^javascript:/i.test(href) ? target.href : '#';
+    link.addEventListener('click', function (event) {
+      if (event.ctrlKey || event.metaKey || event.shiftKey) return;
+      event.preventDefault(); if (target.isConnected) target.click();
+    });
+    return link;
+  }
+
+  function readEntry(row, index) {
+    var original = Array.from(row.children).find(function (child) { return child.classList.contains('gall-detail-lnktb'); });
+    if (!original || row.matches(adSelector) || row.querySelector(adSelector)) return null;
+    var titleLink = original.querySelector('a.lt');
+    var titleNode = original.querySelector('.subjectin');
+    if (!titleLink || !titleNode) return null;
+    var info = original.querySelector('.ginfo');
+    var parts = info ? Array.from(info.children) : [];
+    var authorNode = original.querySelector('.list-nick');
+    var author = words(authorNode) || '작성자';
+    var date = parts.map(words).find(function (part) { return /^(?:\d{1,4}[.:/-])?\d{1,2}[.:/-]\d{1,2}(?:\s|$)/.test(part); }) || '';
+    var category = parts.length && parts[0] !== authorNode ? words(parts[0]) : '';
+    if (/^(조회|추천)|^\d/.test(category)) category = '';
+    var count = function (prefix) {
+      var part = parts.map(words).find(function (value) { return value.startsWith(prefix); });
+      if (!part) return null;
+      var match = part.slice(prefix.length).match(/[\d,.]+(?:[만천])?/);
+      return match ? match[0] : null;
+    };
+    var imageSource = original.querySelector('img[data-src],.thumb img,.thum img,.thum-img img,.thumbnail img');
+    var imageUrl = '';
+    if (imageSource) {
+      try {
+        var parsed = new URL(imageSource.getAttribute('data-src') || imageSource.getAttribute('src'), location.href);
+        if (parsed.protocol === 'https:') imageUrl = parsed.href;
+      } catch (_) { }
+    }
+    var commentLink = original.querySelector('a.rt');
+    var comments = words(commentLink && commentLink.querySelector('.ct'));
+    return {original:original,titleLink:titleLink,title:words(titleNode),author:author,date:date,category:category,
+      views:count('조회'),recommend:count('추천'),commentLink:commentLink,comments:comments,
+      imageSource:imageSource,imageUrl:imageUrl,imageAlt:imageSource ? imageSource.alt : '',index:index};
+  }
+
+  function entryParts(data) {
+    var avatar = node('span', 'moa-entry-avatar', Array.from(data.author)[0] || '·');
+    avatar.setAttribute('aria-hidden','true');
+    var name = node('span','moa-entry-name',data.author);
+    var date = node('time','moa-entry-date',data.date);
+    var category = node('span','moa-entry-category',data.category);
+    var title = sourceLink('moa-entry-title',data.titleLink,data.title);
+    var header = node('div','moa-entry-header'); header.append(name,date);
+    var comments = data.commentLink && data.comments ? action('moa-entry-comments','comment',data.comments,data.commentLink) : null;
+    if (comments) comments.setAttribute('aria-label','댓글 ' + data.comments);
+    var recommend = data.recommend !== null ? action('moa-entry-recommend','heart',data.recommend,null) : null;
+    if (recommend) recommend.setAttribute('aria-label','추천 ' + data.recommend);
+    var views = data.views !== null ? action('moa-entry-views','views',data.views,null) : null;
+    if (views) views.setAttribute('aria-label','조회 ' + data.views);
+    var media = null;
+    if (data.imageUrl && ['post','photogram','cafe','magazine'].includes(current.theme)) {
+      media = sourceLink('moa-entry-media',data.titleLink);
+      var image = node('img','moa-entry-image'); image.src = data.imageUrl; image.alt = data.imageAlt || '게시물 사진'; image.loading = 'lazy';
+      image.addEventListener('error',function () { media.hidden = true; }); media.appendChild(image);
+    }
+    return {avatar:avatar,name:name,date:date,category:category,title:title,header:header,comments:comments,recommend:recommend,views:views,media:media};
+  }
+  function append(parent) { Array.prototype.slice.call(arguments,1).forEach(function (child) { if (child) parent.appendChild(child); }); return parent; }
+  function region(className) { return node('div',className); }
+  function entryRoot(className, data) { var entry = node('article','moa-entry '+className); entry.setAttribute('aria-label',data.title); return entry; }
+
+  // Seven templates, each with its own information hierarchy. These are not
+  // one shared board row recolored or reordered by the selected palette.
+  var entryTemplates = {
+    mail: function (d,p) {
+      var main = sourceLink('moa-entry-main',d.titleLink);
+      append(main,p.header,node('span','moa-entry-title',d.title),append(region('moa-entry-meta'),p.category));
+      return append(entryRoot('moa-mail-message',d),p.avatar,main,p.comments);
+    },
+    post: function (d,p) {
+      var main = append(region('moa-entry-main'),p.header,p.title,p.media,append(region('moa-entry-actions'),p.comments,p.recommend,p.views));
+      return append(entryRoot('moa-post-entry',d),p.avatar,main);
+    },
+    photogram: function (d,p) {
+      var profile = append(region('moa-entry-header'),p.avatar,p.name,p.date);
+      var caption = append(region('moa-entry-caption'),p.title,append(region('moa-entry-meta'),p.category));
+      return append(entryRoot('moa-photo-entry',d),profile,p.media,caption,append(region('moa-entry-actions'),p.comments,p.recommend,p.views));
+    },
+    cafe: function (d,p) {
+      var main = append(region('moa-entry-main'),p.category,p.title,append(region('moa-entry-meta'),p.name,p.date,p.views));
+      return append(entryRoot('moa-cafe-entry',d),main,p.media,p.comments);
+    },
+    sheet: function (d,p) {
+      var key = node('span','moa-entry-key',String(d.index)); key.setAttribute('aria-label','행 '+d.index);
+      return append(entryRoot('moa-sheet-entry',d),key,p.title,p.name,p.comments || node('span','moa-entry-comments','—'),p.views || node('span','moa-entry-views','—'));
+    },
+    ebook: function (d,p) {
+      var key = node('span','moa-entry-key',String(d.index).padStart(2,'0'));
+      var main = append(region('moa-entry-main'),p.category,p.title,append(region('moa-entry-meta'),p.name,p.date),p.comments);
+      return append(entryRoot('moa-book-entry',d),key,main);
+    },
+    magazine: function (d,p) {
+      var key = node('span','moa-entry-key',String(d.index).padStart(2,'0'));
+      var main = append(region('moa-entry-main'),p.category,p.title,append(region('moa-entry-meta'),p.name,p.date),append(region('moa-entry-actions'),p.comments,p.views));
+      return append(entryRoot('moa-mag-entry',d),key,main,p.media);
+    }
+  };
+
+  function restoreRow(row, state) {
+    if (state.sheetScroll) row.removeEventListener('scroll',state.sheetScroll);
+    state.entry.remove();
+    [['data-moa-row',state.rowAttribute],['data-moa-renderer',state.rendererAttribute]].forEach(function (pair) {
+      if (pair[1] === null) row.removeAttribute(pair[0]); else row.setAttribute(pair[0],pair[1]);
+    });
+    if (state.original.getAttribute('data-moa-list-source') === 'true') {
+      if (state.sourceAttribute === null) state.original.removeAttribute('data-moa-list-source');
+      else state.original.setAttribute('data-moa-list-source',state.sourceAttribute);
+    }
+  }
+
+  function renderEntries(list) {
+    rows.forEach(function (state,row) { if (!row.isConnected || row.parentNode !== list) { restoreRow(row,state); rows.delete(row); } });
+    var index = 0;
+    Array.from(list.children).forEach(function (row) {
+      var data = readEntry(row,index+1);
+      var previous = rows.get(row);
+      if (!data) {
+        if (previous) { restoreRow(row,previous); rows.delete(row); }
+        return;
+      }
+      index++;
+      var signature = JSON.stringify([current.theme,data.title,data.author,data.date,data.category,data.views,data.recommend,data.comments,data.imageUrl,data.imageAlt,data.index,
+        data.titleLink.getAttribute('href'),data.commentLink && data.commentLink.getAttribute('href')]);
+      if (previous && previous.signature === signature && previous.original === data.original
+          && previous.titleLink === data.titleLink && previous.commentLink === data.commentLink) return;
+      if (previous) restoreRow(row,previous);
+      var entry = entryTemplates[current.theme](data,entryParts(data));
+      var state = {entry:entry,original:data.original,titleLink:data.titleLink,commentLink:data.commentLink,signature:signature,
+        rowAttribute:row.getAttribute('data-moa-row'),rendererAttribute:row.getAttribute('data-moa-renderer'),sourceAttribute:data.original.getAttribute('data-moa-list-source')};
+      row.setAttribute('data-moa-row','true'); row.setAttribute('data-moa-renderer','3');
+      data.original.setAttribute('data-moa-list-source','true'); row.appendChild(entry); rows.set(row,state);
+      if (current.theme === 'sheet') {
+        state.sheetScroll = function () { if (current && current.theme === 'sheet') syncSheetScroll(row.scrollLeft); };
+        row.addEventListener('scroll',state.sheetScroll,{passive:true});
+      }
+    });
+  }
+
+  function syncSheetScroll(left) {
+    if (sheetHeader && Math.abs(sheetHeader.scrollLeft-left) > 1) sheetHeader.scrollLeft = left;
+    rows.forEach(function (state,row) { if (Math.abs(row.scrollLeft-left) > 1) row.scrollLeft = left; });
+  }
+
   function updatePresentation() {
     if (!current) return;
     var type = pageType();
@@ -202,8 +359,14 @@
     // Never hide an advertising slot as a side effect of removing duplicated
     // site navigation. If a provider adds a slot there, retain that surface.
     document.querySelectorAll('body > .header, body > .nav, body > .footer, .gall-tit-box').forEach(function (chrome) {
-      var ad = chrome.querySelector('.adv-group,.adv-groupin,.adv-inner,.ntc-line-ad,ins.adsbygoogle,iframe[src*="doubleclick.net"],iframe[src*="googlesyndication.com"]');
+      var ad = chrome.querySelector(adSelector);
       setAttribute(chrome, 'data-moa-contains-ad', ad ? 'true' : 'false');
+      // An ad in the site header must stay visible. It does not require bringing
+      // back the logo and the entire unrelated global navigation alongside it.
+      chrome.querySelectorAll('.logo,#topsearch_form,.search-box,.menu-scroll-lst,.ft-top,.ft-btm').forEach(function (part) {
+        var containsAd = part.matches(adSelector) || part.querySelector(adSelector);
+        setAttribute(part,'data-moa-chrome-hidden',String(!containsAd));
+      });
     });
     var group = document.querySelector('.gall-tit-group');
     var title = document.querySelector('.gall-tit-lnk') || document.querySelector('.gall-tit');
@@ -233,6 +396,18 @@
           filter.setAttribute('aria-expanded',String(expanded));
         });
         pageHeader.appendChild(filter);
+        var photoSwitch = node('div','moa-photo-switch');
+        photoSwitch.setAttribute('role','group'); photoSwitch.setAttribute('aria-label','사진 피드 보기 방식');
+        ['feed','grid'].forEach(function (value) {
+          var choice = node('button','moa-photo-choice',value === 'feed' ? '피드' : '모아보기');
+          choice.type = 'button'; choice.setAttribute('data-view',value);
+          choice.addEventListener('click',function () {
+            setAttribute(root,'data-moa-photo-view',value);
+            photoSwitch.querySelectorAll('button').forEach(function (button) { button.setAttribute('aria-pressed',String(button === choice)); });
+          });
+          photoSwitch.appendChild(choice);
+        });
+        pageHeader.appendChild(photoSwitch);
       }
       var compose = document.querySelector('.gall-lnk-box .btn-write');
       if (compose && type !== 'write') {
@@ -246,78 +421,35 @@
     text(pageHeader.querySelector('.moa-community-mark'), Array.from(name)[0] || '·');
     var contexts = {mail:'주제함', post:'채널', photogram:'피드', cafe:'카페', sheet:'워크시트', ebook:'서가', magazine:'섹션'};
     text(pageHeader.querySelector('.moa-page-context'), contexts[current.theme]);
+    var photoView = root.getAttribute('data-moa-photo-view');
+    if (!photoView) { photoView = 'feed'; setAttribute(root,'data-moa-photo-view',photoView); }
+    pageHeader.querySelectorAll('.moa-photo-choice').forEach(function (button) { button.setAttribute('aria-pressed',String(button.getAttribute('data-view') === photoView)); });
     var recommendation = document.querySelector('#recom_box1');
     if (recommendation) setAttribute(recommendation,'data-moa-empty',String(!words(recommendation.querySelector('.lt'))));
+    if (window.MoaDetailLayout) window.MoaDetailLayout.apply(Object.assign({},current,{pageType:type}));
     var list = document.querySelector('.gall-detail-lst');
     if (!list) return;
     if (!listHeading || !listHeading.isConnected) {
       listHeading = own(node('div', 'moa-list-heading'));
       list.parentNode.insertBefore(listHeading, list);
     }
-    text(listHeading, {mail:'받은편지함', post:'게시물', photogram:'피드', cafe:'전체글', sheet:'목록', ebook:'읽을거리', magazine:'최신 이야기'}[current.theme]);
-    rows.forEach(function (value, row) { if (!row.isConnected) rows.delete(row); });
-    Array.prototype.forEach.call(list.children, function (row) {
-      var original = row.querySelector('.gall-detail-lnktb');
-      if (!original || row.classList.contains('adv-inner') || row.querySelector('.ntc-line-ad')) return;
-      var titleLink = original.querySelector('a.lt');
-      if (!titleLink) return;
-      var info = original.querySelector('.ginfo');
-      var author = words(original.querySelector('.list-nick')) || '작성자';
-      var parts = info ? Array.from(info.children).map(words) : [];
-      var date = parts.find(function (part) { return /^(?:\d{1,4}[.:/-])?\d{1,2}[.:/-]\d{1,2}(?:\s|$)/.test(part); }) || '';
-      var views = parts.find(function (part) { return /^조회\s*\d/.test(part); }) || '';
-      var recommend = parts.find(function (part) { return /^추천\s*\d/.test(part); }) || '';
-      var commentLink = original.querySelector('a.rt');
-      var comments = words(commentLink && commentLink.querySelector('.ct'));
-      var signature = [author,date,views,recommend,comments].join('|');
-      var state = rows.get(row);
-      if (!state) {
-        setAttribute(row, 'data-moa-row', 'true');
-        state = { avatar: own(node('div','moa-avatar')), author: own(node('div','moa-author-line')), actions: own(node('div','moa-row-actions')), signature: null };
-        state.avatar.setAttribute('aria-hidden','true');
-        state.author.appendChild(node('span','moa-author-name'));
-        state.author.appendChild(node('time','moa-row-time'));
-        row.appendChild(state.avatar); row.appendChild(state.author); row.appendChild(state.actions);
-        rows.set(row,state);
-      }
-      if (!state.media) {
-        // Use only an image already provided in this row. Sprite/nickname
-        // icons are not photos and are never expanded into fabricated media.
-        var source = original.querySelector('img[data-src], .thumb img, .thum img, .thum-img img, .thumbnail img');
-        if (source) {
-          try {
-            var imageUrl = new URL(source.getAttribute('data-src') || source.getAttribute('src'), location.href);
-            if (imageUrl.protocol === 'https:') {
-              state.media = own(node('a','moa-media')); state.media.href = titleLink.href;
-              state.media.addEventListener('click', function (event) {
-                if (event.ctrlKey || event.metaKey || event.shiftKey) return;
-                event.preventDefault(); titleLink.click();
-              });
-              var picture = node('img','moa-post-image'); picture.src = imageUrl.href;
-              picture.alt = source.alt || '게시물 사진'; picture.loading = 'lazy';
-              picture.addEventListener('error',function () { if (state.media) state.media.hidden = true; });
-              state.media.appendChild(picture); row.appendChild(state.media);
-              setAttribute(source,'data-moa-source-media','true');
-            }
-          } catch (_) { }
-        }
-      }
-      if (state.signature !== signature) {
-        state.signature = signature;
-        text(state.avatar, Array.from(author)[0] || '·');
-        text(state.author.querySelector('.moa-author-name'), author);
-        text(state.author.querySelector('.moa-row-time'), date);
-        state.actions.textContent = '';
-        if (commentLink && comments) { var commentAction = action('moa-comment-count','comment',comments,commentLink); commentAction.setAttribute('aria-label','댓글 ' + comments); state.actions.appendChild(commentAction); }
-        if (recommend) { var recommendCount = action('moa-recommend-count','heart',recommend.replace(/^추천\s*/,''),null); recommendCount.setAttribute('aria-label',recommend); state.actions.appendChild(recommendCount); }
-        if (views) { var viewCount = action('moa-view-count','views',views.replace(/^조회\s*/,''),null); viewCount.setAttribute('aria-label',views); state.actions.appendChild(viewCount); }
-      }
-    });
+    text(listHeading, {mail:'받은편지함', post:'게시물', photogram:'피드', cafe:'전체글', sheet:'데이터 목록', ebook:'목차', magazine:'이야기'}[current.theme]);
+    if (!sheetHeader || !sheetHeader.isConnected) {
+      sheetHeader = own(node('div','moa-sheet-header-scroll'));
+      sheetHeader.setAttribute('aria-label','표 열 제목 · 가로 스크롤');
+      var columns = node('div','moa-sheet-columns');
+      ['#','A · 제목','B · 작성자','C · 댓글','D · 조회'].forEach(function (label) { columns.appendChild(node('span','',label)); });
+      sheetHeader.appendChild(columns); list.parentNode.insertBefore(sheetHeader,list);
+      sheetHeader.addEventListener('scroll',function () { if (current && current.theme === 'sheet') syncSheetScroll(sheetHeader.scrollLeft); },{passive:true});
+    }
+    renderEntries(list);
   }
 
   function removePresentation() {
+    if (window.MoaDetailLayout) window.MoaDetailLayout.disable();
+    rows.forEach(function (state,row) { restoreRow(row,state); });
     ownedNodes.forEach(function (element) { element.remove(); });
-    ownedNodes.clear(); rows.clear(); pageHeader = null; listHeading = null;
+    ownedNodes.clear(); rows.clear(); pageHeader = null; listHeading = null; sheetHeader = null;
   }
 
   function observe() {
@@ -332,10 +464,10 @@
         observer.disconnect();
         updateUiLabels();
         updatePresentation();
-        observer.observe(root, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['class','id','src','data-src'] });
+        observer.observe(root, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['class','id','src','data-src','href','alt'] });
       });
     });
-    observer.observe(root, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['class','id','src','data-src'] });
+    observer.observe(root, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['class','id','src','data-src','href','alt'] });
   }
 
   function disable(reason) {
@@ -423,7 +555,7 @@
   }
 
   window.MoaSkin = Object.freeze({
-    version: '2.0.0', apply: apply, disable: disable,
+    version: '3.0.0', apply: apply, disable: disable,
     status: function () { return Object.assign({}, lastStatus); }
   });
 })();

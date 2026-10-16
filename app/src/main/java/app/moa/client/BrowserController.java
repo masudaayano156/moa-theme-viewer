@@ -105,8 +105,8 @@ public final class BrowserController {
         web = new WebView(activity);
         container.addView(web, new FrameLayout.LayoutParams(-1, -1));
         try {
-            css = readAsset("web/skin.css");
-            script = readAsset("web/skin.js");
+            css = readAsset("web/skin.css") + "\n" + readAsset("web/list-layout.css") + "\n" + readAsset("web/detail-layout.css");
+            script = readAsset("web/detail-layout.js") + "\n" + readAsset("web/skin.js");
             favoritesScript = readAsset("web/account-favorites.js");
             draftScript = readAsset("web/drafts.js");
         } catch (Exception exception) {

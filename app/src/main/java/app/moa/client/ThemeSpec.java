@@ -46,8 +46,8 @@ public enum ThemeSpec {
         int onAccent;
         switch (this) {
             case POST:
-                accent = dark ? 0xFFF3F5F7 : 0xFF15191E;
-                onAccent = dark ? 0xFF12161B : 0xFFFFFFFF;
+                accent = 0xFF1D9BF0;
+                onAccent = 0xFFFFFFFF;
                 break;
             case PHOTOGRAM:
                 accent = dark ? 0xFFFF9FB9 : 0xFFB52F71;
@@ -75,6 +75,10 @@ public enum ThemeSpec {
                 break;
         }
         if (dark) {
+            if (this == POST || this == PHOTOGRAM) {
+                return new Palette(0xFF000000, 0xFF000000, 0xFFF2F2F2, 0xFFA0A0A0,
+                        accent, onAccent, 0xFF292929);
+            }
             return new Palette(this == EBOOK ? 0xFF1E1B18 : 0xFF101419,
                     this == EBOOK ? 0xFF29241F : 0xFF1B222A,
                     0xFFF0F2F5, 0xFFB0BBC7, accent, onAccent,

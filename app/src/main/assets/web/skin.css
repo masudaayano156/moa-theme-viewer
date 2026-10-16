@@ -218,11 +218,12 @@ html[data-moa-theme] #comment_write > .btm-wrt-btns > .rt { position:static; tra
 /* App layouts use a reversible DOM adapter. Original anchors, forms and event
    targets remain in the page; only the adapter's copied metadata is arranged
    here. These rules are inactive when the user opens the original view. */
+html[data-moa-theme][data-moa-layout="app"] [data-moa-chrome-hidden="true"] { display:none !important; }
 html[data-moa-theme][data-moa-layout="app"] { --moa-column:720px; --moa-avatar-bg:#dce8fa; --moa-avatar-ink:#294c7d; }
 html[data-moa-theme][data-moa-layout="app"] body { margin:0; background:var(--moa-bg); }
-html[data-moa-theme][data-moa-layout="app"] .header:not([data-moa-contains-ad="true"]),
-html[data-moa-theme][data-moa-layout="app"] .nav:not([data-moa-contains-ad="true"]),
-html[data-moa-theme][data-moa-layout="app"] .footer:not([data-moa-contains-ad="true"]),
+html[data-moa-theme][data-moa-layout="app"] body > .header:not([data-moa-contains-ad="true"]),
+html[data-moa-theme][data-moa-layout="app"] body > .nav:not([data-moa-contains-ad="true"]),
+html[data-moa-theme][data-moa-layout="app"] body > .footer:not([data-moa-contains-ad="true"]),
 html[data-moa-theme][data-moa-layout="app"] .gall-tit-box:not([data-moa-contains-ad="true"]) { display:none !important; }
 html[data-moa-theme][data-moa-layout="app"] .gall-tit-group { margin:0; border:0; }
 html[data-moa-theme][data-moa-layout="app"][data-moa-tools="true"] .gall-tit-box { display:flex !important; }
