@@ -1,6 +1,6 @@
 # Third-party notices
 
-This file describes third-party build components. It does not grant a project-wide license to this application's first-party code or assets.
+This file describes third-party build and runtime components. It does not grant a project-wide license to this application's first-party code or assets.
 
 ## Included Gradle Wrapper
 
@@ -16,22 +16,17 @@ The full Gradle distribution is downloaded by the Wrapper; it is not bundled in 
 
 ## Build-resolved dependencies
 
-The following application dependencies are resolved by Gradle and are not vendored as binaries or source in this repository. The listed versions are the runtime graph for the current app configuration; their published POM metadata identifies Apache License, Version 2.0. Preserve the applicable notices and license texts when distributing dependency-containing binaries.
+The following direct application dependencies are resolved by Gradle and are not vendored as binaries or source in this repository. Gradle also resolves their AndroidX, Kotlin, Google Play services, and supporting runtime dependencies. Their respective published licenses and notices apply; the Firebase dependency graph must not be treated as entirely Apache-licensed merely because Firebase itself is Apache-licensed.
 
 | Dependency | Version |
 |---|---|
 | androidx.webkit:webkit | 1.12.1 |
-| androidx.core:core | 1.1.0 |
-| androidx.versionedparcelable:versionedparcelable | 1.1.0 |
-| androidx.collection:collection | 1.0.0 |
-| androidx.annotation:annotation-experimental | 1.4.1 |
-| androidx.annotation:annotation-jvm | 1.8.1 |
-| androidx.lifecycle:lifecycle-runtime | 2.0.0 |
-| androidx.lifecycle:lifecycle-common | 2.0.0 |
-| androidx.arch.core:core-common | 2.0.0 |
-| org.jetbrains.kotlin:kotlin-stdlib | 1.7.10 |
-| org.jetbrains.kotlin:kotlin-stdlib-common | 1.7.10 |
-| org.jetbrains:annotations | 13.0 |
+| com.google.firebase:firebase-bom | 35.0.1 (version alignment) |
+| com.google.firebase:firebase-messaging | 26.0.0 (selected by the BoM) |
+
+- AndroidX and the open-source Firebase Android SDK use Apache License, Version 2.0. See [AndroidX](https://developer.android.com/jetpack/androidx) and the [Firebase Android SDK license](https://github.com/firebase/firebase-android-sdk/blob/main/LICENSE).
+- Google Play services components are distributed under their applicable Google/Android SDK terms. See [Google Play services](https://developers.google.com/android/guides/overview) and [Android SDK terms](https://developer.android.com/studio/terms).
+- Preserve dependency-provided license/notice resources when distributing the built application. The Apache-2.0 text is included in [licenses/Apache-2.0.txt](licenses/Apache-2.0.txt).
 
 Android Gradle Plugin 8.7.3 is a build tool, separate from the application's runtime dependencies, and is also published under Apache License, Version 2.0. The Android SDK is obtained separately under its own terms and is not included here.
 

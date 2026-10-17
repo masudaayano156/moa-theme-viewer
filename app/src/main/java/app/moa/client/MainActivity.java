@@ -70,6 +70,11 @@ public final class MainActivity extends Activity implements BrowserController.Li
     private boolean pendingLauncherValue;
     private long launcherChangeGeneration;
     private Runnable launcherTimeout;
+    private static final int PUSH_PERMISSION_REQUEST = 4201;
+    private AlertDialog pushDialog;
+    private boolean pushBusy;
+    private long pushUiGeneration;
+    private String pushStatus = "";
 
     @Override public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -126,6 +131,18 @@ public final class MainActivity extends Activity implements BrowserController.Li
                     android.window.OnBackInvokedDispatcher.PRIORITY_DEFAULT, this::navigateBack);
         }
         browser.refreshAccountFavorites();
+        handlePushIntent(getIntent());
+    }
+
+    @Override protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        handlePushIntent(intent);
+    }
+
+    private void handlePushIntent(Intent intent) {
+        String target = PushNotifications.consumeTarget(intent);
+        if (target != null && browser != null) navigate(target);
     }
 
     private void buildChrome() {
@@ -905,11 +922,160 @@ public final class MainActivity extends Activity implements BrowserController.Li
         launcherHint.setLineSpacing(dp(3), 1f);
         launcherHint.setPadding(0, 0, 0, dp(7));
         panel.addView(launcherHint);
+        panel.addView(line(), new LinearLayout.LayoutParams(-1, dp(1)));
+        TextView pushChoice = settingsRow("푸시 알림", PushClient.isEnabled(this) ? "켜짐   ›" : "꺼짐   ›");
+        pushChoice.setOnClickListener(v -> { dialog.dismiss(); showPushSettings(); });
+        panel.addView(pushChoice);
         showAdaptiveDialog(dialog, () -> { dialog.dismiss(); showSettings(); }, () -> {
             // Keyboard and accessibility adjustments do not end a touch
             // gesture. Refresh the native chrome on every dismissal route.
             if (Float.compare(displayedFontScale, fontScale) != 0) buildChrome();
         });
+    }
+
+    private void showPushSettings() {
+        if (isFinishing() || isDestroyed()) return;
+        ScrollView scroll = new ScrollView(this);
+        LinearLayout panel = vertical();
+        panel.setPadding(dp(23), dp(8), dp(23), dp(16));
+        scroll.addView(panel);
+        boolean enabled = PushClient.isEnabled(this);
+        boolean paired = PushRelayClient.isPaired(this);
+        String state = pushBusy ? "연결을 확인하고 있어요" : !enabled ? "알림 꺼짐"
+                : !PushNotifications.canNotify(this) ? "휴대폰에서 알림이 차단되어 있어요"
+                : paired ? "푸시 연결 완료" : "기기 연결 대기";
+        panel.addView(text(state, 17, colors.text, true));
+        TextView description = text("현재는 푸시 연결 테스트를 위한 미리보기입니다. 디시 댓글을 자동으로 확인하는 기능은 아직 연결되지 않았어요.", 13, colors.mutedText, false);
+        description.setPadding(0, dp(12), 0, dp(12));
+        description.setLineSpacing(dp(3), 1f);
+        panel.addView(description);
+        if (!pushStatus.isEmpty()) {
+            TextView status = text(pushStatus, 13, colors.text, false);
+            status.setPadding(0, 0, 0, dp(12));
+            panel.addView(status);
+        }
+        if (!PushClient.isConfigured(this)) {
+            panel.addView(text("이 빌드에는 푸시 연결 설정이 준비되지 않았어요.", 13, colors.mutedText, false));
+        } else {
+            TextView dataNotice = text("알림을 켜면 기기별 푸시 식별자가 Google에 등록됩니다. 연결 코드를 사용하면 발송 서버에도 저장됩니다. 디시 비밀번호·로그인 쿠키는 보내지 않아요.", 12, colors.mutedText, false);
+            dataNotice.setPadding(0, dp(8), 0, dp(12));
+            panel.addView(dataNotice);
+            panel.addView(pushAction(enabled ? "알림 연결 다시 준비" : "알림 사용하기", !pushBusy, this::beginPushEnable));
+            if (enabled) {
+                if (PushRelayClient.isConfigured(this)) {
+                    if (!paired) {
+                        EditText code = new EditText(this);
+                        code.setHint("일회용 연결 코드");
+                        code.setSingleLine(true);
+                        code.setTextSize(15);
+                        code.setTextColor(colors.text);
+                        code.setHintTextColor(colors.mutedText);
+                        code.setBackgroundTintList(ColorStateList.valueOf(colors.accent));
+                        code.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD);
+                        code.setImeOptions(android.view.inputmethod.EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING
+                                | android.view.inputmethod.EditorInfo.IME_ACTION_DONE);
+                        code.setFilters(new android.text.InputFilter[]{new android.text.InputFilter.LengthFilter(64)});
+                        code.setEnabled(!pushBusy);
+                        code.setContentDescription("일회용 연결 코드");
+                        panel.addView(code, new LinearLayout.LayoutParams(-1, dp(56)));
+                        panel.addView(pushAction("이 기기 연결", !pushBusy && PushNotifications.canNotify(this),
+                                () -> pairPush(code.getText().toString())));
+                    }
+                    panel.addView(pushAction("테스트 알림 받기", !pushBusy && paired && PushNotifications.canNotify(this), this::testPush));
+                } else panel.addView(text("발송 서버 연결이 아직 준비되지 않았어요.", 13, colors.mutedText, false));
+            }
+        }
+        if (enabled) panel.addView(pushAction("알림 끄고 연결 해제", !pushBusy, this::disablePush));
+        panel.addView(pushAction("휴대폰 알림 설정", !pushBusy, () -> {
+            try {
+                startActivity(new Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                        .putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, getPackageName()));
+            } catch (android.content.ActivityNotFoundException unavailable) { toast("휴대폰 설정에서 앱 알림을 확인해 주세요."); }
+        }));
+        AlertDialog dialog = dialogBuilder().setTitle("푸시 알림").setView(scroll).setPositiveButton("닫기", null).create();
+        pushDialog = dialog;
+        showAdaptiveDialog(dialog, () -> { dialog.dismiss(); showPushSettings(); }, () -> {
+            if (pushDialog == dialog) pushDialog = null;
+        });
+    }
+
+    private TextView pushAction(String label, boolean enabled, Runnable action) {
+        TextView item = plainAction(label, label, v -> action.run());
+        item.setMinHeight(dp(48));
+        item.setEnabled(enabled);
+        item.setAlpha(enabled ? 1f : .45f);
+        return item;
+    }
+
+    private long startPushAction() {
+        pushBusy = true;
+        long request = ++pushUiGeneration;
+        if (pushDialog != null && pushDialog.isShowing()) { pushDialog.dismiss(); showPushSettings(); }
+        return request;
+    }
+
+    private void finishPushAction(long request, String message) {
+        if (request != pushUiGeneration || isFinishing() || isDestroyed()) return;
+        pushBusy = false;
+        pushStatus = message;
+        if (pushDialog != null && pushDialog.isShowing()) { pushDialog.dismiss(); showPushSettings(); }
+    }
+
+    private void beginPushEnable() {
+        if (pushBusy) return;
+        if (Build.VERSION.SDK_INT >= 33 && !PushNotifications.hasPermission(this)) {
+            requestPermissions(new String[]{android.Manifest.permission.POST_NOTIFICATIONS}, PUSH_PERMISSION_REQUEST);
+            return;
+        }
+        long request = startPushAction();
+        PushClient.enable(this, new PushClient.TokenCallback() {
+            @Override public void onToken(String token) {
+                PushRelayClient.refreshToken(MainActivity.this, token);
+                finishPushAction(request, "알림 수신 준비가 됐어요. 연결 코드를 입력해 이 기기를 연결해 주세요.");
+            }
+            @Override public void onError(String message) { finishPushAction(request, message); }
+        });
+    }
+
+    private void pairPush(String code) {
+        if (pushBusy) return;
+        String pairing = code.trim();
+        if (!pairing.matches("[A-Za-z0-9_-]{27}")) { toast("연결 코드를 다시 확인해 주세요."); return; }
+        long request = startPushAction();
+        PushClient.getToken(this, new PushClient.TokenCallback() {
+            @Override public void onToken(String token) {
+                if (request != pushUiGeneration || isFinishing() || isDestroyed()) return;
+                PushRelayClient.pair(MainActivity.this, pairing, token, pushRelayResult(request));
+            }
+            @Override public void onError(String message) { finishPushAction(request, message); }
+        });
+    }
+
+    private PushRelayClient.Callback pushRelayResult(long request) {
+        return new PushRelayClient.Callback() {
+            @Override public void onSuccess(String message) { finishPushAction(request, message); }
+            @Override public void onError(String message) { finishPushAction(request, message); }
+        };
+    }
+
+    private void testPush() {
+        if (pushBusy) return;
+        long request = startPushAction();
+        PushClient.getToken(this, new PushClient.TokenCallback() {
+            @Override public void onToken(String token) {
+                if (request != pushUiGeneration || isFinishing() || isDestroyed()) return;
+                PushRelayClient.refreshToken(MainActivity.this, token);
+                PushRelayClient.test(MainActivity.this, pushRelayResult(request));
+            }
+            @Override public void onError(String message) { finishPushAction(request, message); }
+        });
+    }
+
+    private void disablePush() {
+        if (pushBusy) return;
+        long request = startPushAction();
+        PushClient.disable(this);
+        PushRelayClient.disconnect(this, pushRelayResult(request));
     }
 
     private TextView settingsRow(String title, String value) {
@@ -1114,6 +1280,7 @@ public final class MainActivity extends Activity implements BrowserController.Li
                 + "개인정보와 기기 저장\n"
                 + "선택한 테마, 글자 크기, 직접 저장한 페이지는 이 기기에 저장됩니다. 작성 중인 텍스트 초안도 복원을 위해 기기에 임시 저장될 수 있습니다. 비밀번호와 첨부파일은 초안에 저장하지 않습니다. 로그인 쿠키와 웹 저장소는 Android WebView에 저장되고 로그인 정보·작성 내용은 해당 서비스로 전달됩니다. 앱은 별도의 계정 서버나 자체 분석 도구를 사용하지 않습니다.\n\n"
                 + "계정 즐겨찾기는 로그인한 서비스에서 불러옵니다. 이 목록을 별도 파일로 저장하지 않으며, 로그아웃 상태가 확인되거나 새로 불러오기에 실패하면 홈의 계정 목록을 비웁니다. 직접 저장한 페이지는 계정 즐겨찾기와 분리하여 이 기기에 보관합니다.\n\n"
+                + "푸시 알림은 선택 기능입니다. 켜면 Google FCM에 기기별 식별자가 등록되고, 연결 코드를 사용하면 Cloudflare 발송 서버에 푸시 토큰과 임의의 기기 연결 정보가 저장됩니다. 디시 로그인 비밀번호·쿠키·게시글 내용은 이 서버에 보내지 않습니다. 알림을 끄면 기기에서 표시를 중단하고 토큰 폐기·서버 연결 삭제를 요청합니다. 통신 실패 시 서버 삭제는 다음 연결 때 재시도합니다. 현재 댓글 자동 감지는 연결되지 않았습니다.\n\n"
                 + "사진을 첨부할 때 Android 파일 선택창에서 직접 고릅니다. 원본 페이지가 외부 서비스를 포함하면 해당 서비스의 개인정보 처리방침이 적용됩니다.\n\n"
                 + "테마를 바꿔도 열린 페이지는 다시 불러오지 않습니다. 앱 강제 종료·기기 재시작 뒤 작성 중 내용 복구는 보장되지 않으니 긴 글은 등록 전 별도로 보관해 주세요.\n\n"
                 + "콘텐츠 출처: dcinside.com\n테마 아이콘: 자체 제작 독립 심벌";
@@ -1255,6 +1422,14 @@ public final class MainActivity extends Activity implements BrowserController.Li
     }
 
     @Override public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+        if (requestCode == PUSH_PERMISSION_REQUEST) {
+            if (PushNotifications.hasPermission(this)) beginPushEnable();
+            else {
+                pushStatus = "알림 권한이 허용되지 않았어요. 필요할 때 휴대폰 알림 설정에서 변경할 수 있어요.";
+                if (pushDialog != null && pushDialog.isShowing()) { pushDialog.dismiss(); showPushSettings(); }
+            }
+            return;
+        }
         if (!browser.onRequestPermissionsResult(requestCode, permissions, grantResults)) {
             super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         }
@@ -1270,6 +1445,8 @@ public final class MainActivity extends Activity implements BrowserController.Li
     @Override protected void onPause() { if (browser != null) browser.onPause(); super.onPause(); }
     @Override protected void onResume() { super.onResume(); if (browser != null && browserVisible) browser.onResume(); }
     @Override protected void onDestroy() {
+        pushUiGeneration++;
+        if (pushDialog != null) { pushDialog.dismiss(); pushDialog = null; }
         launcherChangeGeneration++;
         launcherChangePending = false;
         if (launcherTimeout != null && root != null) root.removeCallbacks(launcherTimeout);

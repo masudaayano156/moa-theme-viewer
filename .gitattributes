@@ -12,3 +12,6 @@
 gradlew text eol=lf
 gradlew.bat text eol=crlf
 *.jar binary
+*.mjs text eol=lf
+*.jsonc text eol=lf
+*.sql text eol=lf
