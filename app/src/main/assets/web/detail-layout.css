@@ -29,6 +29,15 @@ html[data-moa-theme][data-moa-detail] .all-comment-lst > li.comment { position:r
 html[data-moa-theme][data-moa-detail] .all-comment-lst > li.comment::before { content:attr(data-moa-comment-initial); display:flex; align-items:center; justify-content:center; position:absolute; width:34px; height:34px; border-radius:50%; background:var(--moa-tint); color:var(--moa-accent); font:600 14px/1 system-ui,sans-serif; }
 html[data-moa-theme][data-moa-detail] .all-comment-lst > li.comment .date { position:static; display:block; margin-top:6px; font-size:11px; }
 html[data-moa-theme][data-moa-detail] .all-comment-lst > li.comment .ginfo-area { max-width:100%; }
+/* Sprite buttons retain their source text as an accessible name. Keep that
+   text off the image even when the general comment palette sets button color.
+   Padding enlarges the tap area; content-box clipping prevents adjacent sprite
+   tiles from bleeding into it. No source image, handler or label is replaced. */
+html[data-moa-theme][data-moa-detail] .comment-write .btm-wrt-btns > .lt { display:flex; flex-wrap:wrap; align-items:center; gap:4px; min-width:0; max-width:100%; }
+html[data-moa-theme][data-moa-detail] .comment-write .btm-wrt-btns > .lt > button.sp-write-form-icon {
+  color:transparent !important; font-size:0 !important; line-height:0; text-indent:100%; white-space:nowrap; overflow:hidden;
+  box-sizing:content-box; padding:10px; border:0; margin:0; flex:0 0 auto; background-origin:content-box; background-clip:content-box;
+}
 html[data-moa-theme][data-moa-detail] .moa-detail-compose-heading { min-width:0; font-size:20px; line-height:1.4; font-weight:600; }
 html[data-moa-theme][data-moa-detail] [data-moa-compose-heading] > .wrt-tit { display:none; }
 html[data-moa-theme][data-moa-detail] .moa-detail-compose-destination { display:flex; align-items:baseline; gap:14px; padding:18px 16px; border-bottom:1px solid var(--moa-line); font-size:14px; line-height:1.6; }

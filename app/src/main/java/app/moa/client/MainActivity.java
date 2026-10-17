@@ -959,7 +959,6 @@ public final class MainActivity extends Activity implements BrowserController.Li
             menu.getMenu().add(0, 3, 2, browser.isOriginalMode() ? "테마 화면 보기" : "원본 화면 보기");
             menu.getMenu().add(0, 4, 3, "현재 페이지 저장");
             menu.getMenu().add(0, 5, 4, "페이지 주소 공유");
-            menu.getMenu().add(0, 11, 5, "닫을 수 있는 광고 닫기");
         }
         menu.getMenu().add(0, 6, 5, "로그인");
         menu.getMenu().add(0, 7, 6, "화면 스타일");
@@ -984,7 +983,6 @@ public final class MainActivity extends Activity implements BrowserController.Li
                 case 8: showSettings(); break;
                 case 9: showAbout(); break;
                 case 10: compose(); break;
-                case 11: browser.closeDismissibleAds(); break;
                 default: return false;
             }
             return true;
@@ -1026,7 +1024,6 @@ public final class MainActivity extends Activity implements BrowserController.Li
             });
             addDrawerAction(panel, dialog, "bookmark", "현재 페이지 저장", this::saveCurrent);
             addDrawerAction(panel, dialog, "share", "페이지 주소 공유", this::shareCurrent);
-            addDrawerAction(panel, dialog, "close", "닫을 수 있는 광고 닫기", browser::closeDismissibleAds);
         }
         addDrawerAction(panel, dialog, "grid", "화면 스타일", this::showThemes);
         addDrawerAction(panel, dialog, "settings", "환경 설정", this::showSettings);
@@ -1111,7 +1108,8 @@ public final class MainActivity extends Activity implements BrowserController.Li
         try { version = getPackageManager().getPackageInfo(getPackageName(), 0).versionName; }
         catch (android.content.pm.PackageManager.NameNotFoundException ignored) { }
         String details = "모아 " + version + " · 개발 미리보기\n\n"
-                + "연결한 커뮤니티의 화면 배치를 선택한 스타일로 바꾸는 테마 뷰어입니다. 연결 서비스는 디시인사이드이며, 콘텐츠와 광고는 원본 서비스가 제공합니다. 디시인사이드 및 각 테마에서 참고한 서비스의 공식 앱이나 제휴 앱이 아닙니다.\n\n"
+                + "연결한 커뮤니티의 화면 배치를 선택한 스타일로 바꾸는 테마 뷰어입니다. 연결 서비스와 콘텐츠 출처는 디시인사이드입니다. 디시인사이드 및 각 테마에서 참고한 서비스의 공식 앱이나 제휴 앱이 아닙니다.\n\n"
+                + "알려진 광고 영역과 게시판 아래의 외부 추천·검색 영역은 화면에서 숨깁니다. 원본 보기에서도 같은 정리가 적용됩니다. 광고의 네트워크 요청이나 추적을 모두 차단하는 기능은 아닙니다.\n\n"
                 + "글·댓글·추천 등은 원본 서비스의 기능입니다. 테마는 화면 표현을 바꾸며 공개 범위와 이용 권한은 바꾸지 않습니다. 지원이 어려운 페이지는 원본 보기로 이용할 수 있습니다.\n\n"
                 + "개인정보와 기기 저장\n"
                 + "선택한 테마, 글자 크기, 직접 저장한 페이지는 이 기기에 저장됩니다. 작성 중인 텍스트 초안도 복원을 위해 기기에 임시 저장될 수 있습니다. 비밀번호와 첨부파일은 초안에 저장하지 않습니다. 로그인 쿠키와 웹 저장소는 Android WebView에 저장되고 로그인 정보·작성 내용은 해당 서비스로 전달됩니다. 앱은 별도의 계정 서버나 자체 분석 도구를 사용하지 않습니다.\n\n"

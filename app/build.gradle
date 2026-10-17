@@ -7,12 +7,12 @@ android {
         applicationId 'app.moa.client'
         minSdk 26
         targetSdk 35
-        versionCode 7
-        versionName '0.3.1'
+        versionCode 8
+        versionName '0.3.2'
     }
     buildTypes {
         debug { debuggable true }
-        release { minifyEnabled false }
+        release { debuggable false; minifyEnabled false }
     }
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17

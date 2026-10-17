@@ -7,7 +7,7 @@
 (function () {
   'use strict';
   if (window.top !== window) return;
-  if (window.MoaSkin && window.MoaSkin.version === '3.0.1') return;
+  if (window.MoaSkin && window.MoaSkin.version === '3.0.2') return;
   if (window.MoaSkin && typeof window.MoaSkin.disable === 'function') window.MoaSkin.disable();
 
   var themes = {
@@ -370,20 +370,25 @@
     rows.forEach(function (state,row) { move(row); });
   }
 
+  function containsUnhiddenAd(container) {
+    var candidates = Array.from(container.querySelectorAll(adSelector));
+    if (container.matches(adSelector)) candidates.unshift(container);
+    var cleaned = root.getAttribute('data-moa-cleanup-active') === '1';
+    return candidates.some(function (ad) {
+      return !cleaned || !ad.closest('[data-moa-cleanup-hidden="1"]');
+    });
+  }
+
   function updatePresentation() {
     if (!current) return;
     var type = pageType();
     setAttribute(root, 'data-moa-layout', 'app');
-    // Never hide an advertising slot as a side effect of removing duplicated
-    // site navigation. If a provider adds a slot there, retain that surface.
+    // The independent cleanup module owns ad hiding. Slots it has already
+    // hidden must not leave an empty copy of the site's header or footer.
     document.querySelectorAll('body > .header, body > .nav, body > .footer, .gall-tit-box').forEach(function (chrome) {
-      var ad = chrome.querySelector(adSelector);
-      setAttribute(chrome, 'data-moa-contains-ad', ad ? 'true' : 'false');
-      // An ad in the site header must stay visible. It does not require bringing
-      // back the logo and the entire unrelated global navigation alongside it.
+      setAttribute(chrome, 'data-moa-contains-ad', String(containsUnhiddenAd(chrome)));
       chrome.querySelectorAll('.logo,#topsearch_form,.search-box,.menu-scroll-lst,.ft-top,.ft-btm').forEach(function (part) {
-        var containsAd = part.matches(adSelector) || part.querySelector(adSelector);
-        setAttribute(part,'data-moa-chrome-hidden',String(!containsAd));
+        setAttribute(part,'data-moa-chrome-hidden',String(!containsUnhiddenAd(part)));
       });
     });
     var group = document.querySelector('.gall-tit-group');
@@ -470,48 +475,6 @@
     ownedNodes.clear(); rows.clear(); pageHeader = null; listHeading = null; sheetHeader = null;
   }
 
-  // This is not an ad blocker. It invokes only the site's verified close
-  // control for its fixed footer slot, and only when explicitly requested.
-  // Ordinary sponsor links, no-close slots and authored content are untouched.
-  function availableAdCloses() {
-    if (!pageType() || typeof window.$ !== 'function') return [];
-    var handled = new Set();
-    var closePattern = /^\s*\$\s*\(\s*this\s*\)\s*\.\s*closest\s*\(\s*(['"])\.adv-group\1\s*\)\s*\.\s*hide\s*\(\s*\)\s*;?\s*(?:return\s+false\s*;?\s*)?$/;
-    return Array.from(document.querySelectorAll('section.adv-group.pwlink a[onclick]')).filter(function (button) {
-      var slot = button.closest('section.adv-group.pwlink');
-      var wrapper = button.parentElement;
-      if (!slot || !wrapper || wrapper.parentElement !== slot || handled.has(slot)) return false;
-      if (button.closest('.thum-txtin,#textbox,[contenteditable],.all-comment-lst,#writeForm,#comment_write,.gall-detail-lnktb,.moa-entry')) return false;
-      if (!wrapper.querySelector('#footer_bottom_overlay') || getComputedStyle(wrapper).position !== 'fixed') return false;
-      if (!closePattern.test(button.getAttribute('onclick') || '')) return false;
-      if (!/^(?:#|javascript\s*:\s*;?)?$/i.test((button.getAttribute('href') || '').trim())) return false;
-      if (!button.isConnected || button.ownerDocument !== document) return false;
-      for (var ancestor = button; ancestor; ancestor = ancestor.parentElement) {
-        var style = getComputedStyle(ancestor);
-        if (style.display === 'none' || style.visibility === 'hidden' || Number(style.opacity) === 0) return false;
-      }
-      var bounds = button.getBoundingClientRect();
-      if (bounds.width <= 0 || bounds.height <= 0) return false;
-      handled.add(slot); return true;
-    });
-  }
-
-  function closeAvailableAds() {
-    var candidates = availableAdCloses();
-    var requested = 0, closed = 0;
-    candidates.forEach(function (button) {
-      // Revalidate after each source callback; another control can have been
-      // replaced or hidden by the site's own close handler.
-      if (availableAdCloses().indexOf(button) < 0) return;
-      var slot = button.closest('section.adv-group.pwlink');
-      try {
-        button.click(); requested++;
-        if (!slot.isConnected || getComputedStyle(slot).display === 'none' || getComputedStyle(slot).visibility === 'hidden') closed++;
-      } catch (_) { }
-    });
-    return {available:candidates.length,requested:requested,closed:closed};
-  }
-
   function observe() {
     if (!observer) observer = new MutationObserver(function (mutations) {
       if (!current || queued || !mutations.some(function (m) {
@@ -524,10 +487,10 @@
         observer.disconnect();
         updateUiLabels();
         updatePresentation();
-        observer.observe(root, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['class','id','src','data-src','href','alt'] });
+        observer.observe(root, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['class','id','src','data-src','href','alt','data-moa-cleanup-active','data-moa-cleanup-hidden'] });
       });
     });
-    observer.observe(root, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['class','id','src','data-src','href','alt'] });
+    observer.observe(root, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['class','id','src','data-src','href','alt','data-moa-cleanup-active','data-moa-cleanup-hidden'] });
   }
 
   function disable(reason) {
@@ -615,7 +578,22 @@
   }
 
   window.MoaSkin = Object.freeze({
-    version: '3.0.1', apply: apply, disable: disable, closeAvailableAds: closeAvailableAds,
+    version: '3.0.2', apply: apply, disable: disable,
+    presentationState: function () {
+      var currentRoot = document.documentElement;
+      var style = document.getElementById('moa-skin-style');
+      var ready = Boolean(currentRoot && current && lastStatus.applied && !pendingOptions && !waitingForDocument && !queued &&
+        document.readyState !== 'loading' && style && style.isConnected && !style.disabled &&
+        style.getAttribute('data-moa-owned') === 'true' &&
+        currentRoot.getAttribute('data-moa-theme') === current.theme && currentRoot.getAttribute('data-moa-layout') === 'app');
+      return {
+        ready: ready,
+        theme: current ? current.theme : null,
+        dark: Boolean(currentRoot && currentRoot.getAttribute('data-moa-dark') === 'true'),
+        fontScale: currentRoot ? Number(currentRoot.style.getPropertyValue('--moa-font-scale')) || 1 : 1,
+        reason: lastStatus.reason
+      };
+    },
     status: function () { return Object.assign({}, lastStatus); }
   });
 })();

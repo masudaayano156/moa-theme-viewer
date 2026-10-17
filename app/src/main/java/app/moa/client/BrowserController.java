@@ -31,6 +31,11 @@ import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.FrameLayout;
+import android.widget.LinearLayout;
+import android.widget.TextView;
+import android.widget.Button;
+import android.view.Gravity;
+import android.content.res.ColorStateList;
 import android.widget.Toast;
 import androidx.webkit.ScriptHandler;
 import androidx.webkit.WebViewCompat;
@@ -82,12 +87,18 @@ public final class BrowserController {
     private boolean openFavoritesPending, authNavigationPending;
     private int favoritesGeneration, documentGeneration, accountGeneration, authenticationGeneration, navigationIntentGeneration;
     private float fontScale = 1f;
-    private String css = "", script = "", favoritesScript = "", draftScript = "", recoveryUrl = "", draftOwner = "";
+    private String css = "", script = "", favoritesScript = "", draftScript = "", cleanupScript = "", recoveryUrl = "", draftOwner = "";
     private int lastDraftPromptGeneration = -1;
     private AlertDialog draftDialog, permissionDialog;
     private NavigationCheck navigationCheck;
     private PageContext approvedNavigationContext;
     private ScriptHandler documentScript;
+    private PresentationGate presentation;
+    private LinearLayout presentationCover;
+    private TextView presentationMessage;
+    private Button presentationRetry, presentationOriginal;
+    private boolean browserPaused;
+    private long presentationWork;
     private ValueCallback<Uri[]> fileCallback;
     private WebView fileOwner, permissionOwner;
     private boolean filePickerOutstanding, fileMultiple, permissionAwaitingSystem;
@@ -111,6 +122,7 @@ public final class BrowserController {
             script = readAsset("web/detail-layout.js") + "\n" + readAsset("web/skin.js");
             favoritesScript = readAsset("web/account-favorites.js");
             draftScript = readAsset("web/drafts.js");
+            cleanupScript = readAsset("web/page-cleanup.js");
         } catch (Exception exception) {
             listener.onError("테마 파일을 읽지 못했습니다. 원본 화면으로 이용할 수 있습니다.");
         }
@@ -229,7 +241,7 @@ public final class BrowserController {
     private void openInternal(String url) {
         if (destroyed) return;
         if (UrlPolicy.isDcHttps(url)) {
-            snapshotDraft(() -> web.loadUrl(url));
+            snapshotDraft(() -> { prepareNavigation(url); web.loadUrl(url); });
         } else {
             openExternal(url);
         }
@@ -237,11 +249,11 @@ public final class BrowserController {
     public boolean canGoBack() { return !destroyed && (fullscreenView != null || web.canGoBack()); }
     public void goBack() {
         if (fullscreenView != null) hideFullscreen();
-        else if (!destroyed && web.canGoBack()) { cancelFavoritesNavigation(); snapshotDraft(() -> web.goBack()); }
+        else if (!destroyed && web.canGoBack()) { cancelFavoritesNavigation(); snapshotDraft(() -> { prepareHistoryNavigation(-1); web.goBack(); }); }
     }
     public boolean canGoForward() { return !destroyed && web.canGoForward(); }
-    public void goForward() { if (canGoForward()) { cancelFavoritesNavigation(); snapshotDraft(() -> web.goForward()); } }
-    public void reload() { cancelFavoritesNavigation(); if (!recoveryUrl.isEmpty()) openInternal(recoveryUrl); else snapshotDraft(() -> web.reload()); }
+    public void goForward() { if (canGoForward()) { cancelFavoritesNavigation(); snapshotDraft(() -> { prepareHistoryNavigation(1); web.goForward(); }); } }
+    public void reload() { cancelFavoritesNavigation(); if (!recoveryUrl.isEmpty()) openInternal(recoveryUrl); else snapshotDraft(() -> { beginPresentation(getUrl(), false); web.reload(); }); }
 
     private void cancelFavoritesNavigation() {
         navigationIntentGeneration++;
@@ -261,16 +273,20 @@ public final class BrowserController {
         container.setBackgroundColor(this.theme.palette(dark).background);
         web.setBackgroundColor(this.theme.palette(dark).background);
         refreshDocumentScript();
+        restartCoveredPresentation();
         applyTheme();
     }
     public void setFontScale(float scale) {
         fontScale = Math.max(.85f, Math.min(1.4f, scale));
         refreshDocumentScript();
+        restartCoveredPresentation();
         applyTheme();
     }
     public void setOriginalMode(boolean enabled) {
+        boolean changed = original != enabled;
         original = enabled;
         refreshDocumentScript();
+        if (changed && !enabled && UrlPolicy.canTheme(getUrl())) beginPresentation(getUrl(), !loading);
         applyTheme();
     }
 
@@ -318,7 +334,10 @@ public final class BrowserController {
             if (!request.isForMainFrame()) return false;
             String url = request.getUrl().toString();
             if (view == web && request.hasGesture() && !request.isRedirect()) cancelFavoritesNavigation();
-            if (UrlPolicy.isDcHttps(url)) return false;
+            if (UrlPolicy.isDcHttps(url)) {
+                if (view == web && !sameDocumentFragment(getUrl(), url)) prepareNavigation(url);
+                return false;
+            }
             Dialog popup = popups.get(view);
             if (popup != null) handler.post(popup::dismiss);
             openExternal(url); return true;
@@ -344,16 +363,27 @@ public final class BrowserController {
             if (view != web) return;
             if (!isFavoritesPage(url) && !UrlPolicy.isAuthenticationPage(url)) openFavoritesPending = false;
             documentGeneration++;
+            beginPresentation(url, false);
             dismissDraftDialog();
             recoveryUrl = "";
             loading = true;
             listener.onPageState(view.getTitle(), url, true);
+        }
+        @Override public void onPageCommitVisible(WebView view, String url) {
+            if (view != web || !isLive(view)) return;
+            PresentationGate gate = presentation;
+            if (gate != null && gate.matchesDocument(url)) {
+                gate.committed = true;
+                if (gate.failed) showPresentationCover(true, presentationMessage.getText().toString());
+                else gate.probe();
+            }
         }
         @Override public void onPageFinished(WebView view, String url) {
             if (!isLive(view)) return;
             if (view == web && !documentKey(url).equals(documentKey(getUrl()))) return;
             CookieManager.getInstance().flush();
             if (view != web) {
+                if (UrlPolicy.canTheme(url) && !cleanupScript.isEmpty()) view.evaluateJavascript(cleanupScript, null);
                 if (authNavigationPending && !UrlPolicy.isAuthenticationPage(url)) { authNavigationPending = false; refreshAccountFavorites(); }
                 return;
             }
@@ -391,12 +421,16 @@ public final class BrowserController {
         @Override public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
             if (isLive(view) && request.isForMainFrame() && view == web) {
                 loading = false;
+                if (presentation != null && presentation.url.equals(presentationUrl(request.getUrl().toString())))
+                    failPresentation("페이지 연결을 완료하지 못했습니다. 인터넷 연결을 확인해 주세요.");
                 listener.onError("페이지를 열지 못했습니다. 인터넷 연결을 확인한 뒤 새로고침해 주세요.");
                 listener.onPageState(view.getTitle(), view.getUrl(), false);
             }
         }
         @Override public void onReceivedSslError(WebView view, SslErrorHandler sslHandler, SslError error) {
             sslHandler.cancel();
+            if (view == web && isLive(view) && presentation != null && error != null
+                    && presentation.url.equals(presentationUrl(error.getUrl()))) failPresentation("사이트의 보안 연결을 확인하지 못했습니다.");
             if (isLive(view)) listener.onError("사이트의 보안 연결을 확인할 수 없어 열기를 중단했습니다.");
         }
         @Override public boolean onRenderProcessGone(WebView view, android.webkit.RenderProcessGoneDetail detail) {
@@ -416,7 +450,9 @@ public final class BrowserController {
             view.destroy();
             web = new WebView(activity);
             configure(web);
-            container.addView(web, new FrameLayout.LayoutParams(-1, -1));
+            container.addView(web, 0, new FrameLayout.LayoutParams(-1, -1));
+            beginPresentation(recoveryUrl, false);
+            failPresentation("웹 화면이 중단되었습니다. 새로고침으로 다시 열 수 있습니다.");
             web.setBackgroundColor(theme.palette(dark).background);
             refreshDocumentScript();
             loading = false;
@@ -674,7 +710,7 @@ public final class BrowserController {
         try {
             if (!WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) return;
             if (documentScript != null) { documentScript.remove(); documentScript = null; }
-            String source = draftScript + ((!original && !script.isEmpty()) ? "\n" + skinSource() : "");
+            String source = cleanupScript + "\n" + draftScript + ((!original && !script.isEmpty()) ? "\n" + skinSource() : "");
             documentScript = WebViewCompat.addDocumentStartJavaScript(web, source, Collections.singleton("https://m.dcinside.com"));
         } catch (RuntimeException | LinkageError unavailableProvider) {
             // Older or unavailable providers still receive the onPageFinished skin.
@@ -683,10 +719,210 @@ public final class BrowserController {
     }
     private void applyTheme() {
         if (destroyed) return;
+        if (UrlPolicy.canTheme(getUrl()) && !cleanupScript.isEmpty()) web.evaluateJavascript(cleanupScript, null);
         if (original || !UrlPolicy.canTheme(getUrl())) {
-            web.evaluateJavascript("window.MoaSkin&&window.MoaSkin.disable();", null);
-        } else if (!script.isEmpty()) web.evaluateJavascript(skinSource(), null);
+            if (original && presentation != null) revealOriginalPresentation();
+            else {
+                clearPresentation();
+                web.evaluateJavascript("window.MoaSkin&&window.MoaSkin.disable();", null);
+            }
+        } else if (presentation != null) presentation.probe();
+        else if (!script.isEmpty()) web.evaluateJavascript(skinSource(), null);
     }
+
+    private String presentationUrl(String url) {
+        if (url == null) return "";
+        int fragment = url.indexOf('#');
+        return fragment < 0 ? url : url.substring(0, fragment);
+    }
+
+    private boolean sameDocumentFragment(String current, String next) {
+        return current != null && next != null && presentationUrl(current).equals(presentationUrl(next))
+                && (!current.equals(next) || next.contains("#"));
+    }
+
+    private void prepareNavigation(String url) {
+        if (!sameDocumentFragment(getUrl(), url)) beginPresentation(url, false);
+    }
+
+    private void prepareHistoryNavigation(int offset) {
+        android.webkit.WebBackForwardList history = web.copyBackForwardList();
+        int index = history.getCurrentIndex() + offset;
+        String target = index >= 0 && index < history.getSize() ? history.getItemAtIndex(index).getUrl() : getUrl();
+        prepareNavigation(target);
+    }
+
+    private void beginPresentation(String url, boolean committed) {
+        if (destroyed) return;
+        if (original || !UrlPolicy.canTheme(url)) { clearPresentation(); return; }
+        if (presentation != null) presentation.suspend();
+        presentation = new PresentationGate(url, committed);
+        showPresentationCover(false, "테마 화면을 준비하고 있어요");
+        presentation.resume();
+    }
+
+    private void restartCoveredPresentation() {
+        if (presentation == null) return;
+        String url = presentation.url;
+        boolean committed = presentation.committed;
+        beginPresentation(url, committed);
+    }
+
+    private void showPresentationCover(boolean failure, String message) {
+        if (presentationCover == null) {
+            presentationCover = new LinearLayout(activity);
+            presentationCover.setOrientation(LinearLayout.VERTICAL);
+            presentationCover.setGravity(Gravity.CENTER);
+            int padding = Math.round(24 * activity.getResources().getDisplayMetrics().density);
+            presentationCover.setPadding(padding, padding, padding, padding);
+            presentationCover.setClickable(true);
+            presentationCover.setFocusable(true);
+            presentationCover.setTag("page-presentation-cover");
+            presentationMessage = new TextView(activity);
+            presentationMessage.setGravity(Gravity.CENTER);
+            presentationMessage.setTextSize(16);
+            presentationMessage.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
+            presentationCover.addView(presentationMessage, new LinearLayout.LayoutParams(-1, -2));
+            presentationRetry = new Button(activity);
+            presentationRetry.setText("화면 다시 준비");
+            presentationRetry.setOnClickListener(ignored -> {
+                PresentationGate gate = presentation;
+                if (gate == null || !gate.isCurrent()) return;
+                if (gate.committed) beginPresentation(gate.url, true);
+                else guardNavigation(this::reload);
+            });
+            presentationCover.addView(presentationRetry, new LinearLayout.LayoutParams(-1, -2));
+            presentationOriginal = new Button(activity);
+            presentationOriginal.setText("원본 보기");
+            presentationOriginal.setOnClickListener(ignored -> setOriginalMode(true));
+            presentationCover.addView(presentationOriginal, new LinearLayout.LayoutParams(-1, -2));
+        }
+        ThemeSpec.Palette palette = theme.palette(dark);
+        presentationCover.setBackgroundColor(palette.background);
+        presentationMessage.setTextColor(palette.text);
+        presentationMessage.setText(message);
+        presentationRetry.setTextColor(palette.onAccent);
+        presentationRetry.setBackgroundTintList(ColorStateList.valueOf(palette.accent));
+        presentationOriginal.setTextColor(palette.accent);
+        presentationOriginal.setBackgroundTintList(ColorStateList.valueOf(palette.surface));
+        presentationRetry.setText(presentation != null && presentation.committed ? "화면 다시 준비" : "페이지 다시 열기");
+        presentationRetry.setVisibility(failure ? View.VISIBLE : View.GONE);
+        presentationOriginal.setVisibility(failure ? View.VISIBLE : View.GONE);
+        if (presentationCover.getParent() == null) container.addView(presentationCover, new FrameLayout.LayoutParams(-1, -1));
+        presentationCover.bringToFront();
+        web.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);
+    }
+
+    private void clearPresentation() {
+        if (presentation != null) presentation.suspend();
+        presentation = null;
+        if (presentationCover != null) container.removeView(presentationCover);
+        if (web != null) web.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_AUTO);
+    }
+
+    private void failPresentation(String message) {
+        PresentationGate gate = presentation;
+        if (gate == null || !gate.isCurrent()) return;
+        gate.suspend();
+        gate.failed = true;
+        showPresentationCover(true, message + " 화면을 다시 준비하거나 원본으로 볼 수 있어요.");
+    }
+
+    private void revealOriginalPresentation() {
+        PresentationGate gate = presentation;
+        if (gate == null) return;
+        gate.suspend();
+        long work = gate.work;
+        Runnable reveal = () -> {
+            if (gate.isCurrent() && gate.work == work && original) clearPresentation();
+        };
+        // Only the user's explicit original-view selection can release a cover
+        // when JavaScript or the compositor no longer responds.
+        handler.postDelayed(reveal, 1000);
+        try {
+            gate.source.evaluateJavascript("window.MoaSkin&&window.MoaSkin.disable();", ignored -> {
+                if (!gate.isCurrent() || gate.work != work || !original) return;
+                try {
+                    gate.source.postVisualStateCallback(work, new WebView.VisualStateCallback() {
+                        @Override public void onComplete(long requestId) { reveal.run(); }
+                    });
+                } catch (RuntimeException ignoredRenderer) { /* bounded explicit fallback remains scheduled */ }
+            });
+        } catch (RuntimeException ignored) { /* explicit fallback above remains bounded */ }
+    }
+
+    /** Keep native cover opaque until the intended DOM and its next drawn frame agree. */
+    private final class PresentationGate {
+        final WebView source = web;
+        final int page = documentGeneration, account = accountGeneration;
+        final String url, themeId = theme.id;
+        final boolean night = dark;
+        final float scale = fontScale;
+        boolean committed, failed, inFlight, visualPending, applied;
+        long work;
+        final Runnable poll = this::probe;
+        final Runnable timeout = () -> {
+            if (isCurrent() && !browserPaused) failPresentation("테마 화면 준비가 지연되고 있습니다.");
+        };
+        PresentationGate(String url, boolean committed) { this.url = presentationUrl(url); this.committed = committed; }
+        boolean isCurrent() {
+            return presentation == this && !destroyed && source == web && page == documentGeneration
+                    && account == accountGeneration && themeId.equals(theme.id) && night == dark && scale == fontScale;
+        }
+        boolean matchesDocument(String value) {
+            return isCurrent() && url.equals(presentationUrl(value)) && url.equals(presentationUrl(getUrl()));
+        }
+        void suspend() {
+            handler.removeCallbacks(poll); handler.removeCallbacks(timeout);
+            work = ++presentationWork;
+            inFlight = false; visualPending = false;
+        }
+        void resume() {
+            if (!isCurrent() || browserPaused || failed) return;
+            handler.removeCallbacks(timeout);
+            handler.postDelayed(timeout, 12000);
+            probe();
+        }
+        void probe() {
+            if (!isCurrent() || original || browserPaused || failed || !committed || inFlight || visualPending) return;
+            if (!matchesDocument(getUrl())) return;
+            inFlight = true;
+            long request = work = ++presentationWork;
+            String sourceScript = applied ? "" : cleanupScript + "\n" + skinSource() + "\n";
+            applied = true;
+            String query = sourceScript + ";JSON.stringify(window.MoaSkin&&window.MoaSkin.presentationState?window.MoaSkin.presentationState():{ready:false,reason:'missing-presentation-api'})";
+            try {
+                source.evaluateJavascript(query, response -> {
+                    if (!isCurrent() || work != request || original || browserPaused || !matchesDocument(getUrl())) return;
+                    inFlight = false;
+                    boolean ready = false;
+                    String reason = "";
+                    try {
+                        Object decoded = new org.json.JSONTokener(response == null ? "null" : response).nextValue();
+                        JSONObject state = new JSONObject(decoded instanceof String ? (String) decoded : "{}");
+                        ready = state.optBoolean("ready", false) && themeId.equals(state.optString("theme"))
+                                && night == state.optBoolean("dark") && Math.abs(scale - state.optDouble("fontScale", 0)) < .001;
+                        reason = state.optString("reason", "");
+                    } catch (Exception ignored) { }
+                    if (!ready) {
+                        if (reason.startsWith("unsupported")) failPresentation("이 화면에 테마를 적용하지 못했습니다.");
+                        else handler.postDelayed(poll, 100);
+                        return;
+                    }
+                    visualPending = true;
+                    try {
+                        source.postVisualStateCallback(request, new WebView.VisualStateCallback() {
+                            @Override public void onComplete(long requestId) {
+                                if (requestId == request && work == request && isCurrent() && !browserPaused
+                                        && !original && matchesDocument(getUrl())) clearPresentation();
+                            }
+                        });
+                    } catch (RuntimeException unavailableRenderer) { failPresentation("화면 표시 준비를 완료하지 못했습니다."); }
+                });
+            } catch (RuntimeException unavailableRenderer) { failPresentation("테마 화면을 준비하지 못했습니다."); }
+        }
+    }
+
 
     private void openExternal(String value) {
         try {
@@ -825,6 +1061,7 @@ public final class BrowserController {
         invalidatePendingDownload("계정 정보가 변경되어 저장을 취소했습니다. 파일을 다시 선택해 주세요.");
         draftOwner = owner;
         accountGeneration++;
+        restartCoveredPresentation();
         lastDraftPromptGeneration = -1;
         dismissDraftDialog();
         if (!owner.isEmpty() && !destroyed && !loading) offerDraftRestore(getUrl());
@@ -917,26 +1154,6 @@ public final class BrowserController {
         }
     }
 
-    /** Only a deliberate user action invokes the site's existing close buttons. */
-    public void closeDismissibleAds() {
-        if (destroyed) return;
-        if (!UrlPolicy.canTheme(getUrl())) {
-            Toast.makeText(activity, "이 화면에는 닫기 버튼이 있는 광고가 없어요", Toast.LENGTH_SHORT).show();
-            return;
-        }
-        PageContext context = new PageContext();
-        context.source.evaluateJavascript(script + ";JSON.stringify(window.MoaSkin?window.MoaSkin.closeAvailableAds():{available:0,requested:0,closed:0})", result -> {
-            if (!context.isCurrent()) return;
-            int requested = 0;
-            try {
-                Object decoded = new org.json.JSONTokener(result == null ? "null" : result).nextValue();
-                requested = Math.max(0, new JSONObject(decoded instanceof String ? (String) decoded : "{}").optInt("requested", 0));
-            } catch (Exception ignored) { }
-            Toast.makeText(activity, requested > 0 ? "닫기 버튼이 있는 광고 " + requested + "개에 닫기를 실행했어요"
-                    : "이 화면에는 닫기 버튼이 있는 광고가 없어요", Toast.LENGTH_SHORT).show();
-        });
-    }
-
     /** Text drafts are scoped to the verified account and document, never passwords/tokens. */
     public void snapshotDraft(Runnable after) {
         if (destroyed) return;
@@ -1000,6 +1217,7 @@ public final class BrowserController {
     }
     public void onSaveInstanceState(Bundle state) {
         web.saveState(state); snapshotDraft(null);
+        state.putString("browser.presentationUrl", getUrl());
         state.putBoolean("browser.filePickerOutstanding", filePickerOutstanding);
         state.putBoolean("browser.permissionAwaitingSystem", permissionAwaitingSystem);
         state.putBoolean("browser.savePickerOutstanding", savePickerOutstanding);
@@ -1010,10 +1228,16 @@ public final class BrowserController {
         permissionAwaitingSystem = state.getBoolean("browser.permissionAwaitingSystem", false);
         savePickerOutstanding = state.getBoolean("browser.savePickerOutstanding", false) || state.getString("browser.pendingDownload", null) != null;
         if (savePickerOutstanding) downloadCancellationNotice = "앱 화면이 다시 생성되어 저장을 취소했습니다. 파일을 다시 선택해 주세요.";
-        return web.restoreState(state) != null;
+        String restoredUrl = state.getString("browser.presentationUrl", "");
+        prepareNavigation(restoredUrl);
+        boolean restored = web.restoreState(state) != null;
+        if (!restored) clearPresentation();
+        return restored;
     }
     public void onPause() {
         if (!destroyed) {
+            browserPaused = true;
+            if (presentation != null) presentation.suspend();
             cancelNavigationGuard();
             hideFullscreen(); snapshotDraft(null); CookieManager.getInstance().flush(); web.onPause();
             for (WebView popup : new ArrayList<>(popups.keySet())) popup.onPause();
@@ -1021,13 +1245,16 @@ public final class BrowserController {
     }
     public void onResume() {
         if (!destroyed) {
+            browserPaused = false;
             web.onResume();
+            if (presentation != null) presentation.resume();
             for (WebView popup : new ArrayList<>(popups.keySet())) popup.onResume();
         }
     }
     public void destroy() {
         if (destroyed) return;
         cancelNavigationGuard();
+        clearPresentation();
         destroyed = true; handler.removeCallbacksAndMessages(null);
         for (SiteDialog request : new ArrayList<>(siteDialogs.values())) request.finish(false);
         pendingDownload = null;
