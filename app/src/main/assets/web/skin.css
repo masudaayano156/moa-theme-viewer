@@ -597,6 +597,13 @@ html[data-moa-theme][data-moa-layout="app"] :is(#writeForm .ipt,#comment_write .
 html[data-moa-theme][data-moa-layout="app"] #textbox:empty::before { color:var(--moa-muted) !important; opacity:1; }
 html[data-moa-theme][data-moa-layout="app"] :is(.malwrt-lst,.mal-lst) a { color:var(--moa-muted) !important; background-color:var(--moa-paper) !important; }
 html[data-moa-theme][data-moa-layout="app"] :is(.malwrt-lst,.mal-lst) .on a { color:var(--moa-action-ink) !important; background-color:var(--moa-tint) !important; }
+/* The real mobile category slider has its own white/blue wrapper and overlay. */
+html[data-moa-theme][data-moa-layout="app"] .mal-sw-wrap .detail-sel-box,
+html[data-moa-theme][data-moa-layout="app"] .mal-sw-wrap .detail-sel-box > .rt {
+  background-color:var(--moa-paper) !important; border-color:var(--moa-line) !important;
+}
+html[data-moa-theme][data-moa-layout="app"] .mal-sw-wrap .mal-slider + .rt::before { background-color:var(--moa-line) !important; }
+html[data-moa-theme][data-moa-layout="app"] .detail-sel-box + .gall-detail-lst { border-top-color:var(--moa-line) !important; }
 html[data-moa-theme][data-moa-layout="app"] .wrt-form-box .malwrt-slider::after { background:none; }
 html[data-moa-theme][data-moa-layout="app"] :is(.wrt-tit-box .btn-temp,#writeForm .btn-line-blue,#writeForm .btn-line-inblue) { color:var(--moa-action-on) !important; background:var(--moa-action-fill) !important; border-color:var(--moa-action-fill) !important; }
 html[data-moa-theme][data-moa-layout="app"] #writeForm :is(.btn-line-gray,.btn-line-white) { color:var(--moa-ink) !important; background:var(--moa-paper) !important; border-color:var(--moa-line) !important; }

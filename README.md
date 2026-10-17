@@ -1,6 +1,6 @@
 # 모아 — 커뮤니티 테마 뷰어
 
-**[Android APK 다운로드 · 0.4.0 미리보기](https://github.com/masudaayano156/moa-theme-viewer/releases/download/v0.4.0/moa-0.4.0.apk)** · [릴리스와 체크섬](https://github.com/masudaayano156/moa-theme-viewer/releases/tag/v0.4.0)
+**[Android APK 다운로드 · 0.4.1 미리보기](https://github.com/masudaayano156/moa-theme-viewer/releases/download/v0.4.1/moa-0.4.1.apk)** · [릴리스와 체크섬](https://github.com/masudaayano156/moa-theme-viewer/releases/tag/v0.4.1)
 
 Android 8.0 이상. 기존 0.3.2 이상은 삭제하지 않고 업데이트 설치할 수 있습니다. 미리보기 릴리스는 GitHub의 `Latest` 목록에 나타나지 않을 수 있으므로 위 다운로드 링크를 사용하세요.
 
