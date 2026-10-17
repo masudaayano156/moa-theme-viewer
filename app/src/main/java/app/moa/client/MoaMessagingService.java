@@ -7,7 +7,12 @@ import com.google.firebase.messaging.RemoteMessage;
 public final class MoaMessagingService extends FirebaseMessagingService {
     @Override public void onMessageReceived(RemoteMessage message) {
         // The relay sends data-only payloads. Remote titles and content are never displayed.
-        if (message.getNotification() == null) PushNotifications.show(this, message.getData());
+        if (message.getNotification() != null) return;
+        if ("registration".equals(message.getData().get("kind"))) {
+            PushRelayClient.acceptRegistrationMessage(this, message.getData());
+            return;
+        }
+        PushNotifications.show(this, message.getData());
     }
 
     @Override public void onNewToken(String token) {

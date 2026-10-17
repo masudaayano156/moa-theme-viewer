@@ -14,6 +14,7 @@ public final class PushClient {
     static final String PREFS = "moa_push";
     private static final Object LOCK = new Object();
     private static long generation;
+    private static long tokenRevision;
     private static Task<Void> deletion;
 
     public interface TokenCallback {
@@ -57,7 +58,10 @@ public final class PushClient {
         }
         synchronized (LOCK) {
             generation++;
-            preferences(app).edit().putBoolean("enabled", true).apply();
+            if (!preferences(app).edit().putBoolean("enabled", true).commit()) {
+                error(callback, "알림 설정을 저장하지 못했어요. 다시 시도해 주세요.");
+                return;
+            }
         }
         getToken(app, callback);
     }
@@ -95,18 +99,24 @@ public final class PushClient {
                     return;
                 }
                 messaging.setAutoInitEnabled(true);
+                final long requestedTokenRevision = tokenRevision;
                 messaging.getToken().addOnCompleteListener(task -> {
                     synchronized (LOCK) {
                         if (generation != expected || !isEnabled(app)) return;
-                        if (!task.isSuccessful() || !validToken(task.getResult())) {
+                        // onNewToken can deliver a newer token before this older Task completes.
+                        String latest = completedToken(app, requestedTokenRevision, task.isSuccessful() ? task.getResult() : null);
+                        if (!validToken(latest)) {
                             error(callback, "푸시 연결 정보를 받지 못했어요. 네트워크를 확인하고 다시 시도해 주세요.");
                             return;
                         }
-                        acceptToken(app, task.getResult());
-                        String token = task.getResult();
+                        if (!acceptToken(app, latest)) {
+                            error(callback, "푸시 연결 정보를 저장하지 못했어요. 다시 시도해 주세요.");
+                            return;
+                        }
                         onMain(() -> {
                             synchronized (LOCK) {
-                                if (generation == expected && isEnabled(app)) callback.onToken(token);
+                                String current = cachedToken(app);
+                                if (generation == expected && isEnabled(app) && validToken(current)) callback.onToken(current);
                             }
                         });
                     }
@@ -122,8 +132,9 @@ public final class PushClient {
         Context app = context.getApplicationContext();
         synchronized (LOCK) {
             generation++;
+            tokenRevision++;
             preferences(app).edit().putBoolean("enabled", false)
-                    .remove("current_token").remove("previous_token").apply();
+                    .remove("current_token").remove("previous_token").commit();
             PushNotifications.cancelAll(app);
             try {
                 FirebaseMessaging messaging = messaging(app);
@@ -145,9 +156,14 @@ public final class PushClient {
             String previous = prefs.getString("current_token", "");
             SharedPreferences.Editor edit = prefs.edit().putString("current_token", token);
             if (!previous.isEmpty() && !previous.equals(token)) edit.putString("previous_token", previous);
-            edit.apply();
+            if (!edit.commit()) return false;
+            if (!previous.equals(token)) tokenRevision++;
             return true;
         }
+    }
+
+    static String completedToken(Context context, long requestedTokenRevision, String taskToken) {
+        synchronized (LOCK) { return tokenRevision != requestedTokenRevision ? cachedToken(context) : taskToken; }
     }
 
     private static FirebaseMessaging messaging(Context context) {

@@ -128,3 +128,8 @@
 !/app/src/main/res/xml/media_file_paths.xml
 !/push-worker/migrations/0002_public_watches.sql
 !/push-worker/src/public-watches.mjs
+!/app/src/main/java/app/moa/client/PushRegistrationJobService.java
+!/push-worker/src/registration.mjs
+!/push-worker/src/job-dispatch.mjs
+!/push-worker/migrations/0003_public_registration.sql
+!/push-worker/migrations/0004_public_watch_queue.sql

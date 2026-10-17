@@ -85,15 +85,17 @@ public final class CommentWatchDialog {
     private void render(String message) {
         content.removeAllViews();
         paragraph("선택한 공개 글 주소와 댓글 수를 Cloudflare 알림 서버에 저장해요. 앱은 로그인 쿠키·비밀번호·본문·닉네임을 보내지 않아요. 서버가 공개 페이지를 읽지만 본문·닉네임은 저장하지 않아요.");
-        paragraph("최소 5분 간격으로 댓글 수 증가를 확인하며 즉시 알림은 아니에요. 기기당 3개, 등록 후 7일 동안 유지돼요. 본인 댓글도 포함되며 삭제와 추가가 겹치면 놓칠 수 있어요.");
+        paragraph("댓글 수 증가를 주기적으로 확인하며 즉시 알림은 아니에요. 기기당 20개 글을 등록할 수 있고, 확인 간격은 최소 5분부터 서버 대기량에 따라 늘어납니다. 본인 댓글도 포함되며 삭제와 추가가 겹치면 놓칠 수 있어요.");
         if (!message.isEmpty()) {
             TextView status = paragraph(message);
             status.setTag("watch_status");
             status.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
             status.setTextColor(colors.accent);
         }
+        long resumeAt = PushRelayClient.watchResumeAt(activity);
+        if (resumeAt > 0) paragraph("오늘 서버의 알림 처리량을 사용해 잠시 대기 중이에요. 다시 처리 가능한 시각: " + date(resumeAt));
         if (!PushRelayClient.isPaired(activity)) {
-            paragraph("댓글 알림을 사용하려면 먼저 푸시 알림을 켜고 이 기기를 서버에 연결해 주세요.");
+            paragraph("알림을 허용하면 앱이 이 기기를 자동으로 연결해요. 운영자에게 연결 코드를 받을 필요가 없어요.");
             button("푸시 연결 설정", "watch_connect", () -> { dismiss(); host.openPushSettings(); });
             return;
         }
@@ -117,13 +119,13 @@ public final class CommentWatchDialog {
             boolean saved = false;
             for (PushRelayClient.Watch watch : watches) if (watch.url.equals(currentUrl)) saved = true;
             final boolean renew = saved;
-            button(saved ? "현재 글 알림 7일 연장" : "현재 글 댓글 알림 등록", "watch_current", () -> {
+            button(saved ? "현재 글 알림 유지" : "현재 글 댓글 알림 등록", "watch_current", () -> {
                 if (renew) change(currentUrl, null);
                 else confirmWatch(currentUrl);
             });
         } else paragraph("게시글을 연 뒤 이 화면에서 그 글의 댓글 알림을 등록할 수 있어요.");
         button("알림 목록 새로고침", "watch_refresh", this::refresh);
-        heading("등록한 글 · " + watches.size() + " / 3");
+        heading("등록한 글 · " + watches.size() + " / 20");
         if (watches.isEmpty() && !busy) paragraph("아직 등록한 글이 없어요.");
         for (PushRelayClient.Watch watch : watches) {
             View line = new View(activity); line.setBackgroundColor(colors.border);
@@ -131,11 +133,11 @@ public final class CommentWatchDialog {
             heading(articleLabel(watch.url));
             paragraph(statusText(watch.status) + (watch.baselineCount == null ? "" : " · 댓글 " + watch.baselineCount));
             if (watch.lastChecked > 0) paragraph("최근 확인 " + date(watch.lastChecked));
-            paragraph("만료 " + date(watch.expiresAt));
-            button("7일 연장", "watch_renew_" + watch.watchId, () -> change(watch.url, null));
+            paragraph("확인 유지 기한 " + date(watch.expiresAt));
+            button("30일 연장", "watch_renew_" + watch.watchId, () -> change(watch.url, null));
             button("이 글 알림 해제", "watch_remove_" + watch.watchId, () -> change(null, watch.watchId));
         }
-        paragraph("초기 서버는 전체 5개 글, 같은 글을 구독하는 기기 3대까지 지원해요. 사이트 차단·서버 대기열·절전 상태에 따라 더 늦어질 수 있고, 원본 글의 조회수에 영향을 줄 수 있어요.");
+        paragraph("전체 5개 글·글당 3명 제한은 없어요. 무료 서버의 처리량을 함께 사용하므로 이용량이 많거나 사이트 연결이 지연되면 알림도 늦어질 수 있어요. 같은 글은 함께 확인하며 원본 글의 조회수에 영향을 줄 수 있습니다.");
     }
 
     private void confirmWatch(String url) {
@@ -143,7 +145,7 @@ public final class CommentWatchDialog {
         AlertDialog consent = new AlertDialog.Builder(activity, host.isDark()
                 ? android.R.style.Theme_Material_Dialog_Alert : android.R.style.Theme_Material_Light_Dialog_Alert)
                 .setTitle("이 공개 글의 댓글을 확인할까요?")
-                .setMessage("아래 주소를 Cloudflare 알림 서버에 보내고 7일 동안 저장합니다. 서버가 로그인 없이 댓글 수를 주기적으로 확인해요. 첫 확인은 기준만 저장하고 이후 증가할 때 알립니다.\n\n"
+                .setMessage("아래 주소를 Cloudflare 알림 서버에 보내고 30일 동안 저장합니다. 알림 목록을 확인하면 유지 기한을 자동으로 연장합니다. 서버가 로그인 없이 댓글 수를 주기적으로 확인해요. 첫 확인은 기준만 저장하고 이후 증가할 때 알립니다.\n\n"
                         + url + "\n\n쿠키·비밀번호·본문·닉네임은 전송하지 않아요.")
                 .setNegativeButton("취소", null).setPositiveButton("동의하고 등록", (ignored, which) -> change(url, null)).create();
         confirmation = consent;
@@ -157,8 +159,8 @@ public final class CommentWatchDialog {
         AlertDialog consent = new AlertDialog.Builder(activity, host.isDark()
                 ? android.R.style.Theme_Material_Dialog_Alert : android.R.style.Theme_Material_Light_Dialog_Alert)
                 .setTitle("앞으로 쓴 글을 자동 등록할까요?")
-                .setMessage("이 앱에서 새 글 등록이 확인될 때마다 해당 공개 글 주소를 Cloudflare 서버로 보내 7일 동안 댓글 수를 확인합니다.\n\n"
-                        + "예전에 쓴 글이나 읽기만 한 글은 등록하지 않아요. 쿠키·비밀번호·본문·닉네임은 보내지 않아요. 기기당 3개와 서버 전체 한도가 적용되며, 최초 확인 이후의 댓글 수 증가를 주기적으로 알립니다.\n\n"
+                .setMessage("이 앱에서 새 글 등록이 확인될 때마다 해당 공개 글 주소를 Cloudflare 서버로 보내 30일 동안 댓글 수를 확인합니다. 알림 목록을 확인하면 유지 기한을 자동으로 연장합니다.\n\n"
+                        + "예전에 쓴 글이나 읽기만 한 글은 등록하지 않아요. 쿠키·비밀번호·본문·닉네임은 보내지 않아요. 기기당 20개까지 등록할 수 있으며, 최초 확인 이후의 댓글 수 증가를 서버 대기 순서에 따라 알립니다.\n\n"
                         + "끄면 앞으로의 자동 등록이 중단됩니다. 기존 글의 확인도 멈추려면 목록에서 해제해 주세요.")
                 .setNegativeButton("취소", null).setPositiveButton("동의하고 켜기", (ignored, which) -> CommunityOptions.setAutoWatchOwnPosts(activity, true)).create();
         confirmation = consent;

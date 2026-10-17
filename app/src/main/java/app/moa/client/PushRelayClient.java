@@ -14,11 +14,14 @@ import java.net.URI;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
+import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadPoolExecutor;
@@ -40,6 +43,12 @@ public final class PushRelayClient {
                 return thread;
             });
     private static long generation;
+    private static final Handler MAIN = new Handler(Looper.getMainLooper());
+    private static final ArrayList<ConnectionWaiter> CONNECTION_WAITERS = new ArrayList<>();
+    private static final long CONNECTION_WAIT_MS = 90_000;
+    private static final String[] REGISTRATION_FIELDS = {"registration_id", "registration_token_hash",
+            "registration_challenge", "registration_expires_at", "registration_phase", "registration_terminal",
+            "registration_error", "registration_failures", "registration_attempts", "registration_quota_uncounted_id"};
 
     static { WORK.allowCoreThreadTimeOut(true); }
 
@@ -74,6 +83,384 @@ public final class PushRelayClient {
         synchronized (LOCK) {
             return allowed(app) && credentials(app) != null && preferences(app).getBoolean("paired", false)
                     && !preferences(app).getBoolean("cleanup_pending", false);
+        }
+    }
+
+    /** Unix seconds; zero means no current server-budget pause is known. */
+    public static long watchResumeAt(Context context) {
+        try {
+            long value = preferences(context.getApplicationContext()).getLong("watch_resume_at", 0);
+            return value > System.currentTimeMillis() / 1000 ? value : 0;
+        } catch (ClassCastException malformed) { return 0; }
+    }
+
+    /** Public opt-in flow. A challenge is never returned over HTTP or entered by the user. */
+    public static void requestConnection(Context context) {
+        Context app = context.getApplicationContext();
+        if (endpoint(app) == null) return;
+        synchronized (LOCK) {
+            if (!preferences(app).getBoolean("registration_requested", false)) generation++;
+            preferences(app).edit().putBoolean("registration_requested", true).commit();
+        }
+    }
+
+    public static void connect(Context context, String token, Callback callback) {
+        Context app = context.getApplicationContext();
+        String problem;
+        synchronized (LOCK) {
+            problem = prerequisite(app);
+            if (problem == null && (!validToken(token) || !token.equals(PushClient.cachedToken(app))))
+                problem = "현재 푸시 연결 정보를 다시 받아 주세요.";
+            Credentials stored = storedCredentials(app);
+            if (problem == null && stored != null && !stored.endpoint.equals(endpoint(app)))
+                problem = "이전 알림 서버 연결을 먼저 해제한 뒤 다시 연결해 주세요.";
+            if (problem == null) {
+                if (!preferences(app).getBoolean("registration_requested", false)) generation++;
+                Credentials device = stored == null ? new Credentials(endpoint(app), random(16), random(32)) : stored;
+                SharedPreferences.Editor edit = preferences(app).edit().putString("endpoint", device.endpoint)
+                        .putString("installation_id", device.id).putString("installation_secret", device.secret)
+                        .putBoolean("registration_requested", true);
+                if (preferences(app).getBoolean("registration_terminal", false)) clearRegistration(edit);
+                if (!edit.commit()) problem = "연결 정보를 저장하지 못했어요. 저장 공간을 확인해 주세요.";
+            }
+        }
+        if (problem != null) { String message = problem; MAIN.post(() -> { if (callback != null) callback.onError(message); }); return; }
+        observeConnection(app, callback);
+        resumeRegistration(app);
+    }
+
+    /** Reattach a foreground observer without creating a new attempt on rotation or process restart. */
+    public static void observeConnection(Context context, Callback callback) {
+        if (callback == null) return;
+        Context app = context.getApplicationContext();
+        ConnectionWaiter waiter;
+        synchronized (LOCK) { waiter = new ConnectionWaiter(app, generation, callback); CONNECTION_WAITERS.add(waiter); }
+        MAIN.post(waiter);
+    }
+
+    public static void cancelConnectionObservers() {
+        synchronized (LOCK) {
+            for (ConnectionWaiter waiter : CONNECTION_WAITERS) { MAIN.removeCallbacks(waiter); waiter.callback = null; }
+            CONNECTION_WAITERS.clear();
+        }
+    }
+
+    public static boolean isConnecting(Context context) {
+        Context app = context.getApplicationContext();
+        synchronized (LOCK) {
+            return allowed(app) && preferences(app).getBoolean("registration_requested", false)
+                    && !preferences(app).getBoolean("registration_terminal", false) && !connectionReady(app);
+        }
+    }
+
+    public static boolean isConnectionReady(Context context) {
+        synchronized (LOCK) { return connectionReady(context.getApplicationContext()); }
+    }
+
+    static long registrationDelayMillis(Context context) {
+        try {
+            long seconds = preferences(context.getApplicationContext()).getLong("registration_retry_at", 0) - System.currentTimeMillis() / 1000;
+            return seconds > 0 ? Math.min(86400, seconds) * 1000 : 0;
+        } catch (ClassCastException malformed) { return 0; }
+    }
+
+    public static String connectionStatus(Context context) {
+        Context app = context.getApplicationContext();
+        synchronized (LOCK) {
+            if (connectionReady(app)) return "푸시 연결 완료";
+            if (!allowed(app)) return "알림 꺼짐";
+            if (registrationDelayMillis(app) > 0) {
+                long retry = preferences(app).getLong("registration_retry_at", 0);
+                String time = java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.SHORT, java.text.DateFormat.SHORT)
+                        .format(new java.util.Date(retry * 1000));
+                return "서버 요청이 많아 " + time + " 이후 자동으로 다시 연결해요.";
+            }
+            if (preferences(app).getBoolean("registration_terminal", false))
+                return preferences(app).getString("registration_error", "자동 연결을 다시 시도해 주세요.");
+            if (preferences(app).getBoolean("registration_requested", false)) return "이 기기의 알림 수신을 확인하고 있어요";
+            return "기기 연결 대기";
+        }
+    }
+
+    /** Existing paired users keep their installation and subscriptions. No first opt-in is inferred. */
+    public static void resumeRegistration(Context context) {
+        Context app = context.getApplicationContext();
+        boolean needsCredentials;
+        synchronized (LOCK) {
+            if (!allowed(app)) return;
+            if (!preferences(app).getBoolean("registration_requested", false) && !preferences(app).getBoolean("paired", false)) return;
+            needsCredentials = credentials(app) == null;
+            preferences(app).edit().putBoolean("registration_requested", true).apply();
+            if (!needsCredentials && !registrationWorkNeeded(app)) return;
+        }
+        if (needsCredentials) {
+            String token = PushClient.cachedToken(app);
+            if (validToken(token)) connect(app, token, null);
+            return;
+        }
+        PushRegistrationJobService.schedule(app, 0);
+    }
+
+    /** Fast FCM receiver path: validate the previously persisted local attempt, then save proof only. */
+    public static boolean acceptRegistrationMessage(Context context, Map<String, String> data) {
+        if (data == null || data.size() != 5 || !"registration".equals(data.get("kind"))) return false;
+        String rid = data.get("registration_id"), id = data.get("installation_id");
+        String challenge = data.get("challenge"), hash = data.get("token_hash");
+        if (!validRegistrationId(rid) || id == null || !id.matches("[A-Za-z0-9_-]{16,80}")
+                || challenge == null || !challenge.matches("[A-Za-z0-9_-]{43,128}")
+                || hash == null || !hash.matches("[A-Za-z0-9_-]{43}")) return false;
+        Context app = context.getApplicationContext();
+        synchronized (LOCK) {
+            Credentials device = credentials(app);
+            SharedPreferences prefs = preferences(app);
+            if (!allowed(app) || device == null || !device.id.equals(id)
+                    || !prefs.getBoolean("registration_requested", false) || prefs.getBoolean("cleanup_pending", false)
+                    || !rid.equals(prefs.getString("registration_id", ""))
+                    || !hash.equals(prefs.getString("registration_token_hash", ""))
+                    || !hash.equals(tokenHash(PushClient.cachedToken(app)))) return false;
+            if (!challenge.equals(prefs.getString("registration_challenge", ""))
+                    && !prefs.edit().putString("registration_challenge", challenge).putString("registration_phase", "proof")
+                    .putBoolean("registration_terminal", false).commit()) return false;
+        }
+        // The job owns the HTTP lifetime; no thread or network call escapes this FCM callback.
+        PushRegistrationJobService.schedule(app, 0);
+        return true;
+    }
+
+    interface RegistrationJobCallback { void finished(boolean retry, long delayMillis); }
+
+    static boolean registrationWorkNeeded(Context app) {
+        synchronized (LOCK) {
+            return allowed(app) && credentials(app) != null && preferences(app).getBoolean("registration_requested", false)
+                    && !preferences(app).getBoolean("registration_terminal", false) && !connectionReady(app);
+        }
+    }
+
+    static void runRegistrationJob(Context context, RegistrationJobCallback callback) {
+        Context app = context.getApplicationContext();
+        try {
+            WORK.execute(() -> {
+                long delay = 0;
+                try { delay = registrationStep(app); }
+                catch (IOException | JSONException | RuntimeException unavailable) {
+                    delay = registrationFailure(app, "연결 확인이 지연되고 있어요. 네트워크를 확인해 주세요.", 30_000, false);
+                }
+                final long next = delay;
+                MAIN.post(() -> callback.finished(false, next));
+            });
+        } catch (RejectedExecutionException busy) { MAIN.post(() -> callback.finished(true, 0)); }
+    }
+
+    private static long registrationStep(Context app) throws IOException, JSONException {
+        for (int step = 0; step < 4; step++) {
+            final Credentials device;
+            final Registration registration;
+            final String token;
+            synchronized (LOCK) {
+                if (!registrationWorkNeeded(app)) return 0;
+                long notBefore = registrationDelayMillis(app);
+                if (notBefore > 0) return notBefore;
+                preferences(app).edit().remove("registration_retry_at").apply();
+                device = credentials(app);
+            }
+            if (preferences(app).getBoolean("cleanup_pending", false)) {
+                if (!removeRemote(device)) return registrationFailure(app, "이전 알림 연결을 정리한 뒤 다시 연결할게요.", 30_000, false);
+                synchronized (LOCK) {
+                    if (!allowed(app) || !device.same(credentials(app))) return 0;
+                    Credentials fresh = new Credentials(endpoint(app), random(16), random(32));
+                    SharedPreferences.Editor edit = preferences(app).edit().clear().putString("endpoint", fresh.endpoint)
+                            .putString("installation_id", fresh.id).putString("installation_secret", fresh.secret)
+                            .putBoolean("registration_requested", true).putBoolean("paired", false);
+                    if (!edit.commit()) return registrationFailure(app, "연결 정보를 저장하지 못했어요.", 0, true);
+                }
+                continue;
+            }
+            synchronized (LOCK) {
+                if (!allowed(app) || !device.same(credentials(app))) return 0;
+                token = PushClient.cachedToken(app);
+                if (!validToken(token)) return registrationFailure(app, "푸시 연결 정보를 다시 받아 주세요.", 0, true);
+                registration = prepareRegistration(app, token);
+                if (registration == null) return 0;
+            }
+            try {
+            Response response;
+            if (!registration.challenge.isEmpty()) {
+                response = requestAt(device, "POST", "/v1/registrations/" + registration.id + "/confirm",
+                        new JSONObject().put("challenge", registration.challenge), true);
+                if (!registrationCurrent(app, device, registration)) return registrationWorkNeeded(app) ? 1_000 : 0;
+                if (response.is(200, "paired") && device.id.equals(response.body.optString("installationId"))) {
+                    finishRegistration(app, device, registration); return registrationWorkNeeded(app) ? 1_000 : 0;
+                }
+            } else if ("created".equals(registration.phase)) {
+                JSONObject body = tokenBody(token).put("registrationId", registration.id)
+                        .put("installationId", device.id).put("installationSecret", device.secret);
+                response = requestAt(device, "POST", "/v1/registrations", body, false);
+                if (!registrationCurrent(app, device, registration)) return registrationWorkNeeded(app) ? 1_000 : 0;
+                if (response.status == 200 && "confirmed".equals(response.body.optString("state"))
+                        && response.is(200, "paired") && registration.id.equals(response.body.optString("registrationId"))
+                        && device.id.equals(response.body.optString("installationId"))) {
+                    finishRegistration(app, device, registration); return registrationWorkNeeded(app) ? 1_000 : 0;
+                }
+                if (response.status == 202 && "pending".equals(response.body.optString("state"))
+                        && registration.id.equals(response.body.optString("registrationId"))
+                        && device.id.equals(response.body.optString("installationId"))) {
+                    synchronized (LOCK) {
+                        if (!registrationCurrent(app, device, registration)) return 0;
+                        long expires = response.body.optLong("expiresAt", 0);
+                        if (expires <= 0) throw new IOException("Invalid expiry");
+                        SharedPreferences prefs = preferences(app);
+                        boolean received = !prefs.getString("registration_challenge", "").isEmpty();
+                        if (!prefs.edit().putLong("registration_expires_at", expires)
+                                .putString("registration_phase", received ? "proof" : "pending")
+                                .putInt("registration_failures", 0).commit()) throw new IOException("Storage unavailable");
+                        if (received) continue;
+                    }
+                    return 60_000;
+                }
+            } else {
+                response = requestAt(device, "GET", "/v1/registrations/" + registration.id, null, true);
+                if (!registrationCurrent(app, device, registration)) return registrationWorkNeeded(app) ? 1_000 : 0;
+                if (response.status == 200 && registration.id.equals(response.body.optString("registrationId"))
+                        && device.id.equals(response.body.optString("installationId"))) {
+                    String state = response.body.optString("state");
+                    if ("confirmed".equals(state)) {
+                        finishRegistration(app, device, registration); return registrationWorkNeeded(app) ? 1_000 : 0;
+                    }
+                    if ("pending".equals(state)) return 60_000;
+                    if ("expired".equals(state)) { expireRegistration(app, device, registration); continue; }
+                    if ("failed".equals(state)) return registrationFailure(app, "알림 수신 확인을 완료하지 못했어요. 다시 연결해 주세요.", 0, true);
+                }
+            }
+            if (!registrationCurrent(app, device, registration)) return 0;
+            if (response.status == 404 || response.status == 410) { expireRegistration(app, device, registration); continue; }
+            if (response.status == 409 && "registration_cancelled".equals(response.body.optString("error"))) {
+                synchronized (LOCK) {
+                    if (registrationCurrent(app, device, registration))
+                        preferences(app).edit().putBoolean("cleanup_pending", true).putBoolean("paired", false).commit();
+                }
+                continue;
+            }
+            if (response.status == 429) return registrationQuotaPause(app, device, registration, response.retryAfterSeconds);
+            if (response.status >= 500) return registrationFailure(app, "알림 서버 연결이 지연되고 있어요. 잠시 뒤 다시 시도할게요.", 30_000, false);
+            return registrationFailure(app, "이 기기의 알림 연결을 확인하지 못했어요. 다시 연결해 주세요.", 0, true);
+            } catch (IOException | JSONException | RuntimeException unavailable) {
+                if (!registrationCurrent(app, device, registration)) return registrationWorkNeeded(app) ? 1_000 : 0;
+                return registrationFailure(app, "연결 확인이 지연되고 있어요. 네트워크를 확인해 주세요.", 30_000, false);
+            }
+        }
+        return registrationFailure(app, "연결 확인을 다시 시도해 주세요.", 0, true);
+    }
+
+    private static Registration prepareRegistration(Context app, String token) {
+        SharedPreferences prefs = preferences(app);
+        String hash = tokenHash(token), rid = prefs.getString("registration_id", "");
+        long expires = prefs.getLong("registration_expires_at", 0), now = System.currentTimeMillis() / 1000;
+        if (!validRegistrationId(rid) || !hash.equals(prefs.getString("registration_token_hash", "")) || expires <= now) {
+            int attempts = prefs.getInt("registration_attempts", 0);
+            if (attempts >= 3) { registrationFailure(app, "알림 확인 메시지를 받지 못했어요. 앱에서 다시 연결해 주세요.", 0, true); return null; }
+            rid = UUID.randomUUID().toString();
+            SharedPreferences.Editor edit = prefs.edit(); clearRegistration(edit);
+            if (!edit.putString("registration_id", rid).putString("registration_token_hash", hash)
+                    .putLong("registration_expires_at", now + 300).putString("registration_phase", "created")
+                    .putInt("registration_attempts", attempts + 1).commit()) return null;
+        }
+        return new Registration(rid, hash, prefs.getString("registration_phase", "created"), prefs.getString("registration_challenge", ""));
+    }
+
+    private static void expireRegistration(Context app, Credentials device, Registration registration) {
+        synchronized (LOCK) {
+            if (registrationCurrent(app, device, registration)) preferences(app).edit().putLong("registration_expires_at", 0).commit();
+        }
+    }
+
+    private static boolean registrationCurrent(Context app, Credentials device, Registration registration) {
+        synchronized (LOCK) {
+            SharedPreferences prefs = preferences(app);
+            return allowed(app) && device.same(credentials(app)) && !prefs.getBoolean("cleanup_pending", false)
+                    && prefs.getBoolean("registration_requested", false) && registration.id.equals(prefs.getString("registration_id", ""))
+                    && registration.hash.equals(prefs.getString("registration_token_hash", ""))
+                    && registration.hash.equals(tokenHash(PushClient.cachedToken(app)));
+        }
+    }
+
+    private static void finishRegistration(Context app, Credentials device, Registration registration) {
+        synchronized (LOCK) {
+            if (!registrationCurrent(app, device, registration)) return;
+            SharedPreferences.Editor edit = preferences(app).edit(); clearRegistration(edit);
+            edit.putBoolean("paired", true).putBoolean("registration_requested", true)
+                    .putString("registered_token_hash", registration.hash).commit();
+        }
+    }
+
+    private static long registrationFailure(Context app, String message, long delay, boolean terminal) {
+        synchronized (LOCK) {
+            if (!allowed(app) || connectionReady(app)) return 0;
+            SharedPreferences prefs = preferences(app);
+            int failures = prefs.getInt("registration_failures", 0) + 1;
+            boolean stopped = terminal || failures >= 5;
+            prefs.edit().putInt("registration_failures", failures).putString("registration_error", message)
+                    .putBoolean("registration_terminal", stopped).commit();
+            return stopped ? 0 : delay;
+        }
+    }
+
+    private static long registrationQuotaPause(Context app, Credentials device, Registration registration, long requestedSeconds) {
+        synchronized (LOCK) {
+            if (!registrationCurrent(app, device, registration)) return 0;
+            long seconds = requestedSeconds > 0 ? Math.min(86400, requestedSeconds) : 60;
+            SharedPreferences prefs = preferences(app);
+            SharedPreferences.Editor edit = prefs.edit().putLong("registration_retry_at", System.currentTimeMillis() / 1000 + seconds)
+                    .putBoolean("registration_terminal", false).putInt("registration_failures", 0).remove("registration_error");
+            if (!registration.id.equals(prefs.getString("registration_quota_uncounted_id", ""))) {
+                edit.putString("registration_quota_uncounted_id", registration.id)
+                        .putInt("registration_attempts", Math.max(0, prefs.getInt("registration_attempts", 0) - 1));
+            }
+            if (!edit.commit()) return registrationFailure(app, "연결 대기 시간을 저장하지 못했어요.", 0, true);
+            return seconds * 1000;
+        }
+    }
+
+    private static boolean connectionReady(Context app) {
+        String current = tokenHash(PushClient.cachedToken(app));
+        return !current.isEmpty() && isPaired(app) && current.equals(preferences(app).getString("registered_token_hash", ""));
+    }
+
+    private static void clearRegistration(SharedPreferences.Editor edit) {
+        for (String key : REGISTRATION_FIELDS) edit.remove(key);
+    }
+
+    static String tokenHash(String value) {
+        if (!validToken(value)) return "";
+        try { return Base64.encodeToString(MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8)), Base64.URL_SAFE | Base64.NO_WRAP | Base64.NO_PADDING); }
+        catch (java.security.NoSuchAlgorithmException impossible) { throw new IllegalStateException(impossible); }
+    }
+
+    private static boolean validRegistrationId(String value) {
+        return value != null && value.matches("[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}");
+    }
+
+    private static final class Registration {
+        final String id, hash, phase, challenge;
+        Registration(String id, String hash, String phase, String challenge) { this.id = id; this.hash = hash; this.phase = phase; this.challenge = challenge; }
+    }
+
+    private static final class ConnectionWaiter implements Runnable {
+        final Context app; final long expected, deadline = android.os.SystemClock.elapsedRealtime() + CONNECTION_WAIT_MS;
+        Callback callback;
+        ConnectionWaiter(Context app, long expected, Callback callback) { this.app = app; this.expected = expected; this.callback = callback; }
+        @Override public void run() {
+            Callback result = null; boolean success = false; String message = "";
+            synchronized (LOCK) {
+                if (callback == null || generation != expected || !allowed(app)) { CONNECTION_WAITERS.remove(this); callback = null; return; }
+                if (connectionReady(app)) { success = true; message = "이 기기를 알림 서버에 자동으로 연결했어요."; }
+                else if (registrationDelayMillis(app) > 0) message = connectionStatus(app);
+                else if (preferences(app).getBoolean("registration_terminal", false)) message = connectionStatus(app);
+                else if (android.os.SystemClock.elapsedRealtime() >= deadline)
+                    message = "알림 확인 메시지를 기다리고 있어요. 잠시 뒤 앱을 다시 열거나 연결을 다시 시도해 주세요.";
+                if (!message.isEmpty()) { result = callback; callback = null; CONNECTION_WAITERS.remove(this); }
+            }
+            if (result != null) { if (success) result.onSuccess(message); else result.onError(message); }
+            else MAIN.postDelayed(this, 500);
         }
     }
 
@@ -211,13 +598,26 @@ public final class PushRelayClient {
                 Response response = request(device, "GET", "/watches", null, true);
                 if (response.status != 200) { failWatch(app, expected, device, errors, response); return; }
                 JSONArray array = response.body.optJSONArray("watches");
-                if (array == null || array.length() > 3) throw new IOException("Invalid watches");
+                if (array == null || array.length() > 20) throw new IOException("Invalid watches");
                 ArrayList<Watch> watches = new ArrayList<>();
                 Set<String> ids = new HashSet<>(), urls = new HashSet<>();
                 for (int index = 0; index < array.length(); index++) {
                     Watch watch = parseWatch(array.optJSONObject(index));
                     if (!ids.add(watch.watchId) || !urls.add(watch.url)) throw new IOException("Duplicate watches");
                     watches.add(watch);
+                }
+                synchronized (LOCK) {
+                    if (!current(app, expected, device, true) || !isPaired(app)) return;
+                    long seconds = 0;
+                    Object retry = response.body.opt("retryAfterSeconds");
+                    if ("quota_paused".equals(response.body.optString("queueStatus")) && retry instanceof Number) {
+                        double numeric = ((Number) retry).doubleValue();
+                        if (Double.isFinite(numeric) && numeric >= 0 && numeric <= 86400 && numeric == Math.floor(numeric)) seconds = (long) numeric;
+                    }
+                    SharedPreferences.Editor edit = preferences(app).edit();
+                    if (seconds > 0) edit.putLong("watch_resume_at", System.currentTimeMillis() / 1000 + seconds);
+                    else edit.remove("watch_resume_at");
+                    edit.apply();
                 }
                 List<Watch> result = Collections.unmodifiableList(watches);
                 new Handler(Looper.getMainLooper()).post(() -> {
@@ -260,7 +660,7 @@ public final class PushRelayClient {
                 if (url != null && response.status == 200) {
                     Watch accepted = parseWatch(response.body.optJSONObject("watch"));
                     if (!url.equals(accepted.url)) throw new IOException("Unexpected watch");
-                    deliver(app, expected, callback, true, "이 글의 댓글 수를 주기적으로 확인해요. 7일 뒤 만료됩니다.", true);
+                    deliver(app, expected, callback, true, "이 글의 댓글 수를 주기적으로 확인해요. 30일 뒤 만료됩니다.", true);
                 } else if (url == null && response.is(200, "removed")) {
                     deliver(app, expected, callback, true, "이 글의 댓글 알림을 해제했어요.", true);
                 } else failWatch(app, expected, device, callback, response);
@@ -309,7 +709,7 @@ public final class PushRelayClient {
         // 404 can mean an older relay without this feature, not an invalid pairing.
         if (response.status == 401) invalidatePairIfRejected(app, expected, device, response.status);
         if (response.status == 409 && "watch_limit_reached".equals(response.body.optString("error")))
-            deliver(app, expected, callback, false, "댓글 알림 한도에 도달했어요. 기기당 3개이며 서버의 전체 한도도 적용됩니다.", true);
+            deliver(app, expected, callback, false, "이 기기의 댓글 알림 20개를 모두 사용하고 있어요. 기존 알림을 해제한 뒤 등록해주세요.", true);
         else if (response.status == 404)
             deliver(app, expected, callback, false, "댓글 확인 서버의 업데이트가 아직 적용되지 않았어요.", true);
         else fail(app, expected, callback, response);
@@ -318,13 +718,19 @@ public final class PushRelayClient {
     /** Local disconnection is immediate; private cleanup credentials survive a failed remote deletion. */
     public static void disconnect(Context context, Callback callback) {
         Context app = context.getApplicationContext();
+        PushRegistrationJobService.cancel(app);
+        cancelConnectionObservers();
         final Credentials old;
         final long expected;
         synchronized (LOCK) {
             expected = ++generation;
             old = storedCredentials(app);
             if (old == null) preferences(app).edit().clear().commit();
-            else preferences(app).edit().putBoolean("paired", false).putBoolean("cleanup_pending", true).commit();
+            else {
+                SharedPreferences.Editor edit = preferences(app).edit(); clearRegistration(edit);
+                edit.putBoolean("paired", false).putBoolean("cleanup_pending", true)
+                        .putBoolean("registration_requested", false).remove("registered_token_hash").commit();
+            }
         }
         if (old == null) {
             deliver(app, expected, callback, true, "이 기기의 알림 서버 연결을 해제했어요.", false);
@@ -347,32 +753,26 @@ public final class PushRelayClient {
         }
     }
 
-    /** Service entry point; a rotated FCM token never creates a new pairing by itself. */
+    /** FCM callback entry: persist intent and let JobScheduler own every token synchronization. */
     public static void refreshToken(Context context, String token) {
         Context app = context.getApplicationContext();
-        final Credentials device;
-        final long expected;
         synchronized (LOCK) {
-            if (!validToken(token) || !isPaired(app)) return;
-            expected = generation;
-            device = credentials(app);
+            if (!validToken(token) || !token.equals(PushClient.cachedToken(app)) || !allowed(app)) return;
+            SharedPreferences prefs = preferences(app);
+            if (!prefs.getBoolean("paired", false) && !prefs.getBoolean("registration_requested", false)) return;
+            SharedPreferences.Editor edit = prefs.edit().putBoolean("registration_requested", true);
+            if (!tokenHash(token).equals(prefs.getString("registration_token_hash", ""))
+                    && !tokenHash(token).equals(prefs.getString("registered_token_hash", ""))) clearRegistration(edit);
+            edit.commit();
         }
-        submit(app, expected, null, () -> {
-            if (!current(app, expected, device, true)) return;
-            try {
-                Response response = request(device, "PUT", "/token", tokenBody(token), true);
-                invalidatePairIfRejected(app, expected, device, response.status);
-            } catch (IOException | JSONException | RuntimeException unavailable) {
-                // Retry is possible at the next explicit token synchronization; credentials remain private.
-            }
-        });
+        resumeRegistration(app);
     }
-
     private static void finishPair(Context app, long expected, Credentials device, String sentToken, Callback callback) {
         boolean accepted;
         synchronized (LOCK) {
             accepted = current(app, expected, device, true);
-            if (accepted) preferences(app).edit().putBoolean("paired", true).apply();
+            if (accepted) preferences(app).edit().putBoolean("paired", true).putBoolean("registration_requested", true)
+                    .putString("registered_token_hash", tokenHash(sentToken)).apply();
         }
         if (accepted) {
             String latest = PushClient.cachedToken(app);
@@ -449,9 +849,9 @@ public final class PushRelayClient {
         else if (response.status == 410)
             message = "이 기기의 푸시 연결 정보가 만료됐어요. 푸시 연결 정보를 다시 받아 주세요.";
         else if (response.status == 401 || response.status == 404)
-            message = "서버 연결을 확인하지 못했어요. 새 연결 코드로 다시 연결해 주세요.";
+            message = "서버 연결을 확인하지 못했어요. 알림 설정에서 자동 연결을 다시 시도해 주세요.";
         else if (response.status == 409)
-            message = "이 기기의 기존 연결과 맞지 않아요. 연결 해제 후 새 코드로 다시 연결해 주세요.";
+            message = "이 기기의 연결 정보를 다시 확인해야 해요. 알림 설정에서 자동 연결을 다시 시도해 주세요.";
         else if (response.status == 429)
             message = "요청이 많아요. 잠시 기다린 뒤 다시 시도해 주세요.";
         else if (response.status == 502 || response.status == 503)
@@ -518,6 +918,11 @@ public final class PushRelayClient {
     private static Response request(Credentials device, String method, String suffix,
             JSONObject body, boolean authenticated) throws IOException {
         String path = authenticated ? "/v1/devices/" + device.id + suffix : suffix;
+        return requestAt(device, method, path, body, authenticated);
+    }
+
+    private static Response requestAt(Credentials device, String method, String path,
+            JSONObject body, boolean authenticated) throws IOException {
         HttpURLConnection connection = (HttpURLConnection) new URL(device.endpoint + path).openConnection();
         try {
             connection.setInstanceFollowRedirects(false);
@@ -552,7 +957,12 @@ public final class PushRelayClient {
                     }
                 }
             }
-            return new Response(status, json);
+            long retryAfter = 0;
+            try {
+                String header = connection.getHeaderField("Retry-After");
+                if (header != null && header.matches("[0-9]{1,6}")) retryAfter = Long.parseLong(header);
+            } catch (RuntimeException ignored) { }
+            return new Response(status, json, retryAfter);
         } finally { connection.disconnect(); }
     }
 
@@ -573,7 +983,8 @@ public final class PushRelayClient {
     private static final class Response {
         final int status;
         final JSONObject body;
-        Response(int status, JSONObject body) { this.status = status; this.body = body; }
+        final long retryAfterSeconds;
+        Response(int status, JSONObject body, long retryAfterSeconds) { this.status = status; this.body = body; this.retryAfterSeconds = retryAfterSeconds; }
         boolean is(int expected, String field) { return status == expected && Boolean.TRUE.equals(body.opt(field)); }
     }
 }

@@ -1,4 +1,6 @@
-import { WatchError, canonicalWatchUrl, validWatchId, watchRoute, scheduledWatches } from './public-watches.mjs';
+import { WatchError, canonicalWatchUrl, validWatchId, watchRoute, runWatchJob, resumeWatchDelivery } from './public-watches.mjs';
+import { RegistrationError, validRegistrationId, registrationRoute, cancelRegistrationDevice, cleanupRegistrations } from './registration.mjs';
+import { dispatchScheduledWatches, verifyJobRequest } from './job-dispatch.mjs';
 
 const MAX_BODY_BYTES = 8192;
 const PAIR_TTL_SECONDS = 15 * 60;
@@ -266,9 +268,12 @@ async function accessToken(account, now) {
 }
 
 async function sendMessage(env, token, data, now) {
-  if (!data || !/^[0-9a-f-]{36}$/.test(data.event_id || '')
-      || !['test', 'comment'].includes(data.kind)
-      || (data.kind === 'comment' && !canonicalWatchUrl(data.url))) {
+  const registration = data?.kind === 'registration';
+  if (!data || (registration
+      ? !validRegistrationId(data.registration_id) || !ID_PATTERN.test(data.installation_id || '')
+        || !/^[A-Za-z0-9_-]{43}$/.test(data.challenge || '') || !/^[A-Za-z0-9_-]{43}$/.test(data.token_hash || '')
+      : !/^[0-9a-f-]{36}$/.test(data.event_id || '') || !['test', 'comment'].includes(data.kind)
+        || (data.kind === 'comment' && !canonicalWatchUrl(data.url)))) {
     throw new HttpError(400, 'invalid_notification');
   }
   const account = serviceAccount(env);
@@ -278,7 +283,8 @@ async function sendMessage(env, token, data, now) {
     body: JSON.stringify({ message: {
       token,
       data,
-      android: { priority: 'HIGH', ttl: data.kind === 'comment' ? '86400s' : '60s', restricted_package_name: 'app.moa.client' },
+      android: { priority: registration ? 'NORMAL' : 'HIGH',
+        ttl: registration ? '300s' : data.kind === 'comment' ? '86400s' : '60s', restricted_package_name: 'app.moa.client' },
     } }),
   });
   if (response.ok) { await response.body?.cancel(); return; }
@@ -295,6 +301,15 @@ async function sendTest(env, token, eventId, now) {
 
 async function sendComment(env, token, eventId, url, now) {
   return sendMessage(env, token, { kind: 'comment', event_id: eventId, url }, now);
+}
+
+async function sendRegistration(env, token, registrationId, installationId, challenge, tokenHash, now) {
+  return sendMessage(env, token, { kind: 'registration', registration_id: registrationId,
+    installation_id: installationId, challenge, token_hash: tokenHash }, now);
+}
+
+function registrationHelpers() {
+  return { reply, bodyObject, bearer, digest, equalDigest, base64url, validToken, sendRegistration, onRegistered: resumeWatchDelivery };
 }
 
 async function testDevice(request, env, installationId, secretHash, now) {
@@ -332,7 +347,10 @@ async function testDevice(request, env, installationId, secretHash, now) {
 
 async function deviceRoute(request, env, match, now) {
   const [, installationId, action, watchId] = match;
-  const { secretHash } = await requireDevice(request, env, installationId);
+  if (request.method === 'DELETE' && !action) {
+    return cancelRegistrationDevice(request, env, installationId, now, registrationHelpers());
+  }
+  const { secretHash, device } = await requireDevice(request, env, installationId);
   if (action === 'watches') {
     return watchRoute(request, env, installationId, watchId, now, { reply, bodyObject, budget });
   }
@@ -342,11 +360,16 @@ async function deviceRoute(request, env, match, now) {
   if (request.method === 'PUT' && action === 'token') {
     const value = await bodyObject(request, ['fcmToken']);
     if (!validToken(value.fcmToken)) throw new HttpError(400, 'invalid_payload');
+    // Device authentication alone cannot redirect notifications to somebody
+    // else's FCM token. Every new token requires the registration challenge.
+    if (!device.fcm_token || !equalDigest(await digest(device.fcm_token), await digest(value.fcmToken))) {
+      throw new HttpError(409, 'token_verification_required');
+    }
     try {
       const result = await env.DB.prepare(`UPDATE devices SET fcm_token = ?, token_hash = ?, updated_at = ?
-        WHERE installation_id = ? AND secret_hash = ?`)
-        .bind(value.fcmToken, await digest(value.fcmToken), now, installationId, secretHash).run();
-      if (result.meta.changes !== 1) throw new HttpError(401, 'unauthorized');
+        WHERE installation_id = ? AND secret_hash = ? AND fcm_token = ?`)
+        .bind(value.fcmToken, await digest(value.fcmToken), now, installationId, secretHash, value.fcmToken).run();
+      if (result.meta.changes !== 1) throw new HttpError(409, 'token_verification_required');
     } catch (error) {
       if (error instanceof HttpError) throw error;
       if (String(error?.message || '').includes('UNIQUE constraint failed')) {
@@ -356,22 +379,11 @@ async function deviceRoute(request, env, match, now) {
     }
     return reply(200, { updated: true });
   }
-  if (request.method === 'DELETE' && !action) {
-    const results = await env.DB.batch([
-      env.DB.prepare('DELETE FROM devices WHERE installation_id = ? AND secret_hash = ?')
-        .bind(installationId, secretHash),
-      env.DB.prepare('DELETE FROM watch_targets WHERE NOT EXISTS (SELECT 1 FROM watch_subscriptions s WHERE s.target_id = watch_targets.target_id)'),
-    ]);
-    // D1 includes cascading subscription/event deletions in this change count.
-    // The authenticated primary-key predicate still selects at most one device.
-    if (!(results[0].meta?.changes > 0)) throw new HttpError(401, 'unauthorized');
-    return reply(200, { unpaired: true });
-  }
   throw new HttpError(404, 'not_found');
 }
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, context) {
     try {
       const url = new URL(request.url);
       if (url.protocol !== 'https:') throw new HttpError(400, 'https_required');
@@ -379,8 +391,20 @@ export default {
       if (request.method === 'GET' && url.pathname === '/health') {
         return reply(200, { ok: true, service: 'moa-push-relay', protocol: 1 });
       }
+      if (request.method === 'POST' && url.pathname === '/internal/jobs') {
+        const value = await bodyObject(request, ['kind']);
+        const now = nowSeconds();
+        if (!await verifyJobRequest(request, env, value.kind, now)) throw new HttpError(401, 'unauthorized');
+        if (!env.DB) throw new HttpError(503, 'relay_not_configured');
+        await runWatchJob(env, now, value.kind, sendComment);
+        return reply(200, { ok: true });
+      }
       const admin = request.method === 'POST' && url.pathname === '/v1/admin/pairing-codes';
       const pairing = request.method === 'POST' && url.pathname === '/v1/pair';
+      const registrationMatch = /^\/v1\/registrations(?:\/([0-9a-f-]{36})(?:\/(confirm))?)?$/.exec(url.pathname);
+      const registration = registrationMatch && ((!registrationMatch[1] && request.method === 'POST')
+        || (validRegistrationId(registrationMatch[1]) && ((request.method === 'GET' && !registrationMatch[2])
+          || (request.method === 'POST' && registrationMatch[2] === 'confirm'))));
       const match = /^\/v1\/devices\/([A-Za-z0-9_-]{16,80})(?:\/(test|token|watches)(?:\/([0-9a-f-]{36}))?)?$/.exec(url.pathname);
       const device = match && ((request.method === 'POST' && match[2] === 'test')
         || (request.method === 'PUT' && match[2] === 'token')
@@ -390,7 +414,7 @@ export default {
         && (!match[3] || match[2] === 'watches');
       // Invalid routes never use the database. Rate-limit counters also saturate
       // so rejected requests cannot keep consuming the daily D1 write quota.
-      if (!admin && !pairing && !device) throw new HttpError(404, 'not_found');
+      if (!admin && !pairing && !device && !registration) throw new HttpError(404, 'not_found');
       if (!env.DB || typeof env.ADMIN_SECRET !== 'string' || !SECRET_PATTERN.test(env.ADMIN_SECRET)) {
         throw new HttpError(503, 'relay_not_configured');
       }
@@ -398,10 +422,11 @@ export default {
       await entryBudget(request, env, now);
       if (admin) return await issueCode(request, env, now);
       if (pairing) return await pair(request, env, now);
+      if (registration) return await registrationRoute(request, env, registrationMatch[1], !!registrationMatch[2], now, registrationHelpers(), context);
       if (device) return await deviceRoute(request, env, match, now);
       throw new HttpError(404, 'not_found');
     } catch (error) {
-      if (error instanceof HttpError || error instanceof WatchError) return reply(error.status, { error: error.code }, error.retryAfter);
+      if (error instanceof HttpError || error instanceof WatchError || error instanceof RegistrationError) return reply(error.status, { error: error.code }, error.retryAfter);
       return reply(503, { error: 'relay_unavailable' });
     }
   },
@@ -411,6 +436,7 @@ export default {
       env.DB.prepare('DELETE FROM pairing_codes WHERE expires_at <= ?').bind(now),
       env.DB.prepare('DELETE FROM rate_limits WHERE expires_at <= ?').bind(now),
     ]);
-    await scheduledWatches(env, now, sendComment);
+    await cleanupRegistrations(env, now);
+    await dispatchScheduledWatches(env, now);
   },
 };
