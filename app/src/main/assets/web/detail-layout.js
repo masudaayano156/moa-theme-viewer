@@ -9,6 +9,8 @@
   var generated = new Set();
   var pieces = new Map();
   var actionObservers = new Map();
+  var voiceLinks = new Map();
+  var officialVoiceStore = 'https://play.google.com/store/apps/details?id=com.dcinside.app.android';
   var activePage = null;
   var themes = {
     mail: { article: '받은편지함', compose: '편지쓰기', destination: '받는 라벨', reply: '답장', subject: '제목' },
@@ -84,6 +86,24 @@
     if (kind === 'like') annotate(source,'data-moa-detail-vote-proxy','true');
   }
   function community() { return words(document.querySelector('.gall-tit-lnk')) || words(document.querySelector('.gall-tit')); }
+  function officialVoiceControls() {
+    // Themed mode exposes only the official app's public store link. Never
+    // record audio or open an app automatically. Original handlers stay intact.
+    document.querySelectorAll(':is(.comment-write,#comment_write,#writeForm) .btm-wrt-btns :is(#submit_voice,.sp-write-form-icon.add-voice)').forEach(function (button) {
+      if (button.tagName !== 'BUTTON' && button.tagName !== 'A') return;
+      annotate(button,'data-moa-official-voice','true');
+      annotate(button,'aria-label','보이스 댓글 · 디시 공식앱 설치');
+      annotate(button,'title','보이스 댓글 · 디시 공식앱 설치 페이지');
+      if (!voiceLinks.has(button)) {
+        var handler = function (event) {
+          if (!root.hasAttribute('data-moa-theme') || !root.hasAttribute('data-moa-detail')) return;
+          event.preventDefault(); event.stopImmediatePropagation();
+          if (event.isTrusted) window.location.assign(officialVoiceStore);
+        };
+        button.addEventListener('click',handler,true); voiceLinks.set(button,handler);
+      }
+    });
+  }
   function article(config,theme) {
     var title = document.querySelector('.gallview-tit-box');
     var body = document.querySelector('.thum-txtin');
@@ -157,6 +177,7 @@
     return true;
   }
   function disable() {
+    voiceLinks.forEach(function (handler,button) { button.removeEventListener('click',handler,true); }); voiceLinks.clear();
     actionObservers.forEach(function (watcher) { watcher.disconnect(); }); actionObservers.clear();
     generated.forEach(function (element) { element.remove(); }); generated.clear(); pieces.clear();
     changes.forEach(function (edits,element) { edits.forEach(function(edit,key) {
@@ -173,6 +194,7 @@
     if (activePage && activePage !== page) disable();
     var supported = page === 'view' ? article(themes[theme],theme) : compose(themes[theme]);
     if (!supported) { disable(); return false; }
+    officialVoiceControls();
     annotate(root,'data-moa-detail',theme); annotate(root,'data-moa-detail-page',page); activePage=page; return true;
   }
   window.MoaDetailLayout = Object.freeze({version:'3.1.0',apply:apply,disable:disable});

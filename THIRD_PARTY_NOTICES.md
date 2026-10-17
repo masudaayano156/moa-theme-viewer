@@ -21,6 +21,7 @@ The following direct application dependencies are resolved by Gradle and are not
 | Dependency | Version |
 |---|---|
 | androidx.webkit:webkit | 1.12.1 |
+| androidx.swiperefreshlayout:swiperefreshlayout | 1.2.0 |
 | com.google.firebase:firebase-bom | 35.0.1 (version alignment) |
 | com.google.firebase:firebase-messaging | 26.0.0 (selected by the BoM) |
 

@@ -20,6 +20,7 @@ public final class PushNotifications {
     public static final String EXTRA_TARGET_URL = "app.moa.client.push.target";
     private static final String CHANNEL = "moa_updates_v1";
     private static final String TAG = "moa_push:";
+    private static final String DIAGNOSTICS = "moa_push_diagnostics";
     private static final Object DELIVERY_LOCK = new Object();
 
     private PushNotifications() { }
@@ -30,11 +31,53 @@ public final class PushNotifications {
     }
 
     public static boolean canNotify(Context context) {
+        return blockedReason(context).isEmpty();
+    }
+
+    private static String blockedReason(Context context) {
         NotificationManager manager = context.getSystemService(NotificationManager.class);
-        if (!PushClient.isEnabled(context) || !hasPermission(context) || manager == null
-                || !manager.areNotificationsEnabled()) return false;
+        if (!PushClient.isEnabled(context)) return "app_disabled";
+        if (!hasPermission(context)) return "permission_denied";
+        if (manager == null) return "service_unavailable";
+        if (!manager.areNotificationsEnabled()) return "app_blocked";
         NotificationChannel channel = manager.getNotificationChannel(CHANNEL);
-        return channel == null || channel.getImportance() != NotificationManager.IMPORTANCE_NONE;
+        return channel != null && channel.getImportance() == NotificationManager.IMPORTANCE_NONE ? "channel_blocked" : "";
+    }
+
+    /** Local-only test receipt. Posted means handed to Android, not read by a person. */
+    public static final class TestStatus {
+        public final String eventId, resultCode;
+        public final long receivedAtMillis, postedAtMillis;
+        private TestStatus(String eventId, String resultCode, long receivedAtMillis, long postedAtMillis) {
+            this.eventId = eventId; this.resultCode = resultCode;
+            this.receivedAtMillis = receivedAtMillis; this.postedAtMillis = postedAtMillis;
+        }
+    }
+
+    public static TestStatus lastTestStatus(Context context) {
+        synchronized (DELIVERY_LOCK) {
+            SharedPreferences prefs = context.getSharedPreferences(DIAGNOSTICS, Context.MODE_PRIVATE);
+            return new TestStatus(prefs.getString("event", ""), prefs.getString("result", "none"),
+                    prefs.getLong("received", 0), prefs.getLong("posted", 0));
+        }
+    }
+
+    private static void testReceived(Context context, String event) {
+        synchronized (DELIVERY_LOCK) {
+            context.getSharedPreferences(DIAGNOSTICS, Context.MODE_PRIVATE).edit()
+                    .putString("event", event).putString("result", "received")
+                    .putLong("received", System.currentTimeMillis()).putLong("posted", 0).apply();
+        }
+    }
+
+    private static void testResult(Context context, String event, String result) {
+        synchronized (DELIVERY_LOCK) {
+            SharedPreferences prefs = context.getSharedPreferences(DIAGNOSTICS, Context.MODE_PRIVATE);
+            // A slower callback for an older test must not replace a newer receipt.
+            if (!event.equals(prefs.getString("event", ""))) return;
+            prefs.edit().putString("result", result)
+                    .putLong("posted", "posted".equals(result) ? System.currentTimeMillis() : 0).apply();
+        }
     }
 
     /** Only direct post URLs, with no credentials, query, fragment, redirect, or editor path. */
@@ -62,7 +105,7 @@ public final class PushNotifications {
     }
 
     public static boolean show(Context context, Map<String, String> data) {
-        if (data == null || !canNotify(context)) return false;
+        if (data == null) return false;
         String kind = data.get("kind");
         boolean test = "test".equals(kind);
         if (!test && !"comment".equals(kind)) return false;
@@ -70,6 +113,12 @@ public final class PushNotifications {
         if (event == null || !event.matches("[A-Za-z0-9_-]{1,128}")) return false;
         String url = test ? null : validatedTarget(data.get("url"));
         if (!test && url == null) return false;
+        if (test) testReceived(context, event);
+        String blocked = blockedReason(context);
+        if (!blocked.isEmpty()) {
+            if (test) testResult(context, event, blocked);
+            return false;
+        }
         SharedPreferences prefs = context.getSharedPreferences("moa_preferences", Context.MODE_PRIVATE);
         ThemeSpec theme = ThemeSpec.fromId(prefs.getString("theme", "mail"));
         boolean dark = prefs.getBoolean("dark", false);
@@ -99,14 +148,28 @@ public final class PushNotifications {
         try {
             // Consent can change while this service prepares the notification.
             synchronized (DELIVERY_LOCK) {
-                if (!canNotify(context)) return false;
+                blocked = blockedReason(context);
+                if (!blocked.isEmpty()) {
+                    if (test) testResult(context, event, blocked);
+                    return false;
+                }
                 manager.notify(TAG + event, 0, notification);
+                if (test) testResult(context, event, "posted");
                 return true;
             }
-        } catch (SecurityException permissionChanged) { return false; }
+        } catch (SecurityException permissionChanged) {
+            if (test) {
+                String reason = blockedReason(context);
+                testResult(context, event, reason.isEmpty() ? "posting_error" : reason);
+            }
+            return false;
+        }
     }
 
     public static void cancelAll(Context context) {
+        synchronized (DELIVERY_LOCK) {
+            context.getSharedPreferences(DIAGNOSTICS, Context.MODE_PRIVATE).edit().clear().apply();
+        }
         NotificationManager manager = context.getSystemService(NotificationManager.class);
         if (manager == null) return;
         synchronized (DELIVERY_LOCK) {

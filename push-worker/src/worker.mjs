@@ -314,13 +314,14 @@ function registrationHelpers() {
 
 async function testDevice(request, env, installationId, secretHash, now) {
   await bodyObject(request, []);
-  serviceAccount(env);
-  const device = await env.DB.prepare(`UPDATE devices SET last_test_at = ?,
+  const eventId = crypto.randomUUID();
+  const device = await env.DB.prepare(`UPDATE devices SET last_test_at = ?, last_test_event_id = ?,
+    last_test_result_code = 'pending', last_test_accepted_at = 0,
     test_window_start = CASE WHEN test_window_start <= ? THEN ? ELSE test_window_start END,
     test_count = CASE WHEN test_window_start <= ? THEN 1 ELSE test_count + 1 END
     WHERE installation_id = ? AND secret_hash = ? AND fcm_token IS NOT NULL
       AND last_test_at <= ? AND (test_window_start <= ? OR test_count < 5)
-    RETURNING fcm_token`).bind(now, now - 3600, now, now - 3600,
+    RETURNING fcm_token`).bind(now, eventId, now - 3600, now, now - 3600,
     installationId, secretHash, now - 60, now - 3600).first();
   if (!device) {
     const current = await env.DB.prepare(`SELECT fcm_token, last_test_at, test_window_start, test_count
@@ -332,7 +333,6 @@ async function testDevice(request, env, installationId, secretHash, now) {
       current.test_count >= 5 ? current.test_window_start + 3600 : 0);
     throw new HttpError(429, 'test_rate_limited', Math.max(1, readyAt - now));
   }
-  const eventId = crypto.randomUUID();
   try { await sendTest(env, device.fcm_token, eventId, now); }
   catch (error) {
     if (error instanceof HttpError && error.code === 'device_token_expired') {
@@ -340,9 +340,27 @@ async function testDevice(request, env, installationId, secretHash, now) {
         WHERE installation_id = ? AND secret_hash = ? AND fcm_token = ?`)
         .bind(now, installationId, secretHash, device.fcm_token).run();
     }
+    const code = error instanceof HttpError && ['device_token_expired', 'push_not_configured', 'push_service_unavailable'].includes(error.code)
+      ? error.code : 'relay_unavailable';
+    await env.DB.prepare(`UPDATE devices SET last_test_result_code = ?
+      WHERE installation_id = ? AND secret_hash = ? AND last_test_event_id = ?`)
+      .bind(code, installationId, secretHash, eventId).run();
     throw error;
   }
+  // Accepted by FCM is not proof of receipt or visible display on Android.
+  // A CPU termination before this write leaves pending rather than false success.
+  await env.DB.prepare(`UPDATE devices SET last_test_result_code = 'accepted', last_test_accepted_at = ?
+    WHERE installation_id = ? AND secret_hash = ? AND last_test_event_id = ?`)
+    .bind(nowSeconds(), installationId, secretHash, eventId).run();
   return reply(202, { queued: true, eventId });
+}
+
+async function testStatus(env, installationId, secretHash) {
+  const row = await env.DB.prepare(`SELECT last_test_event_id, last_test_at, last_test_accepted_at, last_test_result_code
+    FROM devices WHERE installation_id = ? AND secret_hash = ?`).bind(installationId, secretHash).first();
+  if (!row) throw new HttpError(401, 'unauthorized');
+  return reply(200, { test: { eventId: row.last_test_event_id, requestedAt: row.last_test_at,
+    acceptedAt: row.last_test_accepted_at, resultCode: row.last_test_result_code } });
 }
 
 async function deviceRoute(request, env, match, now) {
@@ -357,6 +375,7 @@ async function deviceRoute(request, env, match, now) {
   if (request.method === 'POST' && action === 'test') {
     return testDevice(request, env, installationId, secretHash, now);
   }
+  if (request.method === 'GET' && action === 'test') return testStatus(env, installationId, secretHash);
   if (request.method === 'PUT' && action === 'token') {
     const value = await bodyObject(request, ['fcmToken']);
     if (!validToken(value.fcmToken)) throw new HttpError(400, 'invalid_payload');
@@ -406,7 +425,7 @@ export default {
         || (validRegistrationId(registrationMatch[1]) && ((request.method === 'GET' && !registrationMatch[2])
           || (request.method === 'POST' && registrationMatch[2] === 'confirm'))));
       const match = /^\/v1\/devices\/([A-Za-z0-9_-]{16,80})(?:\/(test|token|watches)(?:\/([0-9a-f-]{36}))?)?$/.exec(url.pathname);
-      const device = match && ((request.method === 'POST' && match[2] === 'test')
+      const device = match && ((['GET', 'POST'].includes(request.method) && match[2] === 'test')
         || (request.method === 'PUT' && match[2] === 'token')
         || (request.method === 'DELETE' && !match[2])
         || (match[2] === 'watches' && ((!match[3] && ['GET', 'PUT'].includes(request.method))

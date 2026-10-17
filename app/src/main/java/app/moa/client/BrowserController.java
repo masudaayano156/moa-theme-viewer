@@ -83,7 +83,10 @@ public final class BrowserController {
     private final String profileName;
     private final CookieManager cookies;
     private final ImageRequestPolicy imagePolicy = new ImageRequestPolicy();
+    private final AdRequestPolicy adPolicy = new AdRequestPolicy();
     private final FrameLayout container;
+    private ListSwipeRefreshLayout swipeRefresh;
+    private float pageScale;
     private WebView web;
     private WebView favoritesWeb;
     private final SharedPreferences drafts;
@@ -104,6 +107,7 @@ public final class BrowserController {
     private NavigationCheck navigationCheck;
     private PageContext approvedNavigationContext;
     private ScriptHandler documentScript;
+    private boolean localActionsInstalled;
     private PresentationGate presentation;
     private LinearLayout presentationCover;
     private TextView presentationMessage;
@@ -137,7 +141,7 @@ public final class BrowserController {
         drafts = activity.getSharedPreferences("moa_editor_drafts", Activity.MODE_PRIVATE);
         container = new FrameLayout(activity);
         web = createWebView();
-        container.addView(web, new FrameLayout.LayoutParams(-1, -1));
+        attachWebSurface();
         try {
             css = readAsset("web/skin.css") + "\n" + readAsset("web/list-layout.css") + "\n" + readAsset("web/detail-layout.css");
             script = readAsset("web/detail-layout.js") + "\n" + readAsset("web/skin.js");
@@ -155,7 +159,48 @@ public final class BrowserController {
     }
 
     public View getView() { return container; }
+    private void attachWebSurface() {
+        if (swipeRefresh != null) { swipeRefresh.finish(); container.removeView(swipeRefresh); }
+        swipeRefresh = new ListSwipeRefreshLayout(activity, this::canPullRefresh, this::checkPullRefreshDocument, this::pullRefresh);
+        swipeRefresh.colors(CommunityOptions.accentColor(activity, theme.palette(dark).accent), theme.palette(dark).surface);
+        swipeRefresh.addView(web, new ViewGroup.LayoutParams(-1, -1));
+        container.addView(swipeRefresh, 0, new FrameLayout.LayoutParams(-1, -1));
+        pageScale = activity.getResources().getDisplayMetrics().density;
+    }
+
+    private boolean canPullRefresh() {
+        return !destroyed && !browserPaused && !loading && presentation == null && navigationCheck == null
+                && !peerIdentityWaiting && !peerPageStale && !authNavigationPending
+                && fullscreenView == null && popups.isEmpty() && siteDialogs.isEmpty()
+                && (draftDialog == null || !draftDialog.isShowing())
+                && (permissionDialog == null || !permissionDialog.isShowing())
+                && (fileActionDialog == null || !fileActionDialog.isShowing())
+                && !filePickerOutstanding && !mediaPickerOutstanding && !permissionAwaitingSystem
+                && isListPage(getUrl()) && !web.canScrollVertically(-1)
+                && pageScale <= activity.getResources().getDisplayMetrics().density * 1.02f;
+    }
+
+    private void pullRefresh() {
+        swipeRefresh.finish();
+        if (!canPullRefresh()) return;
+        guardNavigation(() -> {
+            if (!canPullRefresh()) return;
+            swipeRefresh.beginLoading();
+            reload();
+        }, () -> swipeRefresh.finish());
+    }
+
+    private void checkPullRefreshDocument(java.util.function.Consumer<Boolean> result) {
+        PageContext context = new PageContext();
+        String query = "(()=>{const active=document.activeElement;if(active&&(active.isContentEditable||/^(INPUT|TEXTAREA|SELECT)$/.test(active.tagName)))return false;"
+                + "return !Array.from(document.querySelectorAll('#galleryConfig,.layer-center-popup,.layer-zoom-popup,[role=dialog],.modal')).some(el=>{"
+                + "const style=getComputedStyle(el);return el.getClientRects().length&&style.display!=='none'&&style.visibility!=='hidden';});})()";
+        try { web.evaluateJavascript(query, value -> result.accept(context.isCurrent() && "true".equals(value))); }
+        catch (RuntimeException unavailableRenderer) { result.accept(false); }
+    }
     public String profileName() { return profileName; }
+    /** True only after the origin-scoped, main-frame message listener was actually installed. */
+    public boolean supportsAutomaticPostTracking() { return !destroyed && localActionsInstalled; }
     private WebView createWebView() {
         WebView created = new WebView(activity);
         try { AccountProfiles.attach(created, profileName); }
@@ -310,6 +355,7 @@ public final class BrowserController {
         this.dark = dark;
         container.setBackgroundColor(this.theme.palette(dark).background);
         web.setBackgroundColor(this.theme.palette(dark).background);
+        swipeRefresh.colors(CommunityOptions.accentColor(activity, this.theme.palette(dark).accent), this.theme.palette(dark).surface);
         refreshDocumentScript();
         restartCoveredPresentation();
         applyTheme();
@@ -368,6 +414,7 @@ public final class BrowserController {
     }
 
     private void installLocalActions(WebView target) {
+        localActionsInstalled = false;
         try {
             if (!WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) return;
             WebViewCompat.addWebMessageListener(target,"MoaLocalActions",Collections.singleton("https://m.dcinside.com"),
@@ -381,8 +428,7 @@ public final class BrowserController {
                     try {
                         JSONObject value = new JSONObject(raw);
                         if ("submitting_post".equals(value.optString("action"))) {
-                            java.net.URI uri = java.net.URI.create(getUrl());
-                            if (uri.getPath().matches("/write/[A-Za-z0-9_]{1,80}/?")) {
+                            if (PostSubmissionTracker.isNewWriteDocument(getUrl())) {
                                 postSubmissions.begin(getUrl(),android.os.SystemClock.elapsedRealtime());
                             }
                         } else if ("user".equals(value.optString("action"))) {
@@ -391,6 +437,7 @@ public final class BrowserController {
                         }
                     } catch (Exception invalid) { }
                 });
+            localActionsInstalled = true;
         } catch (RuntimeException | LinkageError unavailable) { /* Native tools remain available in settings. */ }
     }
 
@@ -401,6 +448,8 @@ public final class BrowserController {
     private final class Client extends WebViewClient {
         @Override public android.webkit.WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
             if (view != web || destroyed || request.isForMainFrame() || !"GET".equals(request.getMethod())) return null;
+            android.webkit.WebResourceResponse ad = adPolicy.intercept(request.getUrl().toString());
+            if (ad != null) return ad;
             return imagePolicy.intercept(request.getUrl().toString());
         }
         @Override public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
@@ -444,6 +493,7 @@ public final class BrowserController {
             }
             if (view != web) return;
             imagePolicy.update(CommunityOptions.imageMode(activity),url);
+            adPolicy.update(url);
             String article = postSubmissions.onNavigation(url,android.os.SystemClock.elapsedRealtime());
             publishedCandidate = article == null ? "" : article;
             if (!isFavoritesPage(url) && !UrlPolicy.isAuthenticationPage(url)) openFavoritesPending = false;
@@ -473,7 +523,13 @@ public final class BrowserController {
                 return;
             }
             loading = false;
-            if (UrlPolicy.canTheme(url)) view.evaluateJavascript(draftScript, null);
+            swipeRefresh.finish();
+            if (UrlPolicy.canTheme(url)) {
+                view.evaluateJavascript(draftScript, null);
+                // DOCUMENT_START_SCRIPT can be unavailable even when the secure message listener works.
+                // This idempotent listener is separate from theme readiness and original-view mode.
+                if (PostSubmissionTracker.isNewWriteDocument(url)) view.evaluateJavascript(submissionHook(), null);
+            }
             applyTheme();
             if (presentation == null) recordRecentArticle();
             listener.onPageState(view.getTitle(), url, false);
@@ -506,6 +562,7 @@ public final class BrowserController {
         @Override public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
             if (isLive(view) && request.isForMainFrame() && view == web) {
                 loading = false;
+                swipeRefresh.finish();
                 if (presentation != null && presentation.url.equals(presentationUrl(request.getUrl().toString())))
                     failPresentation("페이지 연결을 완료하지 못했습니다. 인터넷 연결을 확인해 주세요.");
                 listener.onError("페이지를 열지 못했습니다. 인터넷 연결을 확인한 뒤 새로고침해 주세요.");
@@ -514,6 +571,7 @@ public final class BrowserController {
         }
         @Override public void onReceivedSslError(WebView view, SslErrorHandler sslHandler, SslError error) {
             sslHandler.cancel();
+            if (view == web && isLive(view)) { loading = false; swipeRefresh.finish(); }
             if (view == web && isLive(view) && presentation != null && error != null
                     && presentation.url.equals(presentationUrl(error.getUrl()))) failPresentation("사이트의 보안 연결을 확인하지 못했습니다.");
             if (isLive(view)) listener.onError("사이트의 보안 연결을 확인할 수 없어 열기를 중단했습니다.");
@@ -531,11 +589,11 @@ public final class BrowserController {
             dismissDraftDialog();
             hideFullscreen();
             if (documentScript != null) { try { documentScript.remove(); } catch (RuntimeException ignored) { } documentScript = null; }
-            container.removeView(view);
+            swipeRefresh.finish(); swipeRefresh.removeView(view);
             view.destroy();
             web = createWebView();
             configure(web);
-            container.addView(web, 0, new FrameLayout.LayoutParams(-1, -1));
+            attachWebSurface();
             beginPresentation(recoveryUrl, false);
             failPresentation("웹 화면이 중단되었습니다. 새로고침으로 다시 열 수 있습니다.");
             web.setBackgroundColor(theme.palette(dark).background);
@@ -544,6 +602,9 @@ public final class BrowserController {
             listener.onError("웹 화면을 다시 준비했습니다. 새로고침을 눌러 페이지를 다시 열어 주세요.");
             listener.onPageState("", recoveryUrl, false);
             return true;
+        }
+        @Override public void onScaleChanged(WebView view, float oldScale, float newScale) {
+            if (view == web && isLive(view)) pageScale = newScale;
         }
     }
 
@@ -872,7 +933,14 @@ public final class BrowserController {
     }
 
     private String submissionHook() {
-        return "if(window.top===window&&!window.__moaSubmitHook){window.__moaSubmitHook=true;document.addEventListener('click',function(e){if(!e.isTrusted||!window.MoaLocalActions)return;var n=e.target&&e.target.closest&&e.target.closest('.wrt-tit-box button[onclick],#writeForm button[onclick]');if(n&&/^\\s*write_submit\\(\\);?\\s*$/.test(n.getAttribute('onclick')||''))MoaLocalActions.postMessage(JSON.stringify({action:'submitting_post'}));},true);}";
+        return "/*moa-submission-hook*/if(window.top===window&&!window.__moaSubmitHook){window.__moaSubmitHook=true;document.addEventListener('click',function(e){"
+                + "if(!e.isTrusted||!window.MoaLocalActions||location.protocol!=='https:'||location.hostname!=='m.dcinside.com'||!/^\\/write\\/[A-Za-z0-9_]{1,80}\\/?$/.test(location.pathname))return;"
+                + "var editing=false;new URLSearchParams(location.search).forEach(function(v,k){if(/^(mode|action)$/i.test(k)&&/^(modify|edit)$/i.test(v))editing=true;});if(editing)return;"
+                + "var n=e.target&&e.target.closest&&e.target.closest('.wrt-tit-box button[onclick],#writeForm button[onclick]');"
+                + "if(!n||!/^\\s*write_submit\\(\\);?\\s*$/.test(n.getAttribute('onclick')||''))return;"
+                + "var form=document.querySelector('#writeForm');if(!form||String(form.method).toLowerCase()!=='post')return;"
+                + "try{var action=new URL(form.getAttribute('action')||'',location.href);if(action.protocol!=='https:'||action.hostname!=='mupload.dcinside.com'||action.username||action.password||action.port||action.pathname!=='/write_new.php'||action.search||action.hash)return;}catch(_){return;}"
+                + "MoaLocalActions.postMessage(JSON.stringify({action:'submitting_post'}));},true);}";
     }
 
     public void beginPeerAuthentication() {
@@ -932,7 +1000,9 @@ public final class BrowserController {
     public void refreshCommunityOptions() {
         if (destroyed) return;
         imagePolicy.update(CommunityOptions.imageMode(activity),getUrl());
+        adPolicy.update(getUrl());
         refreshDocumentScript();
+        swipeRefresh.colors(CommunityOptions.accentColor(activity, theme.palette(dark).accent), theme.palette(dark).surface);
         restartCoveredPresentation();
         applyTheme();
     }
@@ -985,6 +1055,7 @@ public final class BrowserController {
 
     private void prepareNavigation(String url) {
         imagePolicy.update(CommunityOptions.imageMode(activity),url);
+        adPolicy.update(url);
         if (!sameDocumentFragment(getUrl(), url)) beginPresentation(url, false);
     }
 
@@ -1072,6 +1143,7 @@ public final class BrowserController {
     }
 
     private void failPresentation(String message) {
+        swipeRefresh.finish();
         PresentationGate gate = presentation;
         if (gate == null || !gate.isCurrent()) return;
         gate.suspend();
@@ -1195,12 +1267,14 @@ public final class BrowserController {
                 if (targetScheme.isEmpty() || Arrays.asList("file", "content", "javascript", "data").contains(targetScheme)) {
                     listener.onError("열 수 없는 링크 형식입니다."); return;
                 }
-                new AlertDialog.Builder(activity).setTitle("외부 앱 열기").setMessage("선택한 링크를 다른 앱에서 엽니다.")
+                boolean officialDcApp = "dcapp".equals(targetScheme) && "com.dcinside.app.android".equals(intent.getPackage());
+                new AlertDialog.Builder(activity).setTitle(officialDcApp ? "디시 공식앱에서 열기" : "외부 앱 열기")
+                    .setMessage(officialDcApp ? "선택한 기능은 디시 공식앱에서 제공됩니다. 보이스 녹음 등을 이용하려면 공식앱으로 이동해야 합니다." : "선택한 링크를 다른 앱에서 엽니다.")
                     .setPositiveButton("열기", (dialog, which) -> {
                         try { activity.startActivity(intent); }
                         catch (ActivityNotFoundException missing) {
                             if (fallback != null && "https".equalsIgnoreCase(Uri.parse(fallback).getScheme())) openExternal(fallback);
-                            else listener.onError("이 기능에 필요한 외부 앱이 설치되어 있지 않습니다.");
+                            else listener.onError(officialDcApp ? "디시 공식앱이 설치되어 있지 않아 이 기능을 열 수 없습니다." : "이 기능에 필요한 외부 앱이 설치되어 있지 않습니다.");
                         } catch (Exception ex) { listener.onError("외부 앱을 열 수 없습니다."); }
                     }).setNegativeButton("취소", null).show();
             } else {
@@ -1498,6 +1572,7 @@ public final class BrowserController {
     public void onPause() {
         if (!destroyed) {
             browserPaused = true;
+            swipeRefresh.finish();
             if (presentation != null) presentation.suspend();
             cancelNavigationGuard();
             hideFullscreen(); snapshotDraft(null); cookies.flush(); web.onPause();
@@ -1529,7 +1604,7 @@ public final class BrowserController {
         for (Dialog dialog : new ArrayList<>(popups.values())) dialog.dismiss();
         popups.clear();
         if (documentScript != null) documentScript.remove();
-        web.stopLoading(); container.removeView(web); web.destroy();
+        swipeRefresh.finish(); web.stopLoading(); swipeRefresh.removeView(web); container.removeView(swipeRefresh); web.destroy();
         downloadExecutor.shutdownNow();
     }
 }

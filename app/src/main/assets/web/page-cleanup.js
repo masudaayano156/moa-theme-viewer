@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.top !== window) return;
-  if (window.MoaPageCleanup && window.MoaPageCleanup.version === '1.0.1') {
+  if (window.MoaPageCleanup && window.MoaPageCleanup.version === '1.0.2') {
     window.MoaPageCleanup.apply();
     return;
   }
@@ -36,10 +36,11 @@
     '#kakao_backup_slot_anchor', '#kakao_backup_slot_contentmiddle',
     '#kakao_backup_slot_mid'
   ];
-  // AdFit inserts its own INS container and nested iframe, including inside
-  // the article wrapper. Hide that exact advertising unit, never its article
-  // parent or an arbitrary iframe (which may be the author's video).
-  var embeddedAdSelector = 'ins.kakao_ad_area[data-ad-unit]';
+  // The source switches the article-bottom slot between AdFit and AdSense.
+  // Both insert dedicated INS units inside the protected article wrapper.
+  // Hide the verified unit itself, never the article parent or arbitrary media.
+  var embeddedAdSelector = 'ins.kakao_ad_area[data-ad-unit],' +
+    'ins.adsbygoogle[data-ad-client][data-ad-slot]';
   var editorSelector = '#textbox,[contenteditable],form,.capcha-code-box,' +
     '.upload-wrap,.upload-img-lst';
   var extraSelectors = ['.view-btm-con', '.outside-search-box'];
@@ -67,10 +68,14 @@
   }
 
   function embeddedAd(node) {
-    return node && node.nodeType === 1 && node.ownerDocument === document &&
-      node.isConnected && node.matches(embeddedAdSelector) &&
-      /^DAN-[a-zA-Z0-9_-]+$/.test(node.getAttribute('data-ad-unit') || '') &&
-      !node.closest(editorSelector) && !node.querySelector(editorSelector);
+    if (!node || node.nodeType !== 1 || node.ownerDocument !== document ||
+        !node.isConnected || !node.matches(embeddedAdSelector) ||
+        node.closest(editorSelector) || node.querySelector(editorSelector)) return false;
+    return (node.matches('ins.kakao_ad_area') &&
+      /^DAN-[a-zA-Z0-9_-]+$/.test(node.getAttribute('data-ad-unit') || '')) ||
+      (node.matches('ins.adsbygoogle') &&
+       /^ca-pub-[0-9]{6,20}$/.test(node.getAttribute('data-ad-client') || '') &&
+       /^[0-9]{1,20}$/.test(node.getAttribute('data-ad-slot') || ''));
   }
 
   function valid(node, kind) {
@@ -226,7 +231,7 @@
 
   function observe() {
     observer.observe(document, { childList: true, subtree: true, attributes: true,
-      attributeFilter: ['class', 'id', 'style', marker, 'data-ad-unit'] });
+      attributeFilter: ['class', 'id', 'style', marker, 'data-ad-unit', 'data-ad-client', 'data-ad-slot'] });
   }
 
   function apply() {
@@ -262,6 +267,6 @@
     if (document.documentElement) document.documentElement.removeAttribute(rootMarker);
   }
 
-  window.MoaPageCleanup = Object.freeze({ version: '1.0.1', apply: apply, disable: disable });
+  window.MoaPageCleanup = Object.freeze({ version: '1.0.2', apply: apply, disable: disable });
   apply();
 })();

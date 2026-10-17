@@ -57,7 +57,8 @@ public final class CommunityOptions {
     }
 
     public static void setAutoWatchOwnPosts(Context context, boolean enabled) {
-        preferences(context).edit().putBoolean("auto_watch_own_posts", enabled).apply();
+        preferences(context).edit().putBoolean("auto_watch_own_posts", enabled).commit();
+        if (!enabled) OwnPostWatchQueue.clear(context);
     }
 
     public static int accentIndex(Context context) {

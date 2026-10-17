@@ -15,14 +15,15 @@ public final class PushRegistrationJobService extends JobService {
 
     static void schedule(Context context, long delayMillis) {
         Context app = context.getApplicationContext();
-        if (!PushRelayClient.registrationWorkNeeded(app)) return;
+        if (!PushRelayClient.pushWorkNeeded(app)) return;
         JobScheduler scheduler = app.getSystemService(JobScheduler.class);
         if (scheduler == null) return;
         try {
             JobInfo.Builder builder = new JobInfo.Builder(JOB_ID, new ComponentName(app, PushRegistrationJobService.class))
                     .setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY)
+                    .setPersisted(true)
                     .setBackoffCriteria(30_000, JobInfo.BACKOFF_POLICY_EXPONENTIAL);
-            long delay = Math.max(delayMillis, PushRelayClient.registrationDelayMillis(app));
+            long delay = Math.max(delayMillis, PushRelayClient.pushWorkDelayMillis(app));
             if (delay > 0) builder.setMinimumLatency(Math.min(86_400_000, delay));
             scheduler.schedule(builder.build());
         } catch (RuntimeException unavailable) { /* Persisted registration resumes when the app next opens. */ }
@@ -34,13 +35,13 @@ public final class PushRegistrationJobService extends JobService {
     }
 
     @Override public boolean onStartJob(JobParameters params) {
-        if (!PushRelayClient.registrationWorkNeeded(this)) return false;
+        if (!PushRelayClient.pushWorkNeeded(this)) return false;
         running = params;
         long expected = ++runGeneration;
         PushRelayClient.runRegistrationJob(this, (retry, delay) -> {
             if (expected != runGeneration || running != params) return;
             running = null;
-            jobFinished(params, retry && PushRelayClient.registrationWorkNeeded(this));
+            jobFinished(params, retry && PushRelayClient.pushWorkNeeded(this));
             if (!retry && delay > 0) schedule(this, delay);
         });
         return true;
@@ -48,7 +49,7 @@ public final class PushRegistrationJobService extends JobService {
 
     @Override public boolean onStopJob(JobParameters params) {
         if (running == params) { running = null; runGeneration++; }
-        return PushRelayClient.registrationWorkNeeded(this);
+        return PushRelayClient.pushWorkNeeded(this);
     }
 
     @Override public void onDestroy() { running = null; runGeneration++; super.onDestroy(); }

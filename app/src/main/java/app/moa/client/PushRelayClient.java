@@ -191,7 +191,7 @@ public final class PushRelayClient {
             if (!preferences(app).getBoolean("registration_requested", false) && !preferences(app).getBoolean("paired", false)) return;
             needsCredentials = credentials(app) == null;
             preferences(app).edit().putBoolean("registration_requested", true).apply();
-            if (!needsCredentials && !registrationWorkNeeded(app)) return;
+            if (!needsCredentials && !pushWorkNeeded(app)) return;
         }
         if (needsCredentials) {
             String token = PushClient.cachedToken(app);
@@ -236,12 +236,31 @@ public final class PushRelayClient {
         }
     }
 
+    static boolean pushWorkNeeded(Context app) {
+        synchronized (LOCK) {
+            return registrationWorkNeeded(app) || (allowed(app) && connectionReady(app)
+                    && OwnPostWatchQueue.hasPending(app));
+        }
+    }
+
+    static long pushWorkDelayMillis(Context app) {
+        synchronized (LOCK) {
+            return connectionReady(app) ? OwnPostWatchQueue.delayMillis(app) : registrationDelayMillis(app);
+        }
+    }
+
     static void runRegistrationJob(Context context, RegistrationJobCallback callback) {
         Context app = context.getApplicationContext();
         try {
             WORK.execute(() -> {
                 long delay = 0;
-                try { delay = registrationStep(app); }
+                try {
+                    delay = recoverExpiredToken(app);
+                    if (delay == 0) {
+                        delay = registrationStep(app);
+                        if (isConnectionReady(app) && OwnPostWatchQueue.hasPending(app)) delay = drainOwnPostWatch(app);
+                    }
+                }
                 catch (IOException | JSONException | RuntimeException unavailable) {
                     delay = registrationFailure(app, "연결 확인이 지연되고 있어요. 네트워크를 확인해 주세요.", 30_000, false);
                 }
@@ -249,6 +268,83 @@ public final class PushRelayClient {
                 MAIN.post(() -> callback.finished(false, next));
             });
         } catch (RejectedExecutionException busy) { MAIN.post(() -> callback.finished(true, 0)); }
+    }
+
+    /** Preserve installation credentials and the outbox while renewing only a rejected FCM token. */
+    private static long recoverExpiredToken(Context app) {
+        final String rejectedHash, snapshot;
+        final Credentials device;
+        final long expected;
+        synchronized (LOCK) {
+            if (!allowed(app)) return 0;
+            rejectedHash = preferences(app).getString("expired_token_hash", "");
+            if (rejectedHash.isEmpty()) return 0;
+            snapshot = PushClient.cachedToken(app); device = credentials(app); expected = generation;
+            if (device == null) return 0;
+        }
+        String fresh = !snapshot.isEmpty() && !rejectedHash.equals(tokenHash(snapshot))
+                ? snapshot : PushClient.refreshExpiredToken(app, snapshot);
+        synchronized (LOCK) {
+            if (!current(app, expected, device, true)) return 0;
+            if (!validToken(fresh) || rejectedHash.equals(tokenHash(fresh))) return 30_000;
+            SharedPreferences.Editor edit = preferences(app).edit(); clearRegistration(edit);
+            return edit.remove("expired_token_hash").putBoolean("registration_requested", true).commit() ? 0 : 30_000;
+        }
+    }
+
+    /** Runs inside the platform-owned job after this exact FCM token has been confirmed. */
+    private static long drainOwnPostWatch(Context app) {
+        final Credentials device;
+        final long expected;
+        final OwnPostWatchQueue.Entry entry;
+        final String sentTokenHash;
+        synchronized (LOCK) {
+            if (!connectionReady(app)) return 0;
+            expected = generation;
+            device = credentials(app);
+            entry = OwnPostWatchQueue.nextDue(app);
+            sentTokenHash = tokenHash(PushClient.cachedToken(app));
+        }
+        if (entry == null) return OwnPostWatchQueue.delayMillis(app);
+        try {
+            if (!current(app, expected, device, true) || !isConnectionReady(app)
+                    || !OwnPostWatchQueue.current(app, entry)) return 0;
+            Response response = request(device, "PUT", "/watches", new JSONObject().put("url", entry.url)
+                    .put("newPost", true).put("publishedAt", entry.createdAt / 1000), true);
+            synchronized (LOCK) {
+                // An opt-out, account cleanup or newer outbox entry owns the state now.
+                if (!current(app, expected, device, true) || !OwnPostWatchQueue.current(app, entry)) return 0;
+                if (response.status == 200) {
+                    if (!Boolean.TRUE.equals(response.body.opt("expired"))) {
+                        Watch accepted = parseWatch(response.body.optJSONObject("watch"));
+                        if (!entry.url.equals(accepted.url)) throw new IOException("Unexpected watch");
+                    }
+                    if (!OwnPostWatchQueue.complete(app, entry)) return 60_000;
+                } else {
+                    if (response.status == 401) {
+                        invalidatePairIfRejected(app, expected, device, response.status);
+                        preferences(app).edit().putBoolean("registration_requested", true).commit();
+                    }
+                    if (response.status == 410 && "device_token_expired".equals(response.body.optString("error"))
+                            && sentTokenHash.equals(tokenHash(PushClient.cachedToken(app)))) {
+                        SharedPreferences.Editor edit = preferences(app).edit(); clearRegistration(edit);
+                        edit.remove("registered_token_hash").putString("expired_token_hash", sentTokenHash)
+                                .putBoolean("registration_requested", true).commit();
+                    }
+                    long delay = response.status == 429 && response.retryAfterSeconds > 0
+                            ? Math.min(86400, response.retryAfterSeconds) * 1000
+                            : response.status == 409 ? 3_600_000 : 0;
+                    if (response.status == 429) OwnPostWatchQueue.pause(app, delay > 0 ? delay : 60_000);
+                    OwnPostWatchQueue.retry(app, entry, delay);
+                }
+            }
+        } catch (IOException | JSONException | RuntimeException unavailable) {
+            synchronized (LOCK) {
+                if (current(app, expected, device, true)) OwnPostWatchQueue.retry(app, entry, 0);
+            }
+        }
+        if (registrationWorkNeeded(app)) return Math.max(1_000, registrationDelayMillis(app));
+        return OwnPostWatchQueue.hasPending(app) ? Math.max(1_000, OwnPostWatchQueue.delayMillis(app)) : 0;
     }
 
     private static long registrationStep(Context app) throws IOException, JSONException {
@@ -660,7 +756,7 @@ public final class PushRelayClient {
                 if (url != null && response.status == 200) {
                     Watch accepted = parseWatch(response.body.optJSONObject("watch"));
                     if (!url.equals(accepted.url)) throw new IOException("Unexpected watch");
-                    deliver(app, expected, callback, true, "이 글의 댓글 수를 주기적으로 확인해요. 30일 뒤 만료됩니다.", true);
+                    deliver(app, expected, callback, true, "이 글의 댓글 수를 지금부터 3일간 확인해요. 이후에는 자동으로 멈춥니다.", true);
                 } else if (url == null && response.is(200, "removed")) {
                     deliver(app, expected, callback, true, "이 글의 댓글 알림을 해제했어요.", true);
                 } else failWatch(app, expected, device, callback, response);
@@ -708,9 +804,7 @@ public final class PushRelayClient {
     private static void failWatch(Context app, long expected, Credentials device, Callback callback, Response response) {
         // 404 can mean an older relay without this feature, not an invalid pairing.
         if (response.status == 401) invalidatePairIfRejected(app, expected, device, response.status);
-        if (response.status == 409 && "watch_limit_reached".equals(response.body.optString("error")))
-            deliver(app, expected, callback, false, "이 기기의 댓글 알림 20개를 모두 사용하고 있어요. 기존 알림을 해제한 뒤 등록해주세요.", true);
-        else if (response.status == 404)
+        if (response.status == 404)
             deliver(app, expected, callback, false, "댓글 확인 서버의 업데이트가 아직 적용되지 않았어요.", true);
         else fail(app, expected, callback, response);
     }
@@ -718,6 +812,7 @@ public final class PushRelayClient {
     /** Local disconnection is immediate; private cleanup credentials survive a failed remote deletion. */
     public static void disconnect(Context context, Callback callback) {
         Context app = context.getApplicationContext();
+        OwnPostWatchQueue.clear(app);
         PushRegistrationJobService.cancel(app);
         cancelConnectionObservers();
         final Credentials old;

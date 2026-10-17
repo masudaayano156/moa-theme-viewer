@@ -133,3 +133,10 @@
 !/push-worker/src/job-dispatch.mjs
 !/push-worker/migrations/0003_public_registration.sql
 !/push-worker/migrations/0004_public_watch_queue.sql
+!/app/src/main/java/app/moa/client/NotificationConsent.java
+!/app/src/main/java/app/moa/client/OwnPostWatchQueue.java
+!/app/src/main/java/app/moa/client/AdRequestPolicy.java
+!/app/src/main/java/app/moa/client/ListSwipeRefreshLayout.java
+!/push-worker/migrations/0005_notification_diagnostics.sql
+!/push-worker/migrations/0006_new_post_watch.sql
+!/push-worker/migrations/0007_three_day_watches.sql

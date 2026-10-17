@@ -5,7 +5,7 @@
 ## 배포 준비
 
 - Cloudflare Workers와 D1 데이터베이스를 사용합니다. 예제 `wrangler.jsonc`의 프로젝트 ID와 데이터베이스 ID는 자리표시자입니다. 실제 계정 값은 별도 비공개 구성에 넣습니다.
-- D1에 `migrations/`의 SQL을 번호 순서대로 적용합니다. 공개 기기 등록은 `0003_public_registration.sql`, 공개 댓글 대기열은 `0004_public_watch_queue.sql`이 필요합니다. 기존 배포에서는 아직 적용하지 않은 마이그레이션만 추가한 다음 서버 코드를 배포합니다.
+- D1에 `migrations/`의 SQL을 번호 순서대로 적용합니다. 공개 기기 등록은 `0003_public_registration.sql`, 공개 댓글 대기열은 `0004_public_watch_queue.sql`, 테스트 발송 진단은 `0005_notification_diagnostics.sql`, 새 글 최초 댓글 감지와 개수 제한 없는 구독 인덱스는 `0006_new_post_watch.sql`, 글별 3일 기한 전환은 `0007_three_day_watches.sql`이 필요합니다. 기존 배포에서는 아직 적용하지 않은 마이그레이션만 추가한 다음 서버 코드를 배포합니다.
 - 공개 예제의 Cron은 1분 간격입니다. 실행할 작업이 있을 때 조회 최대 6개·기기별 발송 최대 6개·구독자 배분 최대 2개를 별도 내부 HTTP 요청으로 나눕니다. 각 요청은 한 개의 제한된 작업만 수행하며, 여러 HTML 파싱을 하나의 CPU 실행 시간에 몰아 넣지 않습니다. 등록한 글이 없으면 디시를 조회하지 않습니다.
 - Worker Secret `ADMIN_SECRET`: 운영자가 생성하는 32바이트 이상의 무작위 값을 base64url로 인코딩한 문자열(43–128자)입니다. 서버 내부 작업 인증과 요청 제한에 사용하며 APK·저장소·채팅에 넣지 않습니다. 일반 이용자에게 이 값이나 관리자 연결 코드를 요구하지 않습니다.
 - Worker Secret `FCM_SERVICE_ACCOUNT_JSON`: 해당 Firebase 프로젝트에서 FCM 관련 권한을 부여한 전용 서비스 계정의 JSON 키입니다. `roles/firebasecloudmessaging.admin`을 필요한 프로젝트에만 부여하며, Owner/Editor 역할을 사용하지 않습니다. 앱용 `google-services.json`과 다른 파일입니다.
@@ -29,8 +29,8 @@
 | `POST /v1/pair` | `{code,installationId,installationSecret,fcmToken}` | `{paired:true,installationId}`; 201 |
 | `PUT /v1/devices/{installationId}/token` | 설치 비밀값 Bearer, `{fcmToken}` | `{updated:true}`; 200 |
 | `POST /v1/devices/{installationId}/test` | 설치 비밀값 Bearer, `{}` | `{queued:true,eventId}`; 202 |
-| `GET /v1/devices/{installationId}/watches` | 설치 비밀값 Bearer | `{watches:[...],intervalSeconds:300,maxWatches:20,expiryDays:30,automaticRenewal:true,bestEffort:true,queueStatus,retryAfterSeconds}`; 200 |
-| `PUT /v1/devices/{installationId}/watches` | 설치 비밀값 Bearer, `{url}` | `{watch:{...}}`; 200 |
+| `GET /v1/devices/{installationId}/watches` | 설치 비밀값 Bearer | `{watches:[...],intervalSeconds:300,listLimit:20,maxWatches:null,expiryDays:3,automaticRenewal:false,bestEffort:true,queueStatus,retryAfterSeconds}`; 200 |
+| `PUT /v1/devices/{installationId}/watches` | 설치 비밀값 Bearer, `{url,newPost?,publishedAt?}` | `{watch:{...}}` 또는 만료된 자동 요청의 `{expired:true}`; 200 |
 | `DELETE /v1/devices/{installationId}/watches/{watchId}` | 설치 비밀값 Bearer | `{removed:true}`; 200 |
 | `DELETE /v1/devices/{installationId}` | 설치 비밀값 Bearer | `{unpaired:true}`; 200 |
 
@@ -52,17 +52,19 @@
 
 테스트 알림은 자기 설치에만 보낼 수 있습니다. 임의 메시지, 토픽, 대상 토큰을 지정하는 발송 API는 없습니다. 테스트 FCM 데이터는 `{kind:"test",event_id:"<UUID>"}`, 댓글 확인 데이터는 `{kind:"comment",event_id:"<UUID>",url:"<등록한 공개 글 주소>"}`입니다. `notification` 페이로드는 사용하지 않으며 앱에서 미리 정한 문구와 아이콘으로 표시합니다. 패키지명은 `app.moa.client`, TTL은 테스트 60초·댓글 확인 24시간(86400초)입니다. 휴대폰이 오프라인이면 FCM은 댓글 확인 알림을 이 기간 안에서 보관할 수 있습니다. 202 응답이나 FCM 요청 성공은 휴대폰 표시 완료를 뜻하지 않습니다.
 
+인증한 기기의 `GET /v1/devices/{installationId}/test`는 최근 테스트의 이벤트 ID·요청/FCM 수락 시각·제한된 결과 코드만 반환합니다. 본문·토큰·상위 서버 오류 내용을 기록하지 않습니다. Android는 기기 수신 시각과 OS 알림 요청 결과를 따로 저장하므로 서버 수락과 기기 수신을 구분할 수 있습니다.
+
 기기당 테스트는 60초에 한 번, 첫 요청부터 1시간에 5번입니다. 실패한 전송 시도도 제한에 포함됩니다. 인증 전 요청도 주소별 분당 30회로 제한합니다. 원본 주소는 저장하지 않고 관리자 비밀값과 날짜를 포함한 해시로 제한 기록을 만듭니다. 이 제한은 기본적인 남용 방지이며 대규모 공격 차단이나 별도 Cloudflare 보안 설정을 대신하지 않습니다.
 
 FCM에서 토큰이 만료되었다고 확인되면 서버의 해당 토큰을 비우고 그 기기만 구독하는 글의 확인을 멈춥니다. 토큰 갱신 API로 복구할 수 있습니다. 연결 해제는 설치 행·FCM 토큰·해당 기기의 구독·대기 알림을 삭제합니다. 다른 기기가 구독하지 않는 URL도 삭제합니다. 이미 FCM에 전달한 알림은 취소하지 못합니다. D1 플랫폼 백업의 보존 기간은 Cloudflare 설정을 따릅니다. FCM 토큰과 구독 URL은 D1에 저장하며, 플랫폼 저장 시 암호화 외 별도 애플리케이션 암호화는 사용하지 않습니다.
 
 ## 공개 글 댓글 확인
 
-앱은 등록 전에 해당 공개 글 주소가 Cloudflare 서버에 전달된다는 점과 주기 확인의 한계를 안내해야 합니다. 기본은 글별 수동 등록이며, 앞으로 직접 작성한 새 글의 자동 등록은 별도 명시적 동의가 있어야 합니다. 자동 등록에 동의했더라도 실제 새 글 등록 성공을 확인한 경우에만 호출하고 로그인·단순 열람·과거 작성 이력으로는 호출하지 않습니다. 기기 식별자와 구독 URL을 결합하면 이용 관심사를 알 수 있으므로 URL도 사용자 데이터로 취급하며 APK·공개 소스·로그에 포함하지 않습니다.
+앱은 등록 전에 해당 공개 글 주소가 Cloudflare 서버에 전달된다는 점과 주기 확인의 한계를 안내해야 합니다. 앱의 첫 알림 동의는 앞으로 앱에서 직접 작성한 새 글의 자동 등록까지 포함하며, 글마다 추가 동의를 요구하지 않습니다. 다른 기존 글은 사용자가 직접 추가할 수 있습니다. 자동 등록에 동의했더라도 실제 새 글 등록 성공을 확인한 경우에만 호출하고 로그인·단순 열람·과거 작성 이력으로는 호출하지 않습니다. 기기 식별자와 구독 URL을 결합하면 이용 관심사를 알 수 있으므로 URL도 사용자 데이터로 취급하며 APK·공개 소스·로그에 포함하지 않습니다.
 
-등록 URL은 정확한 `https://m.dcinside.com/{board|mini|person}/{게시판 ID}/{양의 글 번호}` 형식만 허용합니다. 외부 호스트·사용자 정보·명시적 포트·쿼리·해시·인코딩 경로·쓰기/로그인 주소는 거부합니다. 등록 API에서는 원본 페이지를 조회하지 않고 다음 예약 실행에서 최초 댓글 수를 기준값으로 저장합니다. 댓글이 없는 화면의 `0`도 유효한 기준입니다. 최초 확인에는 알림을 보내지 않고 이후 수가 증가할 때만 대기 알림을 만듭니다. 수가 줄어들면 알림 없이 기준을 갱신합니다.
+등록 URL은 정확한 `https://m.dcinside.com/{board|mini|person}/{게시판 ID}/{양의 글 번호}` 형식만 허용합니다. 외부 호스트·사용자 정보·명시적 포트·쿼리·해시·인코딩 경로·쓰기/로그인 주소는 거부합니다. 등록 API에서는 원본 페이지를 조회하지 않습니다. 직접 추가한 기존 글은 다음 예약 실행의 댓글 수를 기준값으로 저장하고 이후 증가부터 알립니다. 등록 성공을 확인한 새 글은 PUT 본문의 `newPost:true`로 구분하며 첫 확인에 이미 댓글이 있으면 알립니다. 이는 클라이언트의 새 글 등록 표시이며 서버가 원본 글 소유권을 검증한다는 뜻은 아닙니다. 최초 `0`도 유효하며 이후 증가 때 알립니다. PUT 재시도는 최초 알림을 반복 생성하지 않습니다. 수가 줄어들면 알림 없이 기준을 갱신합니다.
 
-기기당 최대 20개 글을 등록하며, 전체 글 수와 같은 글을 구독하는 기기 수의 5개·3명 제한은 없습니다. 같은 URL은 함께 조회합니다. 글마다 최소 5분 간격이며 대기열·오류·플랫폼 사정으로 더 늦어질 수 있습니다. 구독 유지 기한은 30일입니다. 알림 목록을 확인하면 하루 한 번 기기의 유지 기한을 갱신해 구독을 자동 연장하며, 매번 모든 구독 행을 다시 쓰지 않습니다. 만료된 구독은 정리합니다. 등록/갱신은 기기당 시간당 60회로 제한합니다.
+기기당 구독 저장 개수 제한은 없습니다. GET은 인덱스를 이용해 최근 20개만 반환하고 `listLimit:20,maxWatches:null`로 표시 제한임을 구분합니다. PUT은 최근 목록에 없는 기존 구독도 정확한 URL과 소유 기기로 찾습니다. 같은 URL은 함께 조회합니다. 글마다 최소 5분 간격이며 대기열·오류·플랫폼 사정으로 더 늦어질 수 있습니다. 자동 새 글은 `publishedAt`(등록 성공 시각, Unix 초)부터 3일간만 확인합니다. 전송이 지연되어도 서버 등록 시점부터 다시 3일을 부여하지 않습니다. 이미 만료된 자동 등록 요청은 `200 {expired:true}`로 처리하고 저장하지 않습니다. `newPost:true` 요청에는 `publishedAt`이 필수입니다. 수동 연장한 글은 최근 관리 목록에도 다시 나타납니다. 수동 추가·명시적 연장은 요청 시점부터 3일입니다. 자동 등록 재시도·목록 조회·새 댓글·다른 글 등록은 기존 기한을 연장하지 않습니다. 기한이 지난 구독은 조회·알림 배분·발송에서 제외하고 작은 묶음으로 정리합니다. 기존 기기 전체 유지 기한은 더 이상 구독 기한 판단에 사용하지 않습니다. 등록/갱신은 기기당 시간당 60회로 제한합니다.
 
 댓글 수가 그대로일 때는 공통 조회 상태만 갱신하고 구독자 행은 갱신하지 않습니다. 댓글 수가 늘면 변경 번호를 부여하고, 한 번에 16개 구독씩 나누어 대기 알림을 만듭니다. 배분 중 새 변경이 와도 진행 중인 위치를 처음으로 돌리지 않습니다. 기기별 전송 순서를 두어 한 기기에 많은 글이 있어도 다른 기기가 기다릴 기회를 보장하며, 한 기기의 발송 사이에는 최소 1분 간격을 둡니다. 전송 중 더 새 변경이 들어온 경우 이전 전송 완료가 새 대기 알림을 지우지 않습니다.
 
@@ -70,7 +72,7 @@ FCM에서 토큰이 만료되었다고 확인되면 서버의 해당 토큰을 �
 
 `POST /internal/jobs`는 일반 앱 API가 아닙니다. origin·작업 종류·시간에 묶인 짧은 HMAC 증명을 검증하고, 조회·배분·발송 중 하나만 수행합니다. 관리자 비밀값 자체는 내부 HTTP 요청에도 넣지 않습니다. 리디렉션을 따르지 않고 동시에 최대 4개 요청만 시작하며 내부 작업에서 다시 작업을 분배하지 않습니다. 기기·글 주소·FCM 토큰은 작업 호출 본문에 넣지 않습니다.
 
-`watch` 객체는 `{watchId,url,baselineCount,lastChecked,status,expiresAt}`입니다. `watchId`는 UUID v4이고 시간은 Unix 초입니다. `baselineCount`는 최초 성공 전 `null`입니다. 상태는 `pending`, `active`, `blocked`, `rate_limited`, `unavailable`, `parse_error`, `delivery_error`, `token_expired`입니다. `active`는 댓글 수를 읽었다는 뜻이며 실제 휴대폰 수신 확인이 아닙니다. 상한 초과는 409 `watch_limit_reached`, 잘못된 URL은 400 `invalid_watch_url`입니다. 삭제는 자기 기기 소유의 구독에만 적용하며, 없거나 다른 기기의 ID를 지정해도 200을 반환해 소유권 정보를 노출하지 않습니다.
+`watch` 객체는 `{watchId,url,baselineCount,lastChecked,status,expiresAt}`입니다. `watchId`는 UUID v4이고 시간은 Unix 초입니다. `baselineCount`는 최초 성공 전 `null`입니다. 상태는 `pending`, `active`, `blocked`, `rate_limited`, `unavailable`, `parse_error`, `delivery_error`, `token_expired`입니다. `active`는 댓글 수를 읽었다는 뜻이며 실제 휴대폰 수신 확인이 아닙니다. 잘못된 URL은 400 `invalid_watch_url`입니다. 구독 개수 초과 오류는 반환하지 않으며 요청 빈도와 공유 작업 예산 제한은 유지합니다. 삭제는 자기 기기 소유의 구독에만 적용하며, 없거나 다른 기기의 ID를 지정해도 200을 반환해 소유권 정보를 노출하지 않습니다.
 
 공개 페이지는 쿠키·인증 헤더 없이 GET으로만 가져옵니다. User-Agent는 `Moa-Public-Comment-Watch/1.0 (Android client; Mobile)`로 앱의 모바일 문서 요청임을 식별하며 다른 브라우저로 가장하지 않습니다. 리디렉션을 따르지 않고, 10초·512 KiB 제한과 HTML 형식을 확인합니다. 서버가 제공하는 댓글 영역의 수치만 읽고 본문·제목·닉네임·댓글 내용은 저장하지 않습니다. 403은 6시간, 429는 1시간 뒤 다시 확인합니다. 기타 실패는 점차 간격을 늘려 최대 6시간 뒤 재시도합니다. 차단·비공개·CAPTCHA·사이트 보호 장치를 우회하지 않습니다.
 

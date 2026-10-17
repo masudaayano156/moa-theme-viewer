@@ -5,9 +5,11 @@ import android.content.SharedPreferences;
 import android.os.Handler;
 import android.os.Looper;
 import com.google.android.gms.tasks.Task;
+import com.google.android.gms.tasks.Tasks;
 import com.google.firebase.FirebaseApp;
 import com.google.firebase.FirebaseOptions;
 import com.google.firebase.messaging.FirebaseMessaging;
+import java.util.concurrent.TimeUnit;
 
 /** Explicit, device-local consent for FCM. Tokens are never logged or broadcast. */
 public final class PushClient {
@@ -16,6 +18,11 @@ public final class PushClient {
     private static long generation;
     private static long tokenRevision;
     private static Task<Void> deletion;
+    private static FirebaseMessaging requiredMessaging(Context context) {
+        FirebaseMessaging value = messaging(context);
+        if (value == null) throw new IllegalStateException("Push is not configured");
+        return value;
+    }
 
     public interface TokenCallback {
         void onToken(String token);
@@ -164,6 +171,53 @@ public final class PushClient {
 
     static String completedToken(Context context, long requestedTokenRevision, String taskToken) {
         synchronized (LOCK) { return tokenRevision != requestedTokenRevision ? cachedToken(context) : taskToken; }
+    }
+
+    /** Job-owned background recovery only. Never delete a token newer than the rejected snapshot. */
+    static String refreshExpiredToken(Context context, String rejectedToken) {
+        if (Looper.myLooper() == Looper.getMainLooper()) throw new IllegalStateException("Token recovery requires a background job");
+        Context app = context.getApplicationContext();
+        final long expected;
+        final Task<Void> pending;
+        synchronized (LOCK) {
+            if (!isEnabled(app) || !PushNotifications.hasPermission(app)) return "";
+            String current = cachedToken(app);
+            if (validToken(current) && !current.equals(rejectedToken)) return current;
+            expected = generation;
+            try {
+                if (deletion != null && !deletion.isComplete()) pending = deletion;
+                else if (validToken(current)) {
+                    tokenRevision++;
+                    pending = deletion = requiredMessaging(app).deleteToken();
+                } else pending = null;
+            } catch (RuntimeException unavailable) { return ""; }
+        }
+        try {
+            if (pending != null) Tasks.await(pending, 10, TimeUnit.SECONDS);
+            final long requestedRevision;
+            final Task<String> fresh;
+            synchronized (LOCK) {
+                if (generation != expected || !isEnabled(app) || !PushNotifications.hasPermission(app)) return "";
+                String current = cachedToken(app);
+                if (validToken(current) && !current.equals(rejectedToken)) return current;
+                // Only clear the rejected snapshot after its SDK deletion succeeded.
+                if (!preferences(app).edit().remove("current_token").remove("previous_token").commit()) return "";
+                tokenRevision++;
+                requestedRevision = tokenRevision;
+                fresh = requiredMessaging(app).getToken();
+            }
+            String fetched = Tasks.await(fresh, 10, TimeUnit.SECONDS);
+            synchronized (LOCK) {
+                if (generation != expected || !isEnabled(app) || !PushNotifications.hasPermission(app)) return "";
+                String latest = completedToken(app, requestedRevision, fetched);
+                if (!validToken(latest) || latest.equals(rejectedToken) || !acceptToken(app, latest)) return "";
+                return latest;
+            }
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt(); return "";
+        } catch (java.util.concurrent.ExecutionException | java.util.concurrent.TimeoutException | RuntimeException unavailable) {
+            return "";
+        }
     }
 
     private static FirebaseMessaging messaging(Context context) {

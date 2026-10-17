@@ -1,6 +1,8 @@
 package app.moa.client;
 
 import java.net.URI;
+import java.net.URLDecoder;
+import java.util.Locale;
 
 /** Short-lived navigation correlation, armed only by a separately verified new-post action. */
 public final class PostSubmissionTracker {
@@ -11,7 +13,7 @@ public final class PostSubmissionTracker {
     public boolean begin(String writeUrl, long now) {
         cancel();
         URI uri = parsedHttps(writeUrl, "m.dcinside.com");
-        if (now < 0 || uri == null || !uri.getRawPath().matches("/write/[A-Za-z0-9_]{1,80}/?")) return false;
+        if (now < 0 || !isNewWriteDocument(writeUrl)) return false;
         gallery = uri.getRawPath().split("/")[2];
         startedAt = now;
         return true;
@@ -32,6 +34,22 @@ public final class PostSubmissionTracker {
     }
 
     public void cancel() { gallery = ""; startedAt = 0; }
+
+    public static boolean isNewWriteDocument(String value) {
+        URI uri = parsedHttps(value, "m.dcinside.com");
+        if (uri == null || !uri.getRawPath().matches("/write/[A-Za-z0-9_]{1,80}/?")) return false;
+        String query = uri.getRawQuery();
+        if (query == null) return true;
+        try {
+            for (String item : query.split("&")) {
+                String[] pair = item.split("=", 2);
+                String key = URLDecoder.decode(pair[0], "UTF-8").toLowerCase(Locale.ROOT);
+                String mode = pair.length < 2 ? "" : URLDecoder.decode(pair[1], "UTF-8").toLowerCase(Locale.ROOT);
+                if (("mode".equals(key) || "action".equals(key)) && ("modify".equals(mode) || "edit".equals(mode))) return false;
+            }
+            return true;
+        } catch (Exception malformed) { return false; }
+    }
 
     private static URI parsedHttps(String value, String host) {
         if (value == null || value.length() > 2048) return null;
