@@ -351,6 +351,9 @@ public final class BrowserController {
                 authNavigationPending = true;
                 updateDraftOwner("");
                 accountGeneration++;
+                // A popup can start authentication while the main page is covered.
+                // Retire its old account-bound callbacks and keep a live timeout.
+                restartCoveredPresentation();
                 favoritesGeneration++;
                 if (favoritesWeb != null) {
                     favoritesWeb.stopLoading();
