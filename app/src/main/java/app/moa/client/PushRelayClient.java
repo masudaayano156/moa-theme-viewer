@@ -14,11 +14,17 @@ import java.net.URI;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import org.json.JSONException;
+import org.json.JSONArray;
 import org.json.JSONObject;
 
 /** Device-scoped relay credentials stay in private storage, separate from web sessions. */
@@ -40,6 +46,21 @@ public final class PushRelayClient {
     public interface Callback {
         void onSuccess(String message);
         void onError(String message);
+    }
+
+    public interface WatchesCallback {
+        void onSuccess(List<Watch> watches);
+        void onError(String message);
+    }
+
+    public static final class Watch {
+        public final String watchId, url, status;
+        public final Integer baselineCount;
+        public final long lastChecked, expiresAt;
+        private Watch(String watchId, String url, Integer baselineCount, long lastChecked, String status, long expiresAt) {
+            this.watchId = watchId; this.url = url; this.baselineCount = baselineCount;
+            this.lastChecked = lastChecked; this.status = status; this.expiresAt = expiresAt;
+        }
     }
 
     private PushRelayClient() { }
@@ -168,6 +189,130 @@ public final class PushRelayClient {
                 deliver(app, expected, callback, false, "시험 알림을 요청하지 못했어요. 네트워크를 확인해 주세요.", true);
             }
         });
+    }
+
+    /** Returns only this paired installation's explicitly selected public articles. */
+    public static void listWatches(Context context, WatchesCallback callback) {
+        Context app = context.getApplicationContext();
+        final long expected;
+        final Credentials device;
+        Callback errors = new Callback() {
+            @Override public void onSuccess(String ignored) { }
+            @Override public void onError(String message) { if (callback != null) callback.onError(message); }
+        };
+        synchronized (LOCK) {
+            expected = generation;
+            device = watchDevice(app, expected, errors);
+            if (device == null) return;
+        }
+        submit(app, expected, errors, () -> {
+            if (!current(app, expected, device, true) || !isPaired(app)) return;
+            try {
+                Response response = request(device, "GET", "/watches", null, true);
+                if (response.status != 200) { failWatch(app, expected, device, errors, response); return; }
+                JSONArray array = response.body.optJSONArray("watches");
+                if (array == null || array.length() > 3) throw new IOException("Invalid watches");
+                ArrayList<Watch> watches = new ArrayList<>();
+                Set<String> ids = new HashSet<>(), urls = new HashSet<>();
+                for (int index = 0; index < array.length(); index++) {
+                    Watch watch = parseWatch(array.optJSONObject(index));
+                    if (!ids.add(watch.watchId) || !urls.add(watch.url)) throw new IOException("Duplicate watches");
+                    watches.add(watch);
+                }
+                List<Watch> result = Collections.unmodifiableList(watches);
+                new Handler(Looper.getMainLooper()).post(() -> {
+                    if (callback != null && current(app, expected, device, true) && isPaired(app)) callback.onSuccess(result);
+                });
+            } catch (IOException | RuntimeException unavailable) {
+                deliver(app, expected, errors, false, "댓글 알림 목록을 확인하지 못했어요. 잠시 후 다시 시도해 주세요.", true);
+            }
+        });
+    }
+
+    /** Call only after the user accepts sending this public address to the relay. */
+    public static void watch(Context context, String url, Callback callback) {
+        changeWatch(context, CommunityStore.canonicalArticleUrl(url), null, callback);
+    }
+
+    public static void unwatch(Context context, String watchId, Callback callback) {
+        changeWatch(context, null, watchId, callback);
+    }
+
+    private static void changeWatch(Context context, String url, String watchId, Callback callback) {
+        Context app = context.getApplicationContext();
+        final long expected;
+        final Credentials device;
+        synchronized (LOCK) {
+            expected = generation;
+            if (url == null && !validWatchId(watchId)) {
+                deliver(app, expected, callback, false, "댓글을 확인할 글이나 알림 항목을 다시 선택해 주세요.", false);
+                return;
+            }
+            device = watchDevice(app, expected, callback);
+            if (device == null) return;
+        }
+        submit(app, expected, callback, () -> {
+            if (!current(app, expected, device, true) || !isPaired(app)) return;
+            try {
+                Response response = request(device, url != null ? "PUT" : "DELETE",
+                        url != null ? "/watches" : "/watches/" + watchId,
+                        url != null ? new JSONObject().put("url", url) : null, true);
+                if (url != null && response.status == 200) {
+                    Watch accepted = parseWatch(response.body.optJSONObject("watch"));
+                    if (!url.equals(accepted.url)) throw new IOException("Unexpected watch");
+                    deliver(app, expected, callback, true, "이 글의 댓글 수를 주기적으로 확인해요. 7일 뒤 만료됩니다.", true);
+                } else if (url == null && response.is(200, "removed")) {
+                    deliver(app, expected, callback, true, "이 글의 댓글 알림을 해제했어요.", true);
+                } else failWatch(app, expected, device, callback, response);
+            } catch (IOException | JSONException | RuntimeException unavailable) {
+                deliver(app, expected, callback, false, "댓글 알림 변경을 확인하지 못했어요. 목록을 새로고침해 주세요.", true);
+            }
+        });
+    }
+
+    private static Credentials watchDevice(Context app, long expected, Callback callback) {
+        String problem = prerequisite(app);
+        Credentials device = credentials(app);
+        if (problem == null && !isPaired(app)) problem = "먼저 이 기기를 알림 서버에 연결해 주세요.";
+        if (problem != null) { deliver(app, expected, callback, false, problem, false); return null; }
+        return device;
+    }
+
+    private static Watch parseWatch(JSONObject item) throws IOException {
+        if (item == null) throw new IOException("Invalid watch");
+        String id = item.optString("watchId", ""), url = item.optString("url", ""), status = item.optString("status", "");
+        if (!validWatchId(id) || !url.equals(CommunityStore.canonicalArticleUrl(url))
+                || !status.matches("pending|active|blocked|rate_limited|unavailable|parse_error|delivery_error|token_expired"))
+            throw new IOException("Invalid watch");
+        Object raw = item.opt("baselineCount");
+        if (!item.has("baselineCount")) throw new IOException("Missing baseline");
+        Integer count = raw == JSONObject.NULL ? null : (int) wholeNumber(raw, 1000000);
+        long checked = wholeNumber(item.opt("lastChecked"), 4102444800L);
+        long expires = wholeNumber(item.opt("expiresAt"), 4102444800L);
+        if (expires == 0) throw new IOException("Invalid expiration");
+        return new Watch(id, url, count, checked, status, expires);
+    }
+
+    private static long wholeNumber(Object value, long maximum) throws IOException {
+        if (!(value instanceof Number)) throw new IOException("Invalid number");
+        double number = ((Number) value).doubleValue();
+        if (!Double.isFinite(number) || number < 0 || number > maximum || number != Math.floor(number))
+            throw new IOException("Invalid number");
+        return ((Number) value).longValue();
+    }
+
+    private static boolean validWatchId(String value) {
+        return value != null && value.matches("[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}");
+    }
+
+    private static void failWatch(Context app, long expected, Credentials device, Callback callback, Response response) {
+        // 404 can mean an older relay without this feature, not an invalid pairing.
+        if (response.status == 401) invalidatePairIfRejected(app, expected, device, response.status);
+        if (response.status == 409 && "watch_limit_reached".equals(response.body.optString("error")))
+            deliver(app, expected, callback, false, "댓글 알림 한도에 도달했어요. 기기당 3개이며 서버의 전체 한도도 적용됩니다.", true);
+        else if (response.status == 404)
+            deliver(app, expected, callback, false, "댓글 확인 서버의 업데이트가 아직 적용되지 않았어요.", true);
+        else fail(app, expected, callback, response);
     }
 
     /** Local disconnection is immediate; private cleanup credentials survive a failed remote deletion. */

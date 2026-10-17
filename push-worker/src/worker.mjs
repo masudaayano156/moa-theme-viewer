@@ -1,3 +1,5 @@
+import { WatchError, canonicalWatchUrl, validWatchId, watchRoute, scheduledWatches } from './public-watches.mjs';
+
 const MAX_BODY_BYTES = 8192;
 const PAIR_TTL_SECONDS = 15 * 60;
 const OAUTH_URL = 'https://oauth2.googleapis.com/token';
@@ -205,7 +207,14 @@ async function jsonUpstream(response) {
 
 async function fetchGoogle(url, init) {
   try {
-    return await fetch(url, { ...init, redirect: 'error', signal: AbortSignal.timeout(12000) });
+    // Workers supports manual/follow redirects, not the browser-only error mode.
+    // Reject redirects explicitly so credentials cannot follow a different URL.
+    const response = await fetch(url, { ...init, redirect: 'manual', signal: AbortSignal.timeout(12000) });
+    if (response.status >= 300 && response.status < 400) {
+      await response.body?.cancel();
+      throw new HttpError(502, 'push_service_unavailable');
+    }
+    return response;
   } catch {
     throw new HttpError(502, 'push_service_unavailable');
   }
@@ -256,15 +265,20 @@ async function accessToken(account, now) {
   } catch (error) { oauthCache.delete(cacheKey); throw error; }
 }
 
-async function sendTest(env, token, eventId, now) {
+async function sendMessage(env, token, data, now) {
+  if (!data || !/^[0-9a-f-]{36}$/.test(data.event_id || '')
+      || !['test', 'comment'].includes(data.kind)
+      || (data.kind === 'comment' && !canonicalWatchUrl(data.url))) {
+    throw new HttpError(400, 'invalid_notification');
+  }
   const account = serviceAccount(env);
   const oauth = await accessToken(account, now);
   const response = await fetchGoogle(`https://fcm.googleapis.com/v1/projects/${env.FIREBASE_PROJECT_ID}/messages:send`, {
     method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${oauth}` },
     body: JSON.stringify({ message: {
       token,
-      data: { kind: 'test', event_id: eventId },
-      android: { priority: 'HIGH', ttl: '60s', restricted_package_name: 'app.moa.client' },
+      data,
+      android: { priority: 'HIGH', ttl: data.kind === 'comment' ? '86400s' : '60s', restricted_package_name: 'app.moa.client' },
     } }),
   });
   if (response.ok) { await response.body?.cancel(); return; }
@@ -273,6 +287,14 @@ async function sendTest(env, token, eventId, now) {
       && detail.errorCode === 'UNREGISTERED')) throw new HttpError(410, 'device_token_expired');
   if (response.status === 401) oauthCache.delete(`${account.project_id}:${account.private_key_id}`);
   throw new HttpError(502, 'push_service_unavailable');
+}
+
+async function sendTest(env, token, eventId, now) {
+  return sendMessage(env, token, { kind: 'test', event_id: eventId }, now);
+}
+
+async function sendComment(env, token, eventId, url, now) {
+  return sendMessage(env, token, { kind: 'comment', event_id: eventId, url }, now);
 }
 
 async function testDevice(request, env, installationId, secretHash, now) {
@@ -309,8 +331,11 @@ async function testDevice(request, env, installationId, secretHash, now) {
 }
 
 async function deviceRoute(request, env, match, now) {
-  const [, installationId, action] = match;
+  const [, installationId, action, watchId] = match;
   const { secretHash } = await requireDevice(request, env, installationId);
+  if (action === 'watches') {
+    return watchRoute(request, env, installationId, watchId, now, { reply, bodyObject, budget });
+  }
   if (request.method === 'POST' && action === 'test') {
     return testDevice(request, env, installationId, secretHash, now);
   }
@@ -332,9 +357,14 @@ async function deviceRoute(request, env, match, now) {
     return reply(200, { updated: true });
   }
   if (request.method === 'DELETE' && !action) {
-    const result = await env.DB.prepare('DELETE FROM devices WHERE installation_id = ? AND secret_hash = ?')
-      .bind(installationId, secretHash).run();
-    if (result.meta.changes !== 1) throw new HttpError(401, 'unauthorized');
+    const results = await env.DB.batch([
+      env.DB.prepare('DELETE FROM devices WHERE installation_id = ? AND secret_hash = ?')
+        .bind(installationId, secretHash),
+      env.DB.prepare('DELETE FROM watch_targets WHERE NOT EXISTS (SELECT 1 FROM watch_subscriptions s WHERE s.target_id = watch_targets.target_id)'),
+    ]);
+    // D1 includes cascading subscription/event deletions in this change count.
+    // The authenticated primary-key predicate still selects at most one device.
+    if (!(results[0].meta?.changes > 0)) throw new HttpError(401, 'unauthorized');
     return reply(200, { unpaired: true });
   }
   throw new HttpError(404, 'not_found');
@@ -351,10 +381,13 @@ export default {
       }
       const admin = request.method === 'POST' && url.pathname === '/v1/admin/pairing-codes';
       const pairing = request.method === 'POST' && url.pathname === '/v1/pair';
-      const match = /^\/v1\/devices\/([A-Za-z0-9_-]{16,80})(?:\/(test|token))?$/.exec(url.pathname);
+      const match = /^\/v1\/devices\/([A-Za-z0-9_-]{16,80})(?:\/(test|token|watches)(?:\/([0-9a-f-]{36}))?)?$/.exec(url.pathname);
       const device = match && ((request.method === 'POST' && match[2] === 'test')
         || (request.method === 'PUT' && match[2] === 'token')
-        || (request.method === 'DELETE' && !match[2]));
+        || (request.method === 'DELETE' && !match[2])
+        || (match[2] === 'watches' && ((!match[3] && ['GET', 'PUT'].includes(request.method))
+          || (request.method === 'DELETE' && validWatchId(match[3])))))
+        && (!match[3] || match[2] === 'watches');
       // Invalid routes never use the database. Rate-limit counters also saturate
       // so rejected requests cannot keep consuming the daily D1 write quota.
       if (!admin && !pairing && !device) throw new HttpError(404, 'not_found');
@@ -368,7 +401,7 @@ export default {
       if (device) return await deviceRoute(request, env, match, now);
       throw new HttpError(404, 'not_found');
     } catch (error) {
-      if (error instanceof HttpError) return reply(error.status, { error: error.code }, error.retryAfter);
+      if (error instanceof HttpError || error instanceof WatchError) return reply(error.status, { error: error.code }, error.retryAfter);
       return reply(503, { error: 'relay_unavailable' });
     }
   },
@@ -378,5 +411,6 @@ export default {
       env.DB.prepare('DELETE FROM pairing_codes WHERE expires_at <= ?').bind(now),
       env.DB.prepare('DELETE FROM rate_limits WHERE expires_at <= ?').bind(now),
     ]);
+    await scheduledWatches(env, now, sendComment);
   },
 };

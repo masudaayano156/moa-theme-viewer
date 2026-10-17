@@ -638,3 +638,22 @@ html[data-moa-theme][data-moa-layout="app"] .ginfo2 .btn-commentgo { color:var(-
 html[data-moa-theme][data-moa-layout="app"] .ginfo2 .btn-commentgo .point-red { color:var(--moa-action-ink) !important; }
 html[data-moa-theme][data-moa-layout="app"] :is(.ginfo,.ginfo2) li::before { border-color:var(--moa-line) !important; background-color:var(--moa-line) !important; }
 html[data-moa-theme][data-moa-layout="app"] .all-comment-tit.flex .rt > *::before { background-color:var(--moa-line) !important; }
+
+/* The service inserts replies later as comment-add, not li.reply. Keep their
+   selected background and arrow out of the source blue sprite palette. */
+html[data-moa-theme][data-moa-layout="app"] .all-comment-lst .comment-add {
+  background-color:var(--moa-paper) !important; color:var(--moa-ink) !important;
+  border-color:var(--moa-line) !important; padding:14px 16px 14px 40px;
+}
+html[data-moa-theme][data-moa-layout="app"] .all-comment-lst .comment-add.on { background-color:var(--moa-tint) !important; }
+html[data-moa-theme][data-moa-layout="app"] .all-comment-lst .comment-add::before {
+  background:none !important; width:9px; height:9px; left:17px; top:18px;
+  box-sizing:border-box; border:0; border-left:2px solid var(--moa-accent);
+  border-bottom:2px solid var(--moa-accent);
+}
+html[data-moa-theme][data-moa-layout="app"] .all-comment-lst .comment-add :is(.nick,.txt:not([style*="color"]),.reply) { color:var(--moa-ink) !important; }
+html[data-moa-theme][data-moa-layout="app"] .all-comment-lst .comment-add :is(.date,.ip,.delted,.modify button,.modify .item) { color:var(--moa-muted) !important; }
+html[data-moa-theme][data-moa-layout="app"] .all-comment-lst :is(.mention,.reply .ct.on) { color:var(--moa-action-ink) !important; }
+html[data-moa-theme][data-moa-layout="app"] .all-comment-lst > li.focus { border-color:var(--moa-accent) !important; }
+html[data-moa-theme][data-moa-layout="app"] .all-comment-lst .comment-arrow a { background:var(--moa-paper) !important; color:var(--moa-ink) !important; border-color:var(--moa-line) !important; }
+html[data-moa-theme][data-moa-layout="app"] .all-comment-lst .comment-arrow.close { border-color:var(--moa-line) !important; }

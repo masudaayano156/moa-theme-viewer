@@ -37,6 +37,25 @@
   var sheetHeader = null;
   var sheetFormula = null;
   var lastStatus = { applied: false, reason: 'not-applied', pageType: 'original' };
+  var accentStyle = null;
+
+  function applyAccent(options) {
+    var colors;
+    try { colors = [options.accent, options.accentOn, options.accentTint]; }
+    catch (_) { if (accentStyle) accentStyle.disabled = true; return; }
+    // Native options are strings. Snapshot once so arrays, coercible objects or
+    // changing property getters cannot insert unvalidated CSS into the rule.
+    var valid = colors.every(function (value) { return typeof value === 'string' && value.length === 7 && /^#[0-9a-f]{6}$/i.test(value); });
+    if (!valid) { if (accentStyle) accentStyle.disabled = true; return; }
+    if (!accentStyle || !accentStyle.isConnected) {
+      accentStyle = document.createElement('style');
+      accentStyle.setAttribute('data-moa-accent-owned','true');
+      (document.head || root).appendChild(accentStyle);
+    }
+    var rules = 'html[data-moa-theme]{--moa-accent:'+colors[0]+'!important;--moa-action-ink:'+colors[0]+'!important;--moa-action-fill:'+colors[0]+'!important;--moa-on-accent:'+colors[1]+'!important;--moa-action-on:'+colors[1]+'!important;--moa-tint:'+colors[2]+'!important;}';
+    if (accentStyle.textContent !== rules) accentStyle.textContent = rules;
+    accentStyle.disabled = false;
+  }
 
   // User content is never traversed for naming. Even an exact UI phrase in a
   // title, author, body, comment, editable field, or hidden token stays intact.
@@ -564,6 +583,7 @@
     pendingOptions = null;
     current = null;
     if (observer) observer.disconnect();
+    if (accentStyle) accentStyle.disabled = true;
     removePresentation();
     restoreText();
     attributeEdits.forEach(function (changes, node) {
@@ -626,6 +646,7 @@
     setAttribute(root, 'data-moa-theme', theme);
     setAttribute(root, 'data-moa-dark', options.dark ? 'true' : 'false');
     setAttribute(root, 'data-moa-page', type);
+    applyAccent(options);
     suppressSourceDarkMode();
     if (rootFontOriginal === null) rootFontOriginal = {
       value: root.style.getPropertyValue('--moa-font-scale'), priority: root.style.getPropertyPriority('--moa-font-scale')

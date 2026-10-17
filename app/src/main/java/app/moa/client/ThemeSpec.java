@@ -88,5 +88,26 @@ public enum ThemeSpec {
             this.border = border;
             this.tint = tint;
         }
+
+        public Palette withAccent(int selected) {
+            int chosen = 0xFF000000 | selected & 0xFFFFFF;
+            int target = luminance(surface) < .3 ? 0xFFFFFFFF : 0xFF000000;
+            int accessible = chosen;
+            for (int step=1; contrast(accessible,surface)<4.5 && step<=32; step++)
+                accessible = blend(chosen,target,step/32f);
+            int on = contrast(accessible,0xFFFFFFFF)>=contrast(accessible,0xFF000000) ? 0xFFFFFFFF : 0xFF000000;
+            return new Palette(background,surface,text,mutedText,accessible,on,border,blend(surface,accessible,.10f));
+        }
+        private static int blend(int a,int b,float amount) {
+            int result=0xFF000000;
+            for(int shift:new int[]{16,8,0}) result|=Math.round(((a>>shift)&255)*(1-amount)+((b>>shift)&255)*amount)<<shift;
+            return result;
+        }
+        private static double luminance(int color) {
+            double result=0;double[] weights={.2126,.7152,.0722};int[] shifts={16,8,0};
+            for(int i=0;i<3;i++){double c=((color>>shifts[i])&255)/255.0;result+=weights[i]*(c<=.04045?c/12.92:Math.pow((c+.055)/1.055,2.4));}
+            return result;
+        }
+        private static double contrast(int a,int b) {double x=luminance(a),y=luminance(b);return (Math.max(x,y)+.05)/(Math.min(x,y)+.05);}
     }
 }

@@ -66,14 +66,23 @@ public final class BrowserController {
         void onPageState(String title, String url, boolean loading);
         void onError(String message);
         default void onAccountFavorites(String state, List<FavoriteEntry> items) { }
+        default boolean onOpenArticle(String url) { return false; }
+        default void onUserActions(String nickname, String id, String ip) { }
+        default void onOwnArticlePublished(String url) { }
+        default void onAuthenticationChanged() { }
+        default void onAuthenticationSettled() { }
     }
     public static final class FavoriteEntry {
         public final String name, url;
         public FavoriteEntry(String name, String url) { this.name = name; this.url = url; }
     }
-    private static final int FILE_PICK = 4101, SAVE_FILE = 4102, WEB_PERMISSION = 4103;
+    private static final java.util.concurrent.atomic.AtomicInteger NEXT_REQUEST_BLOCK = new java.util.concurrent.atomic.AtomicInteger(4100);
+    private final int FILE_PICK, SAVE_FILE, WEB_PERMISSION, MEDIA_PICK;
     private final Activity activity;
     private final Listener listener;
+    private final String profileName;
+    private final CookieManager cookies;
+    private final ImageRequestPolicy imagePolicy = new ImageRequestPolicy();
     private final FrameLayout container;
     private WebView web;
     private WebView favoritesWeb;
@@ -83,11 +92,13 @@ public final class BrowserController {
     private final Map<WebView, Dialog> popups = new HashMap<>();
     private final Map<WebView, SiteDialog> siteDialogs = new HashMap<>();
     private ThemeSpec theme = ThemeSpec.MAIL;
-    private boolean dark, original, destroyed, loading;
+    private boolean dark, original, loading;
+    private volatile boolean destroyed;
     private boolean openFavoritesPending, authNavigationPending;
     private int favoritesGeneration, documentGeneration, accountGeneration, authenticationGeneration, navigationIntentGeneration;
     private float fontScale = 1f;
     private String css = "", script = "", favoritesScript = "", draftScript = "", cleanupScript = "", recoveryUrl = "", draftOwner = "";
+    private String communityScript = "", communityCss = "";
     private int lastDraftPromptGeneration = -1;
     private AlertDialog draftDialog, permissionDialog;
     private NavigationCheck navigationCheck;
@@ -102,6 +113,11 @@ public final class BrowserController {
     private ValueCallback<Uri[]> fileCallback;
     private WebView fileOwner, permissionOwner;
     private boolean filePickerOutstanding, fileMultiple, permissionAwaitingSystem;
+    private boolean mediaPickerOutstanding;
+    private AlertDialog fileActionDialog;
+    private final PostSubmissionTracker postSubmissions = new PostSubmissionTracker();
+    private String publishedCandidate = "";
+    private boolean peerIdentityWaiting, peerPageStale;
     private DownloadRequest pendingDownload;
     private boolean savePickerOutstanding;
     private String downloadCancellationNotice;
@@ -113,9 +129,14 @@ public final class BrowserController {
     public BrowserController(Activity activity, Listener listener) {
         this.activity = activity;
         this.listener = listener;
+        int requestBlock = NEXT_REQUEST_BLOCK.getAndAdd(10);
+        if (requestBlock > 65000) throw new IllegalStateException("Restart the application before creating more browser instances");
+        FILE_PICK=requestBlock+1; SAVE_FILE=requestBlock+2; WEB_PERMISSION=requestBlock+3; MEDIA_PICK=requestBlock+4;
+        this.profileName = AccountProfiles.activeId(activity);
+        this.cookies = AccountProfiles.cookies(profileName);
         drafts = activity.getSharedPreferences("moa_editor_drafts", Activity.MODE_PRIVATE);
         container = new FrameLayout(activity);
-        web = new WebView(activity);
+        web = createWebView();
         container.addView(web, new FrameLayout.LayoutParams(-1, -1));
         try {
             css = readAsset("web/skin.css") + "\n" + readAsset("web/list-layout.css") + "\n" + readAsset("web/detail-layout.css");
@@ -123,15 +144,24 @@ public final class BrowserController {
             favoritesScript = readAsset("web/account-favorites.js");
             draftScript = readAsset("web/drafts.js");
             cleanupScript = readAsset("web/page-cleanup.js");
+            communityScript = readAsset("web/community-tools.js");
+            communityCss = readAsset("web/community-tools.css");
         } catch (Exception exception) {
             listener.onError("테마 파일을 읽지 못했습니다. 원본 화면으로 이용할 수 있습니다.");
         }
         configure(web);
-        CookieManager.getInstance().setAcceptCookie(true);
+        cookies.setAcceptCookie(true);
         refreshDocumentScript();
     }
 
     public View getView() { return container; }
+    public String profileName() { return profileName; }
+    private WebView createWebView() {
+        WebView created = new WebView(activity);
+        try { AccountProfiles.attach(created, profileName); }
+        catch (RuntimeException | LinkageError error) { created.destroy(); throw error; }
+        return created;
+    }
 
     public void openAccountFavorites() {
         navigationIntentGeneration++;
@@ -141,10 +171,11 @@ public final class BrowserController {
 
     public void refreshAccountFavorites() {
         if (destroyed) return;
+        if (peerIdentityWaiting) return;
         int generation = ++favoritesGeneration;
         listener.onAccountFavorites("loading", Collections.emptyList());
         if (favoritesWeb != null) { container.removeView(favoritesWeb); favoritesWeb.destroy(); }
-        favoritesWeb = new WebView(activity);
+        favoritesWeb = createWebView();
         configure(favoritesWeb);
         favoritesWeb.getSettings().setCacheMode(WebSettings.LOAD_NO_CACHE);
         favoritesWeb.setDownloadListener(null);
@@ -240,6 +271,8 @@ public final class BrowserController {
     }
     private void openInternal(String url) {
         if (destroyed) return;
+        postSubmissions.cancel();
+        if (peerIdentityWaiting) { listener.onError("다른 화면의 로그인 처리가 끝난 뒤 다시 열어 주세요."); return; }
         if (UrlPolicy.isDcHttps(url)) {
             snapshotDraft(() -> { prepareNavigation(url); web.loadUrl(url); });
         } else {
@@ -248,12 +281,17 @@ public final class BrowserController {
     }
     public boolean canGoBack() { return !destroyed && (fullscreenView != null || web.canGoBack()); }
     public void goBack() {
+        postSubmissions.cancel();
         if (fullscreenView != null) hideFullscreen();
         else if (!destroyed && web.canGoBack()) { cancelFavoritesNavigation(); snapshotDraft(() -> { prepareHistoryNavigation(-1); web.goBack(); }); }
     }
     public boolean canGoForward() { return !destroyed && web.canGoForward(); }
-    public void goForward() { if (canGoForward()) { cancelFavoritesNavigation(); snapshotDraft(() -> { prepareHistoryNavigation(1); web.goForward(); }); } }
-    public void reload() { cancelFavoritesNavigation(); if (!recoveryUrl.isEmpty()) openInternal(recoveryUrl); else snapshotDraft(() -> { beginPresentation(getUrl(), false); web.reload(); }); }
+    public void goForward() { if (canGoForward()) { postSubmissions.cancel(); publishedCandidate=""; cancelFavoritesNavigation(); snapshotDraft(() -> { prepareHistoryNavigation(1); web.goForward(); }); } }
+    public void reload() {
+        postSubmissions.cancel();
+        if (peerIdentityWaiting) { listener.onError("다른 화면의 로그인 처리가 끝난 뒤 새로고침해 주세요."); return; }
+        cancelFavoritesNavigation(); if (!recoveryUrl.isEmpty()) openInternal(recoveryUrl); else snapshotDraft(() -> { beginPresentation(getUrl(), false); web.reload(); });
+    }
 
     private void cancelFavoritesNavigation() {
         navigationIntentGeneration++;
@@ -322,19 +360,57 @@ public final class BrowserController {
         settings.setDisplayZoomControls(false);
         settings.setUseWideViewPort(true);
         settings.setLoadWithOverviewMode(true);
-        CookieManager.getInstance().setAcceptThirdPartyCookies(target, false);
+        cookies.setAcceptThirdPartyCookies(target, false);
         target.setWebViewClient(new Client());
         target.setWebChromeClient(new Chrome(target));
         target.setDownloadListener((url, userAgent, disposition, mime, size) -> requestDownload(target, url, userAgent, disposition, mime));
+        if (target == web) installLocalActions(target);
+    }
+
+    private void installLocalActions(WebView target) {
+        try {
+            if (!WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) return;
+            WebViewCompat.addWebMessageListener(target,"MoaLocalActions",Collections.singleton("https://m.dcinside.com"),
+                (view,message,origin,mainFrame,reply) -> {
+                    if (destroyed || view != web || !mainFrame || !"https".equals(origin.getScheme())
+                            || !"m.dcinside.com".equals(origin.getHost()) || origin.getPort() != -1 && origin.getPort() != 443
+                            || !UrlPolicy.canTheme(getUrl())) return;
+                    String raw;
+                    try { raw = message.getData(); } catch (RuntimeException unsupportedMessage) { return; }
+                    if (raw == null || raw.length() > 2048) return;
+                    try {
+                        JSONObject value = new JSONObject(raw);
+                        if ("submitting_post".equals(value.optString("action"))) {
+                            java.net.URI uri = java.net.URI.create(getUrl());
+                            if (uri.getPath().matches("/write/[A-Za-z0-9_]{1,80}/?")) {
+                                postSubmissions.begin(getUrl(),android.os.SystemClock.elapsedRealtime());
+                            }
+                        } else if ("user".equals(value.optString("action"))) {
+                            String name = safeIdentity(value.optString("nickname")), id = safeIdentity(value.optString("id")), ip = safeIdentity(value.optString("ip"));
+                            if (!name.isEmpty() || !id.isEmpty() || !ip.isEmpty()) listener.onUserActions(name,id,ip);
+                        }
+                    } catch (Exception invalid) { }
+                });
+        } catch (RuntimeException | LinkageError unavailable) { /* Native tools remain available in settings. */ }
+    }
+
+    private static String safeIdentity(String value) {
+        return value != null && value.length() <= 120 && !value.matches("(?s).*[\\x00-\\x1F\\x7F].*") ? value.trim() : "";
     }
 
     private final class Client extends WebViewClient {
+        @Override public android.webkit.WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
+            if (view != web || destroyed || request.isForMainFrame() || !"GET".equals(request.getMethod())) return null;
+            return imagePolicy.intercept(request.getUrl().toString());
+        }
         @Override public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
             if (!isLive(view)) return true;
             if (!request.isForMainFrame()) return false;
             String url = request.getUrl().toString();
-            if (view == web && request.hasGesture() && !request.isRedirect()) cancelFavoritesNavigation();
+            if (view == web && request.hasGesture() && !request.isRedirect()) { cancelFavoritesNavigation(); postSubmissions.cancel(); }
             if (UrlPolicy.isDcHttps(url)) {
+                if (view == web && request.hasGesture() && !request.isRedirect()
+                        && CommunityStore.canonicalArticleUrl(url) != null && listener.onOpenArticle(url)) return true;
                 if (view == web && !sameDocumentFragment(getUrl(), url)) prepareNavigation(url);
                 return false;
             }
@@ -345,14 +421,17 @@ public final class BrowserController {
         @Override public void onPageStarted(WebView view, String url, Bitmap favicon) {
             if (!isLive(view)) return;
             cancelPageRequests(view);
+            if (view == web) peerPageStale = false;
             if (UrlPolicy.isAuthenticationPage(url)) {
+                if (!authNavigationPending) listener.onAuthenticationChanged();
+                if (view != web) beginPeerAuthentication();
                 invalidatePendingDownload("로그인 상태가 변경되어 저장을 취소했습니다. 파일을 다시 선택해 주세요.");
                 authenticationGeneration++;
                 authNavigationPending = true;
                 updateDraftOwner("");
                 accountGeneration++;
-                // A popup can start authentication while the main page is covered.
-                // Retire its old account-bound callbacks and keep a live timeout.
+                // A popup can change the shared session while the main document
+                // still belongs to the old account. Keep it covered until reload.
                 restartCoveredPresentation();
                 favoritesGeneration++;
                 if (favoritesWeb != null) {
@@ -364,6 +443,9 @@ public final class BrowserController {
                 listener.onAccountFavorites("loading", Collections.emptyList());
             }
             if (view != web) return;
+            imagePolicy.update(CommunityOptions.imageMode(activity),url);
+            String article = postSubmissions.onNavigation(url,android.os.SystemClock.elapsedRealtime());
+            publishedCandidate = article == null ? "" : article;
             if (!isFavoritesPage(url) && !UrlPolicy.isAuthenticationPage(url)) openFavoritesPending = false;
             documentGeneration++;
             beginPresentation(url, false);
@@ -384,15 +466,16 @@ public final class BrowserController {
         @Override public void onPageFinished(WebView view, String url) {
             if (!isLive(view)) return;
             if (view == web && !documentKey(url).equals(documentKey(getUrl()))) return;
-            CookieManager.getInstance().flush();
+            cookies.flush();
             if (view != web) {
                 if (UrlPolicy.canTheme(url) && !cleanupScript.isEmpty()) view.evaluateJavascript(cleanupScript, null);
-                if (authNavigationPending && !UrlPolicy.isAuthenticationPage(url)) { authNavigationPending = false; refreshAccountFavorites(); }
+                if (authNavigationPending && !UrlPolicy.isAuthenticationPage(url)) settleAuthentication();
                 return;
             }
             loading = false;
             if (UrlPolicy.canTheme(url)) view.evaluateJavascript(draftScript, null);
             applyTheme();
+            if (presentation == null) recordRecentArticle();
             listener.onPageState(view.getTitle(), url, false);
             offerDraftRestore(url);
             if (openFavoritesPending && isFavoritesPage(url)) {
@@ -414,8 +497,7 @@ public final class BrowserController {
                 });
             }
             if (isFavoritesPage(url) || (url != null && authNavigationPending && !UrlPolicy.isAuthenticationPage(url))) {
-                authNavigationPending = false;
-                refreshAccountFavorites();
+                if (authNavigationPending) settleAuthentication(); else refreshAccountFavorites();
             }
         }
         @Override public void doUpdateVisitedHistory(WebView view, String url, boolean reload) {
@@ -451,7 +533,7 @@ public final class BrowserController {
             if (documentScript != null) { try { documentScript.remove(); } catch (RuntimeException ignored) { } documentScript = null; }
             container.removeView(view);
             view.destroy();
-            web = new WebView(activity);
+            web = createWebView();
             configure(web);
             container.addView(web, 0, new FrameLayout.LayoutParams(-1, -1));
             beginPresentation(recoveryUrl, false);
@@ -498,14 +580,33 @@ public final class BrowserController {
             if (types.size() > 1) intent.putExtra(Intent.EXTRA_MIME_TYPES, types.toArray(new String[0]));
             intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, params.getMode() == FileChooserParams.MODE_OPEN_MULTIPLE);
             intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-            try { activity.startActivityForResult(intent, FILE_PICK); }
-            catch (RuntimeException exception) { finishFileSelection(null); listener.onError("파일 선택 앱을 찾지 못했습니다."); }
+            boolean images = types.isEmpty() || types.stream().anyMatch(type -> type.startsWith("image/") || "*/*".equals(type));
+            if (!images) {
+                try { activity.startActivityForResult(intent, FILE_PICK); }
+                catch (RuntimeException exception) { finishFileSelection(null); listener.onError("파일 선택 앱을 찾지 못했습니다."); }
+            } else {
+                boolean[] launched = {false};
+                fileActionDialog = new AlertDialog.Builder(activity).setTitle("사진 첨부")
+                    .setItems(new String[]{"원본 파일 선택", "사진 편집 · GIF 만들기"}, (dialog, which) -> {
+                        if (fileCallback == null || !isLive(fileOwner)) return;
+                        launched[0] = true;
+                        try {
+                            if (which == 0) activity.startActivityForResult(intent, FILE_PICK);
+                            else {
+                                mediaPickerOutstanding = true;
+                                activity.startActivityForResult(MediaToolsActivity.createIntent(activity,new ArrayList<>(),true), MEDIA_PICK);
+                            }
+                        } catch (RuntimeException unavailable) { finishFileSelection(null); listener.onError("첨부 도구를 열지 못했습니다."); }
+                    }).create();
+                fileActionDialog.setOnDismissListener(ignored -> { fileActionDialog = null; if (!launched[0]) finishFileSelection(null); });
+                fileActionDialog.show();
+            }
             return true;
         }
         @Override public boolean onCreateWindow(WebView view, boolean isDialog, boolean isUserGesture, android.os.Message resultMsg) {
             if (!isUserGesture || view != owner || !isLive(owner) || resultMsg == null
                     || !(resultMsg.obj instanceof WebView.WebViewTransport)) return false;
-            WebView child = new WebView(activity);
+            WebView child = createWebView();
             configure(child);
             Dialog dialog = new Dialog(activity);
             dialog.setContentView(child);
@@ -590,7 +691,7 @@ public final class BrowserController {
 
     private void finishFileSelection(Uri[] selected) {
         ValueCallback<Uri[]> callback = fileCallback;
-        fileCallback = null; fileOwner = null; filePickerOutstanding = false;
+        fileCallback = null; fileOwner = null; filePickerOutstanding = false; mediaPickerOutstanding = false;
         if (callback != null) callback.onReceiveValue(selected);
     }
 
@@ -611,6 +712,7 @@ public final class BrowserController {
             fileCallback = null; fileOwner = null;
             // The old OS picker still owns FILE_PICK until its result arrives.
             if (callback != null) callback.onReceiveValue(null);
+            if (fileActionDialog != null) fileActionDialog.dismiss();
         }
         if (permissionOwner == view && pendingPermission != null) denyPermissionIfCurrent(pendingPermission);
     }
@@ -670,6 +772,14 @@ public final class BrowserController {
     }
 
     public boolean onActivityResult(int requestCode, int resultCode, Intent data) {
+        if (requestCode == MEDIA_PICK) {
+            List<Uri> result = resultCode == Activity.RESULT_OK ? MediaToolsActivity.outputUris(data) : Collections.emptyList();
+            boolean valid = mediaPickerOutstanding && filePickerOutstanding && isLive(fileOwner) && !result.isEmpty()
+                    && (fileMultiple || result.size() == 1);
+            for (Uri uri:result) if (!isSafeEditedMedia(uri)) valid=false;
+            finishFileSelection(valid ? result.toArray(new Uri[0]) : null);
+            return true;
+        }
         if (requestCode == FILE_PICK) {
             List<Uri> selected = new ArrayList<>();
             if (resultCode == Activity.RESULT_OK && data != null) {
@@ -699,11 +809,30 @@ public final class BrowserController {
         }
         return false;
     }
+    public boolean ownsActivityResult(int code) {
+        return code == MEDIA_PICK && mediaPickerOutstanding || code == FILE_PICK && filePickerOutstanding && !mediaPickerOutstanding
+                || code == SAVE_FILE && savePickerOutstanding;
+    }
+    public boolean ownsPermissionRequest(int code) { return code == WEB_PERMISSION && permissionAwaitingSystem; }
+
+    private boolean isSafeEditedMedia(Uri uri) {
+        if (!MediaToolsActivity.validOutputUri(uri)) return false;
+        try {
+            java.io.File file = new java.io.File(MediaImageOps.directory(activity), uri.getLastPathSegment());
+            return MediaImageOps.ownedFile(activity,file) && file.isFile() && file.length()>0 && file.length()<=25L*1024*1024;
+        } catch (Exception invalid) { return false; }
+    }
 
     private String skinSource() {
         try {
             JSONObject config = new JSONObject().put("theme", theme.id).put("dark", dark)
                 .put("fontScale", fontScale).put("groupNoun", theme.groupNoun).put("displayName", theme.displayName);
+            if (CommunityOptions.accentIndex(activity) >= 0) {
+                ThemeSpec.Palette palette = theme.palette(dark).withAccent(CommunityOptions.accentColor(activity, theme.palette(dark).accent));
+                config.put("accent", String.format(java.util.Locale.ROOT,"#%06x", palette.accent & 0xFFFFFF))
+                    .put("accentOn", String.format(java.util.Locale.ROOT,"#%06x", palette.onAccent & 0xFFFFFF))
+                    .put("accentTint", String.format(java.util.Locale.ROOT,"#%06x", palette.tint & 0xFFFFFF));
+            }
             return "if(window.top===window){window.__MOA_SKIN_CSS=" + JSONObject.quote(css) + ";\n" + script
                 + "\nwindow.MoaSkin&&window.MoaSkin.apply(" + config + ");}";
         } catch (Exception ex) { return ""; }
@@ -713,7 +842,7 @@ public final class BrowserController {
         try {
             if (!WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) return;
             if (documentScript != null) { documentScript.remove(); documentScript = null; }
-            String source = cleanupScript + "\n" + draftScript + ((!original && !script.isEmpty()) ? "\n" + skinSource() : "");
+            String source = cleanupScript + "\n" + draftScript + "\n" + communitySource("") + "\n" + submissionHook() + ((!original && !script.isEmpty()) ? "\n" + skinSource() : "");
             documentScript = WebViewCompat.addDocumentStartJavaScript(web, source, Collections.singleton("https://m.dcinside.com"));
         } catch (RuntimeException | LinkageError unavailableProvider) {
             // Older or unavailable providers still receive the onPageFinished skin.
@@ -722,7 +851,9 @@ public final class BrowserController {
     }
     private void applyTheme() {
         if (destroyed) return;
+        if (peerPageStale) { showPeerAccountCover(); return; }
         if (UrlPolicy.canTheme(getUrl()) && !cleanupScript.isEmpty()) web.evaluateJavascript(cleanupScript, null);
+        if (UrlPolicy.canTheme(getUrl()) && !communityScript.isEmpty()) web.evaluateJavascript(communitySource(getUrl()), null);
         if (original || !UrlPolicy.canTheme(getUrl())) {
             if (original && presentation != null) revealOriginalPresentation();
             else {
@@ -731,6 +862,114 @@ public final class BrowserController {
             }
         } else if (presentation != null) presentation.probe();
         else if (!script.isEmpty()) web.evaluateJavascript(skinSource(), null);
+    }
+
+    private String communitySource(String url) {
+        if (communityScript.isEmpty()) return "";
+        JSONObject config = CommunityOptions.webConfig(activity, UrlPolicy.galleryId(url));
+        return "if(window.top===window){window.__MOA_COMMUNITY_CSS=" + JSONObject.quote(communityCss) + ";\n"
+                + communityScript + "\nwindow.MoaCommunityTools&&window.MoaCommunityTools.apply(" + config + ");}";
+    }
+
+    private String submissionHook() {
+        return "if(window.top===window&&!window.__moaSubmitHook){window.__moaSubmitHook=true;document.addEventListener('click',function(e){if(!e.isTrusted||!window.MoaLocalActions)return;var n=e.target&&e.target.closest&&e.target.closest('.wrt-tit-box button[onclick],#writeForm button[onclick]');if(n&&/^\\s*write_submit\\(\\);?\\s*$/.test(n.getAttribute('onclick')||''))MoaLocalActions.postMessage(JSON.stringify({action:'submitting_post'}));},true);}";
+    }
+
+    public void beginPeerAuthentication() {
+        if (destroyed) return;
+        peerIdentityWaiting = true; peerPageStale = UrlPolicy.canTheme(getUrl());
+        postSubmissions.cancel(); publishedCandidate = "";
+        cancelPageRequests(web);
+        authenticationGeneration++; favoritesGeneration++;
+        if (favoritesWeb != null) { container.removeView(favoritesWeb); favoritesWeb.destroy(); favoritesWeb = null; }
+        updateDraftOwner("");
+        if (peerPageStale) showPeerAccountCover();
+    }
+
+    public void finishPeerAuthentication() {
+        if (destroyed) return;
+        peerIdentityWaiting = false;
+        refreshAccountFavorites();
+        if (peerPageStale && isListPage(getUrl())) guardNavigation(this::reload);
+    }
+
+    private void settleAuthentication() {
+        authNavigationPending = false;
+        finishPeerAuthentication();
+        listener.onAuthenticationSettled();
+    }
+
+    private boolean isListPage(String value) {
+        try { return UrlPolicy.canTheme(value) && java.net.URI.create(value).getPath().matches("/(?:board|mini|person)/[A-Za-z0-9_]+/?"); }
+        catch (RuntimeException error) { return false; }
+    }
+
+    private void showPeerAccountCover() {
+        if (destroyed || !peerPageStale) return;
+        if (presentation != null) presentation.suspend();
+        presentation = new PresentationGate(getUrl(), false); presentation.failed = true;
+        showPresentationCover(true,"다른 화면에서 로그인 상태가 바뀌었습니다. 작성 내용이 있으면 복사한 뒤 새로고침해 주세요.");
+    }
+
+    private void copyPendingText() {
+        if (destroyed || !UrlPolicy.canTheme(getUrl())) return;
+        PageContext context = new PageContext();
+        web.evaluateJavascript(draftScript + ";JSON.stringify(window.MoaDrafts?window.MoaDrafts.capture("+JSONObject.quote(context.url)+"):{fields:[]})", result -> {
+            if (!context.isCurrent()) return;
+            try {
+                Object decoded = new org.json.JSONTokener(result).nextValue();
+                JSONArray fields = new JSONObject(decoded instanceof String ? (String)decoded : "{}").optJSONArray("fields");
+                StringBuilder text = new StringBuilder();
+                if (fields != null) for(int i=0;i<fields.length();i++) { JSONObject field=fields.optJSONObject(i);if(field!=null)text.append(field.optString("text")).append("\n\n"); }
+                if(text.length()==0) { listener.onError("복사할 작성 내용이 없습니다."); return; }
+                android.content.ClipboardManager clipboard=activity.getSystemService(android.content.ClipboardManager.class);
+                if(clipboard!=null)clipboard.setPrimaryClip(android.content.ClipData.newPlainText("작성 중인 내용",text.toString()));
+                Toast.makeText(activity,"작성 내용을 복사했습니다.",Toast.LENGTH_SHORT).show();
+            } catch(Exception error) { listener.onError("작성 내용을 복사하지 못했습니다."); }
+        });
+    }
+
+    public void refreshCommunityOptions() {
+        if (destroyed) return;
+        imagePolicy.update(CommunityOptions.imageMode(activity),getUrl());
+        refreshDocumentScript();
+        restartCoveredPresentation();
+        applyTheme();
+    }
+
+    private void recordRecentArticle() {
+        String url = CommunityStore.canonicalArticleUrl(getUrl());
+        if (url == null || !CommunityStore.isHistoryEnabled(activity) && publishedCandidate.isEmpty()) return;
+        PageContext page = new PageContext();
+        web.evaluateJavascript("/*moa-article-metadata*/(()=>{const n=document.querySelector('.gallview-tit-box>.tit');return n?JSON.stringify({url:location.href,title:n.textContent.slice(0,200)}):null})()", result -> {
+            if (!page.isCurrent()) return;
+            try {
+                Object decoded = new org.json.JSONTokener(result == null ? "null" : result).nextValue();
+                if (!(decoded instanceof String)) return;
+                JSONObject value = new JSONObject((String)decoded);
+                if (url.equals(CommunityStore.canonicalArticleUrl(value.optString("url")))) {
+                    CommunityStore.recordRecent(activity, url, value.optString("title"));
+                    if (url.equals(publishedCandidate)) { publishedCandidate=""; listener.onOwnArticlePublished(url); }
+                }
+            } catch (Exception invalid) { }
+        });
+    }
+
+    public void openCommunitySourceTool(String kind) {
+        if (destroyed || !UrlPolicy.canTheme(getUrl())) { listener.onError("먼저 게시판이나 글을 열어 주세요."); return; }
+        final String selector;
+        switch(kind) {
+            case "autopicture": selector = "#galleryConfig a[href^=\"javascript:moveAutozzal(\"]"; break;
+            case "source_affixes": selector = "#galleryConfig a[href^=\"javascript:moveGallText(\"]"; break;
+            case "voice": selector = "#comment_write #submit_voice"; break;
+            default: listener.onError("지원하지 않는 원본 도구입니다."); return;
+        }
+        guardNavigation(() -> {
+            PageContext page = new PageContext();
+            web.evaluateJavascript("(()=>{const n=document.querySelector(" + JSONObject.quote(selector) + ");if(!n||n.disabled)return false;n.click();return true})()", found -> {
+                if (page.isCurrent() && !"true".equals(found)) listener.onError("이 페이지에는 해당 원본 설정이 없습니다. 게시판 목록에서 다시 시도해 주세요.");
+            });
+        });
     }
 
     private String presentationUrl(String url) {
@@ -745,6 +984,7 @@ public final class BrowserController {
     }
 
     private void prepareNavigation(String url) {
+        imagePolicy.update(CommunityOptions.imageMode(activity),url);
         if (!sameDocumentFragment(getUrl(), url)) beginPresentation(url, false);
     }
 
@@ -757,6 +997,7 @@ public final class BrowserController {
 
     private void beginPresentation(String url, boolean committed) {
         if (destroyed) return;
+        if (peerPageStale) { showPeerAccountCover(); return; }
         if (original || !UrlPolicy.canTheme(url)) { clearPresentation(); return; }
         if (presentation != null) presentation.suspend();
         presentation = new PresentationGate(url, committed);
@@ -791,7 +1032,9 @@ public final class BrowserController {
             presentationRetry.setOnClickListener(ignored -> {
                 PresentationGate gate = presentation;
                 if (gate == null || !gate.isCurrent()) return;
-                if (gate.committed) beginPresentation(gate.url, true);
+                if (peerIdentityWaiting) { listener.onError("로그인 화면을 먼저 완료하거나 닫아 주세요."); return; }
+                if (peerPageStale) guardNavigation(this::reload);
+                else if (gate.committed) beginPresentation(gate.url, true);
                 else guardNavigation(this::reload);
             });
             presentationCover.addView(presentationRetry, new LinearLayout.LayoutParams(-1, -2));
@@ -801,6 +1044,7 @@ public final class BrowserController {
             presentationCover.addView(presentationOriginal, new LinearLayout.LayoutParams(-1, -2));
         }
         ThemeSpec.Palette palette = theme.palette(dark);
+        if (CommunityOptions.accentIndex(activity)>=0) palette=palette.withAccent(CommunityOptions.accentColor(activity,palette.accent));
         presentationCover.setBackgroundColor(palette.background);
         presentationMessage.setTextColor(palette.text);
         presentationMessage.setText(message);
@@ -808,7 +1052,9 @@ public final class BrowserController {
         presentationRetry.setBackgroundTintList(ColorStateList.valueOf(palette.accent));
         presentationOriginal.setTextColor(palette.accent);
         presentationOriginal.setBackgroundTintList(ColorStateList.valueOf(palette.surface));
-        presentationRetry.setText(presentation != null && presentation.committed ? "화면 다시 준비" : "페이지 다시 열기");
+        presentationOriginal.setText(peerPageStale ? "작성 내용 복사" : "원본 보기");
+        presentationOriginal.setOnClickListener(ignored -> { if(peerPageStale) copyPendingText(); else setOriginalMode(true); });
+        presentationRetry.setText(!peerPageStale && presentation != null && presentation.committed ? "화면 다시 준비" : "페이지 다시 열기");
         presentationRetry.setVisibility(failure ? View.VISIBLE : View.GONE);
         presentationOriginal.setVisibility(failure ? View.VISIBLE : View.GONE);
         if (presentationCover.getParent() == null) container.addView(presentationCover, new FrameLayout.LayoutParams(-1, -1));
@@ -817,10 +1063,12 @@ public final class BrowserController {
     }
 
     private void clearPresentation() {
+        boolean wasCovered = presentation != null;
         if (presentation != null) presentation.suspend();
         presentation = null;
         if (presentationCover != null) container.removeView(presentationCover);
         if (web != null) web.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_AUTO);
+        if (wasCovered && !destroyed) recordRecentArticle();
     }
 
     private void failPresentation(String message) {
@@ -891,7 +1139,7 @@ public final class BrowserController {
             if (!matchesDocument(getUrl())) return;
             inFlight = true;
             long request = work = ++presentationWork;
-            String sourceScript = applied ? "" : cleanupScript + "\n" + skinSource() + "\n";
+            String sourceScript = applied ? "" : cleanupScript + "\n" + skinSource() + "\n" + communitySource(getUrl()) + "\n";
             applied = true;
             String query = sourceScript + ";JSON.stringify(window.MoaSkin&&window.MoaSkin.presentationState?window.MoaSkin.presentationState():{ready:false,reason:'missing-presentation-api'})";
             try {
@@ -969,7 +1217,7 @@ public final class BrowserController {
     }
 
     private String downloadCookie(String url) {
-        return UrlPolicy.isDcHttps(url) ? CookieManager.getInstance().getCookie(url) : null;
+        return UrlPolicy.isDcHttps(url) ? cookies.getCookie(url) : null;
     }
 
     private void invalidatePendingDownload(String notice) {
@@ -1020,7 +1268,10 @@ public final class BrowserController {
                     try (InputStream input = connection.getInputStream(); OutputStream output = activity.getContentResolver().openOutputStream(destination)) {
                         if (output == null) throw new IllegalStateException("No destination");
                         byte[] buffer = new byte[32768]; int count;
-                        while ((count = input.read(buffer)) != -1) output.write(buffer, 0, count);
+                        while ((count = input.read(buffer)) != -1) {
+                            if (destroyed || Thread.currentThread().isInterrupted()) throw new java.io.IOException("Download cancelled");
+                            output.write(buffer, 0, count);
+                        }
                     }
                     handler.post(() -> { if (!destroyed) Toast.makeText(activity, "파일을 저장했습니다.", Toast.LENGTH_LONG).show(); });
                     return;
@@ -1160,6 +1411,7 @@ public final class BrowserController {
     /** Text drafts are scoped to the verified account and document, never passwords/tokens. */
     public void snapshotDraft(Runnable after) {
         if (destroyed) return;
+        if (peerPageStale) { if(after!=null)after.run(); return; }
         if (!UrlPolicy.canTheme(getUrl()) || draftOwner.isEmpty()) { if (after != null) after.run(); return; }
         PageContext context = new PageContext();
         boolean allowTimedNavigation = after != null && approvedNavigationContext != null && approvedNavigationContext.isCurrent();
@@ -1192,7 +1444,7 @@ public final class BrowserController {
         });
     }
     private void offerDraftRestore(String url) {
-        if (destroyed || draftOwner.isEmpty() || !UrlPolicy.canTheme(url) || lastDraftPromptGeneration == documentGeneration
+        if (destroyed || peerPageStale || draftOwner.isEmpty() || !UrlPolicy.canTheme(url) || lastDraftPromptGeneration == documentGeneration
                 || !documentKey(url).equals(documentKey(getUrl()))) return;
         PageContext context = new PageContext();
         String stored = drafts.getString(draftKey(url, context.owner), null);
@@ -1210,7 +1462,7 @@ public final class BrowserController {
                 }).setNegativeButton("건너뛰기", null).show();
         });
     }
-    private String draftKey(String url, String owner) { return "v2:" + owner + ":" + sha256(documentKey(url)); }
+    private String draftKey(String url, String owner) { return (AccountProfiles.DEFAULT.equals(profileName) ? "v2:" : "v3:" + profileName + ":") + owner + ":" + sha256(documentKey(url)); }
     private String readAsset(String file) throws Exception {
         try (InputStream input = activity.getAssets().open(file); ByteArrayOutputStream output = new ByteArrayOutputStream()) {
             byte[] buffer = new byte[8192]; int count;
@@ -1221,16 +1473,22 @@ public final class BrowserController {
     public void onSaveInstanceState(Bundle state) {
         web.saveState(state); snapshotDraft(null);
         state.putString("browser.presentationUrl", getUrl());
+        state.putString("browser.profile", profileName);
         state.putBoolean("browser.filePickerOutstanding", filePickerOutstanding);
+        state.putBoolean("browser.mediaPickerOutstanding", mediaPickerOutstanding);
         state.putBoolean("browser.permissionAwaitingSystem", permissionAwaitingSystem);
         state.putBoolean("browser.savePickerOutstanding", savePickerOutstanding);
     }
     public boolean onRestoreInstanceState(Bundle state) {
         if (state == null) return false;
-        filePickerOutstanding = state.getBoolean("browser.filePickerOutstanding", false);
-        permissionAwaitingSystem = state.getBoolean("browser.permissionAwaitingSystem", false);
-        savePickerOutstanding = state.getBoolean("browser.savePickerOutstanding", false) || state.getString("browser.pendingDownload", null) != null;
-        if (savePickerOutstanding) downloadCancellationNotice = "앱 화면이 다시 생성되어 저장을 취소했습니다. 파일을 다시 선택해 주세요.";
+        if (!profileName.equals(state.getString("browser.profile", AccountProfiles.DEFAULT))) return false;
+        // Callback objects cannot survive Activity recreation. Fresh request
+        // codes keep an old OS result away from this new pane's later picker.
+        boolean interruptedPicker = state.getBoolean("browser.filePickerOutstanding", false)
+                || state.getBoolean("browser.mediaPickerOutstanding", false)
+                || state.getBoolean("browser.savePickerOutstanding", false) || state.getString("browser.pendingDownload", null) != null;
+        filePickerOutstanding = false; mediaPickerOutstanding = false; permissionAwaitingSystem = false; savePickerOutstanding = false;
+        if (interruptedPicker) listener.onError("화면이 다시 생성되어 이전 첨부·저장 선택을 취소했습니다. 다시 선택해 주세요.");
         String restoredUrl = state.getString("browser.presentationUrl", "");
         prepareNavigation(restoredUrl);
         boolean restored = web.restoreState(state) != null;
@@ -1242,7 +1500,7 @@ public final class BrowserController {
             browserPaused = true;
             if (presentation != null) presentation.suspend();
             cancelNavigationGuard();
-            hideFullscreen(); snapshotDraft(null); CookieManager.getInstance().flush(); web.onPause();
+            hideFullscreen(); snapshotDraft(null); cookies.flush(); web.onPause();
             for (WebView popup : new ArrayList<>(popups.keySet())) popup.onPause();
         }
     }
@@ -1272,6 +1530,6 @@ public final class BrowserController {
         popups.clear();
         if (documentScript != null) documentScript.remove();
         web.stopLoading(); container.removeView(web); web.destroy();
-        downloadExecutor.shutdown();
+        downloadExecutor.shutdownNow();
     }
 }

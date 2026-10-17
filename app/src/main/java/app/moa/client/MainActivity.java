@@ -13,6 +13,7 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.text.InputType;
+import android.text.InputFilter;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
@@ -46,6 +47,15 @@ public final class MainActivity extends Activity implements BrowserController.Li
     private boolean matchLauncher;
     private float fontScale;
     private BrowserController browser;
+    private BrowserController detailBrowser;
+    private LinearLayout browserPanes;
+    private boolean detailOpen, activityResumed, primaryResumed = true, detailResumed;
+    private boolean primaryLoading, detailLoading;
+    private CommunityToolsDialog communityDialog;
+    private CommentWatchDialog commentWatchDialog;
+    private long accountSwitchGeneration;
+    private AlertDialog userActionDialog;
+    private String lastAutoWatchedArticle = "";
     private LinearLayout root;
     private FrameLayout content;
     private View browserView;
@@ -89,8 +99,9 @@ public final class MainActivity extends Activity implements BrowserController.Li
         if (!LauncherIdentity.setTheme(this, theme, matchLauncher)) {
             latestError = LauncherIdentity.getLastError();
         }
-        colors = theme.palette(dark);
+        colors = selectedPalette();
         loadFavorites();
+        CommunityStore.migrateLegacySavedArticles(this);
         getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
         if (Build.VERSION.SDK_INT >= 30) {
             getWindow().setDecorFitsSystemWindows(false);
@@ -114,15 +125,28 @@ public final class MainActivity extends Activity implements BrowserController.Li
         content = new FrameLayout(this);
         browser = new BrowserController(this, this);
         browserView = browser.getView();
-        content.addView(browserView, new FrameLayout.LayoutParams(-1, -1));
-        browser.setTheme(theme, dark);
-        browser.setFontScale(fontScale);
+        browserPanes = horizontal();
+        browserPanes.setTag("community-browser-panes");
+        browserPanes.addView(browserView, new LinearLayout.LayoutParams(-1, -1));
+        content.addView(browserPanes, new FrameLayout.LayoutParams(-1, -1));
+        content.addOnLayoutChangeListener((v, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> {
+            if (right - left != oldRight - oldLeft) applyPaneLayout();
+        });
+        applyBrowserThemes();
         setContentView(root);
         buildChrome();
         boolean restored = savedInstanceState != null && browser.onRestoreInstanceState(savedInstanceState);
         if (restored) {
             browser.setOriginalMode(savedInstanceState.getBoolean("ui.originalMode", false));
             pageUrl = browser.getUrl() == null ? "" : browser.getUrl();
+            Bundle detailState = savedInstanceState.getBundle("ui.detailState");
+            if (detailState != null && savedInstanceState.getBoolean("ui.detailOpen", false)) {
+                createDetailBrowser();
+                if (detailBrowser.onRestoreInstanceState(detailState)) {
+                    detailOpen = true;
+                    detailBrowser.setOriginalMode(detailState.getBoolean("ui.originalMode", false));
+                } else discardDetailBrowser();
+            }
             setBrowserVisible(savedInstanceState.getBoolean("ui.browserVisible", false));
         } else {
             setBrowserVisible(false);
@@ -132,6 +156,11 @@ public final class MainActivity extends Activity implements BrowserController.Li
                     android.window.OnBackInvokedDispatcher.PRIORITY_DEFAULT, this::navigateBack);
         }
         browser.refreshAccountFavorites();
+        if (AccountProfiles.activeId(this).equals(preferences.getString("profile.loginPending", ""))) {
+            preferences.edit().remove("profile.loginPending").apply();
+            setBrowserVisible(true);
+            browser.open(LOGIN_URL);
+        }
         handlePushIntent(getIntent());
     }
 
@@ -147,7 +176,7 @@ public final class MainActivity extends Activity implements BrowserController.Li
     }
 
     private void buildChrome() {
-        colors = theme.palette(dark);
+        colors = selectedPalette();
         // Retain the live content subtree in its parent. Detaching it clears
         // WebView focus (and can close the IME) even if the same object is added
         // back immediately afterwards.
@@ -186,12 +215,135 @@ public final class MainActivity extends Activity implements BrowserController.Li
         updateSystemColors();
     }
 
+    private ThemeSpec.Palette selectedPalette() {
+        ThemeSpec.Palette base = theme.palette(dark);
+        return CommunityOptions.accentIndex(this) < 0 ? base : base.withAccent(CommunityOptions.accentColor(this, base.accent));
+    }
+
+    private BrowserController currentBrowser() { return detailOpen && detailBrowser != null ? detailBrowser : browser; }
+
+    private void applyBrowserThemes() {
+        if (browser != null) { browser.setTheme(theme, dark); browser.setFontScale(fontScale); }
+        if (detailBrowser != null) { detailBrowser.setTheme(theme, dark); detailBrowser.setFontScale(fontScale); }
+    }
+
+    private boolean wideSplitEnabled() {
+        int width = content != null && content.getWidth() > 0
+                ? Math.round(content.getWidth() / getResources().getDisplayMetrics().density)
+                : getResources().getConfiguration().screenWidthDp;
+        return CommunityOptions.splitEnabled(this) && width >= 720;
+    }
+
+    private void applyPaneLayout() {
+        if (browserPanes == null || browserView == null) return;
+        boolean split = detailOpen && detailBrowser != null && wideSplitEnabled();
+        boolean primaryVisible = browserVisible && (!detailOpen || split);
+        boolean detailVisible = browserVisible && detailOpen && detailBrowser != null;
+        browserPanes.setVisibility(browserVisible ? View.VISIBLE : View.GONE);
+        browserView.setVisibility(primaryVisible ? View.VISIBLE : View.GONE);
+        LinearLayout.LayoutParams left = (LinearLayout.LayoutParams) browserView.getLayoutParams();
+        int leftWidth = split ? 0 : -1;
+        float leftWeight = split ? .45f : 0f;
+        if (left.width != leftWidth || left.weight != leftWeight) {
+            left.width = leftWidth; left.height = -1; left.weight = leftWeight; browserView.setLayoutParams(left);
+        }
+        if (detailBrowser != null) {
+            View detail = detailBrowser.getView(); detail.setVisibility(detailVisible ? View.VISIBLE : View.GONE);
+            LinearLayout.LayoutParams right = (LinearLayout.LayoutParams) detail.getLayoutParams();
+            int rightWidth = split ? 0 : -1; float rightWeight = split ? .55f : 0f;
+            if (right.width != rightWidth || right.weight != rightWeight) {
+                right.width = rightWidth; right.height = -1; right.weight = rightWeight; detail.setLayoutParams(right);
+            }
+        }
+        boolean resumePrimary = primaryVisible && activityResumed;
+        if (primaryResumed != resumePrimary) {
+            primaryResumed = resumePrimary; if (resumePrimary) browser.onResume(); else browser.onPause();
+        }
+        boolean resumeDetail = detailVisible && activityResumed;
+        if (detailBrowser != null && detailResumed != resumeDetail) {
+            detailResumed = resumeDetail; if (resumeDetail) detailBrowser.onResume(); else detailBrowser.onPause();
+        }
+    }
+
+    private void createDetailBrowser() {
+        if (detailBrowser != null) return;
+        final BrowserController[] owner = new BrowserController[1];
+        BrowserController detail = new BrowserController(this, new BrowserController.Listener() {
+            @Override public void onPageState(String title, String url, boolean busy) {
+                if (owner[0] != null) onPanePageState(owner[0], title, url, busy);
+            }
+            @Override public void onError(String message) {
+                if (owner[0] == detailBrowser) onPaneError(owner[0], message);
+            }
+            @Override public void onUserActions(String nickname, String id, String ip) {
+                if (owner[0] == detailBrowser) MainActivity.this.onUserActions(nickname, id, ip);
+            }
+            @Override public void onOwnArticlePublished(String url) {
+                if (owner[0] == detailBrowser) MainActivity.this.onOwnArticlePublished(url);
+            }
+            @Override public void onAuthenticationChanged() { forwardAuthentication(owner[0], true); }
+            @Override public void onAuthenticationSettled() { forwardAuthentication(owner[0], false); }
+        });
+        owner[0] = detail; detailBrowser = detail; detailResumed = true;
+        detail.getView().setTag("community-detail-pane");
+        browserPanes.addView(detail.getView(), new LinearLayout.LayoutParams(-1, -1));
+        detail.setTheme(theme, dark); detail.setFontScale(fontScale);
+        detail.refreshAccountFavorites();
+    }
+
+    @Override public void onAuthenticationChanged() { forwardAuthentication(browser, true); }
+    @Override public void onAuthenticationSettled() { forwardAuthentication(browser, false); }
+
+    private void forwardAuthentication(BrowserController source, boolean starting) {
+        if (source == null || isDestroyed()) return;
+        BrowserController peer = source == browser ? detailBrowser : source == detailBrowser ? browser : null;
+        if (peer == null || !source.profileName().equals(peer.profileName())) return;
+        if (starting) peer.beginPeerAuthentication(); else peer.finishPeerAuthentication();
+    }
+
+    private void discardDetailBrowser() {
+        BrowserController closing = detailBrowser;
+        detailBrowser = null; detailOpen = false; detailResumed = false; detailLoading = false;
+        if (closing != null) { browserPanes.removeView(closing.getView()); closing.destroy(); }
+        applyPaneLayout();
+        if (browser != null) onPanePageState(browser, browser.getTitle(), browser.getUrl(), primaryLoading);
+    }
+
+    @Override public boolean onOpenArticle(String url) {
+        String target = CommunityStore.canonicalArticleUrl(url);
+        if (!browserVisible || !wideSplitEnabled() || target == null || !isFloatingComposeList(browser.getUrl())) return false;
+        Runnable open = () -> {
+            createDetailBrowser(); detailOpen = true; latestError = null;
+            applyPaneLayout(); detailBrowser.setOriginalMode(false); detailBrowser.open(target);
+        };
+        if (detailOpen && detailBrowser != null) {
+            BrowserController detail = detailBrowser;
+            detail.guardNavigation(() -> detail.snapshotDraft(open), () -> setBrowserVisible(true));
+        } else open.run();
+        return true;
+    }
+
+    private void snapshotAllDrafts(Runnable after) {
+        browser.snapshotDraft(() -> {
+            if (detailBrowser != null) detailBrowser.snapshotDraft(after); else if (after != null) after.run();
+        });
+    }
+
+    private void guardAllPanesAndSnapshot(Runnable action) {
+        browser.guardNavigation(() -> browser.snapshotDraft(() -> {
+            BrowserController detail = detailBrowser;
+            if (detail != null) detail.guardNavigation(() -> detail.snapshotDraft(action), () -> setBrowserVisible(true));
+            else action.run();
+        }), () -> setBrowserVisible(true));
+    }
+
     private View buildHeader() {
         LinearLayout header = horizontal();
         header.setTag("header-" + theme.id);
         header.setPadding(dp(theme == ThemeSpec.MAIL ? 12 : 8), dp(4), dp(theme == ThemeSpec.MAIL ? 12 : 8), dp(4));
         header.setMinimumHeight(dp(theme == ThemeSpec.MAIL ? 64 : 56));
-        header.setBackgroundColor(theme == ThemeSpec.SHEET ? (dark ? 0xFF185C37 : 0xFF107C41) : colors.surface);
+        header.setBackgroundColor(theme == ThemeSpec.SHEET
+                ? (CommunityOptions.accentIndex(this) >= 0 ? colors.accent : dark ? 0xFF185C37 : 0xFF107C41) : colors.surface);
         if (theme == ThemeSpec.MAIL) {
             LinearLayout searchBar = horizontal();
             searchBar.setTag("mail-search-bar");
@@ -225,7 +377,7 @@ public final class MainActivity extends Activity implements BrowserController.Li
         } else {
             TextView title = text(theme == ThemeSpec.PHOTOGRAM ? "Instagram" : theme == ThemeSpec.CAFE ? "Café" : theme.displayName,
                     theme == ThemeSpec.PHOTOGRAM ? 28 : theme == ThemeSpec.SHEET ? 18 : 24,
-                    theme == ThemeSpec.SHEET ? Color.WHITE : colors.text, true);
+                    theme == ThemeSpec.SHEET ? (CommunityOptions.accentIndex(this) >= 0 ? colors.onAccent : Color.WHITE) : colors.text, true);
             title.setTag("header-wordmark");
             if (theme == ThemeSpec.PHOTOGRAM) title.setTypeface(Typeface.create("cursive", Typeface.NORMAL));
             if (theme == ThemeSpec.CAFE) title.setTypeface(Typeface.SERIF, Typeface.BOLD_ITALIC);
@@ -250,7 +402,8 @@ public final class MainActivity extends Activity implements BrowserController.Li
         action.setContentDescription(description);
         action.setFocusable(true);
         action.setOnClickListener(click);
-        UiGlyphView icon = new UiGlyphView(this, glyph, theme == ThemeSpec.SHEET ? Color.WHITE : colors.text);
+        UiGlyphView icon = new UiGlyphView(this, glyph, theme == ThemeSpec.SHEET
+                ? (CommunityOptions.accentIndex(this) >= 0 ? colors.onAccent : Color.WHITE) : colors.text);
         action.addView(icon, new FrameLayout.LayoutParams(dp(24), dp(24), Gravity.CENTER));
         return action;
     }
@@ -332,6 +485,7 @@ public final class MainActivity extends Activity implements BrowserController.Li
         button.setPadding(dp(16), dp(14), dp(16), dp(14));
         int fill = theme == ThemeSpec.MAIL ? (dark ? 0xFF004A77 : 0xFFC2E7FF) : colors.accent;
         int ink = theme == ThemeSpec.MAIL ? (dark ? 0xFFC2E7FF : 0xFF001D35) : colors.onAccent;
+        if (theme == ThemeSpec.MAIL && CommunityOptions.accentIndex(this) >= 0) { fill = colors.tint; ink = colors.accent; }
         button.setBackground(round(fill, theme == ThemeSpec.MAIL ? 16 : 32, Color.TRANSPARENT));
         button.setElevation(dp(4));
         button.addView(new UiGlyphView(this, theme == ThemeSpec.MAIL ? "pencil" : "plus", ink), new LinearLayout.LayoutParams(dp(24), dp(24)));
@@ -386,7 +540,8 @@ public final class MainActivity extends Activity implements BrowserController.Li
         item.setSelected(active);
         if (theme == ThemeSpec.MAIL) {
             FrameLayout capsule = new FrameLayout(this);
-            if (active) capsule.setBackground(round(dark ? 0xFF004A77 : 0xFFD3E3FD, 16, Color.TRANSPARENT));
+            if (active) capsule.setBackground(round(CommunityOptions.accentIndex(this) >= 0 ? colors.tint
+                    : dark ? 0xFF004A77 : 0xFFD3E3FD, 16, Color.TRANSPARENT));
             capsule.addView(new UiGlyphView(this, symbol, tint), new FrameLayout.LayoutParams(dp(23), dp(23), Gravity.CENTER));
             item.addView(capsule, new LinearLayout.LayoutParams(dp(48), dp(28)));
         } else if (!textOnly) {
@@ -519,7 +674,7 @@ public final class MainActivity extends Activity implements BrowserController.Li
         home.addView(settings, new LinearLayout.LayoutParams(-1, -2));
         content.addView(homeView, new FrameLayout.LayoutParams(-1, -1));
         homeView.setVisibility(browserVisible ? View.GONE : View.VISIBLE);
-        browserView.setVisibility(browserVisible ? View.VISIBLE : View.GONE);
+        applyPaneLayout();
         rebuildComposeAction();
     }
 
@@ -784,18 +939,17 @@ public final class MainActivity extends Activity implements BrowserController.Li
     }
 
     private boolean hasOpenPage() {
-        String url = browser == null ? "" : browser.getUrl();
+        String url = browser == null ? "" : currentBrowser().getUrl();
         return url != null && !url.isEmpty() && !"about:blank".equals(url);
     }
 
     private void setBrowserVisible(boolean visible) {
-        boolean wasVisible = browserVisible;
         browserVisible = visible;
-        if (wasVisible != visible) {
-            if (visible) browser.onResume();
-            else browser.onPause();
-        }
-        browserView.setVisibility(visible ? View.VISIBLE : View.GONE);
+        applyPaneLayout();
+        BrowserController active = currentBrowser();
+        pageUrl = active.getUrl() == null ? "" : active.getUrl();
+        pageTitle = active.getTitle();
+        loading = active == detailBrowser ? detailLoading : primaryLoading;
         if (homeView != null) homeView.setVisibility(visible ? View.GONE : View.VISIBLE);
         if (progress != null) progress.setVisibility(loading && visible ? View.VISIBLE : View.INVISIBLE);
         if (errorBanner != null) errorBanner.setVisibility(latestError != null && visible ? View.VISIBLE : View.GONE);
@@ -808,7 +962,8 @@ public final class MainActivity extends Activity implements BrowserController.Li
     }
 
     private void navigate(String url) {
-        guardComposerNavigation(() -> {
+        Runnable open = () -> {
+            discardDetailBrowser();
             latestError = null;
             pendingComposerTarget = "";
             if (errorBanner != null) errorBanner.setVisibility(View.GONE);
@@ -816,11 +971,12 @@ public final class MainActivity extends Activity implements BrowserController.Li
             setBrowserVisible(true);
             hideComposeForNavigation();
             browser.open(url);
-        });
+        };
+        if (detailBrowser != null) guardAllPanesAndSnapshot(open); else guardComposerNavigation(open);
     }
 
     private void guardComposerNavigation(Runnable action) {
-        browser.guardNavigation(action, () -> setBrowserVisible(true));
+        currentBrowser().guardNavigation(action, () -> setBrowserVisible(true));
     }
 
     private void compose() {
@@ -843,13 +999,13 @@ public final class MainActivity extends Activity implements BrowserController.Li
                         String targetUrl = targets.get(position).url;
                         guardComposerNavigation(() -> {
                             pendingComposerTarget = UrlPolicy.galleryId(targetUrl);
-                            browser.setOriginalMode(false);
+                            currentBrowser().setOriginalMode(false);
                             setBrowserVisible(true);
                             hideComposeForNavigation();
-                            browser.open(targetUrl);
+                            currentBrowser().open(targetUrl);
                         });
                     }).setNegativeButton("닫기", null).show();
-        } else { hideComposeForNavigation(); browser.openComposer(); }
+        } else { hideComposeForNavigation(); currentBrowser().openComposer(); }
     }
 
     private void showExplore() {
@@ -965,10 +1121,10 @@ public final class MainActivity extends Activity implements BrowserController.Li
                 return;
             }
             theme = selected;
-            browser.setTheme(theme, dark);
+            applyBrowserThemes();
             buildChrome();
         };
-        if (matchLauncher) browser.snapshotDraft(apply);
+        if (matchLauncher) snapshotAllDrafts(apply);
         else apply.run();
     }
 
@@ -988,7 +1144,7 @@ public final class MainActivity extends Activity implements BrowserController.Li
         darkSwitch.setOnCheckedChangeListener((button, checked) -> {
             dark = checked;
             preferences.edit().putBoolean("dark", dark).apply();
-            browser.setTheme(theme, dark);
+            applyBrowserThemes();
             buildChrome();
             // Dialog controls are independent of the activity chrome; rebuild
             // them as well so the open settings use the newly selected palette.
@@ -1013,6 +1169,7 @@ public final class MainActivity extends Activity implements BrowserController.Li
                 if (fromUser) {
                     preferences.edit().putFloat("fontScale", fontScale).apply();
                     browser.setFontScale(fontScale);
+                    if (detailBrowser != null) detailBrowser.setFontScale(fontScale);
                 }
             }
             @Override public void onStartTrackingTouch(SeekBar bar) { }
@@ -1045,7 +1202,7 @@ public final class MainActivity extends Activity implements BrowserController.Li
                 toast("설정을 저장하지 못했어요. 다시 시도해 주세요.");
             };
             root.postDelayed(launcherTimeout, 5000);
-            browser.snapshotDraft(() -> {
+            snapshotAllDrafts(() -> {
                 if (!launcherChangePending || request != launcherChangeGeneration || isDestroyed()) return;
                 boolean stored = preferences.edit().putBoolean("matchLauncher", checked).commit();
                 if (stored && LauncherIdentity.setTheme(this, theme, checked)) {
@@ -1067,10 +1224,214 @@ public final class MainActivity extends Activity implements BrowserController.Li
         TextView pushChoice = settingsRow("푸시 알림", PushClient.isEnabled(this) ? "켜짐   ›" : "꺼짐   ›");
         pushChoice.setOnClickListener(v -> { dialog.dismiss(); showPushSettings(); });
         panel.addView(pushChoice);
+        panel.addView(line(), new LinearLayout.LayoutParams(-1, dp(1)));
+        TextView communityChoice = settingsRow("커뮤니티 도구", "차단 · 메모 · 보관함 · 작성   ›");
+        communityChoice.setTag("community-tools-setting");
+        communityChoice.setOnClickListener(v -> { dialog.dismiss(); showCommunityTools(); });
+        panel.addView(communityChoice);
+        TextView accountChoice = settingsRow("간편 계정", AccountProfiles.activeLabel(this) + "   ›");
+        accountChoice.setTag("account-profiles-setting");
+        accountChoice.setOnClickListener(v -> { dialog.dismiss(); showAccountProfiles(); });
+        panel.addView(accountChoice);
         showAdaptiveDialog(dialog, () -> { dialog.dismiss(); showSettings(); }, () -> {
             // Keyboard and accessibility adjustments do not end a touch
             // gesture. Refresh the native chrome on every dismissal route.
             if (Float.compare(displayedFontScale, fontScale) != 0) buildChrome();
+        });
+    }
+
+    private void showCommunityTools() {
+        if (communityDialog != null) communityDialog.dismiss();
+        communityDialog = new CommunityToolsDialog(this, new CommunityToolsDialog.Host() {
+            @Override public ThemeSpec.Palette palette() { return colors; }
+            @Override public boolean isDark() { return dark; }
+            @Override public String currentUrl() { return currentBrowser().getUrl(); }
+            @Override public String currentTitle() { return currentBrowser().getTitle(); }
+            @Override public void openUrl(String url) { navigate(url); }
+            @Override public void onOptionsChanged() {
+                browser.refreshCommunityOptions();
+                if (detailBrowser != null) detailBrowser.refreshCommunityOptions();
+                buildChrome(); applyPaneLayout();
+            }
+            @Override public void onAction(String action) {
+                switch (action) {
+                    case "accounts": showAccountProfiles(); break;
+                    case "push": showCommentWatches(); break;
+                    case "split": applyPaneLayout(); break;
+                    case "media_editor":
+                        startActivity(MediaToolsActivity.createIntent(MainActivity.this, new ArrayList<>(), true)
+                                .putExtra(MediaToolsActivity.EXTRA_STANDALONE, true));
+                        break;
+                    case "voice":
+                        dialogBuilder().setTitle("원본 보이스 기능")
+                                .setMessage("원본 모바일 웹의 보이스 버튼은 디시 공식앱으로 연결됩니다. 이 앱에서 호환되지 않는 보이스를 임의로 등록하지 않으며 원본 안내를 열 수 있어요.")
+                                .setNegativeButton("닫기", null).setPositiveButton("원본 안내 열기", (d, w) -> {
+                                    openOriginalCommunityTool("voice");
+                                }).show();
+                        break;
+                    case "autopicture": case "source_affixes":
+                        openOriginalCommunityTool(action); break;
+                    default: toast("이 기능은 현재 화면에서 사용할 수 없어요.");
+                }
+            }
+        });
+        communityDialog.show();
+    }
+
+    private void openOriginalCommunityTool(String kind) {
+        BrowserController current = currentBrowser();
+        if (!UrlPolicy.canTheme(current.getUrl())) {
+            toast("먼저 게시판이나 글을 열어주세요.");
+            return;
+        }
+        setBrowserVisible(true);
+        current.openCommunitySourceTool(kind);
+    }
+
+    private void showCommentWatches() {
+        if (commentWatchDialog != null) commentWatchDialog.dismiss();
+        commentWatchDialog = new CommentWatchDialog(this, new CommentWatchDialog.Host() {
+            @Override public ThemeSpec.Palette palette() { return colors; }
+            @Override public boolean isDark() { return dark; }
+            @Override public String currentUrl() { return currentBrowser().getUrl(); }
+            @Override public void openPushSettings() { showPushSettings(); }
+        });
+        commentWatchDialog.show();
+    }
+
+    @Override public void onUserActions(String nickname, String id, String ip) {
+        if (isFinishing() || isDestroyed() || userActionDialog != null && userActionDialog.isShowing()) return;
+        String cleanId = identityActionValue(id), cleanIp = identityActionValue(ip), cleanNickname = identityActionValue(nickname);
+        String kind = !cleanId.isEmpty() ? "id" : !cleanIp.isEmpty() ? "ip" : "nickname";
+        String value = !cleanId.isEmpty() ? cleanId : !cleanIp.isEmpty() ? cleanIp : cleanNickname;
+        if (value.isEmpty()) { toast("이용자 정보를 확인할 수 없어요."); return; }
+        String label = "id".equals(kind) ? "아이디" : "ip".equals(kind) ? "IP" : "닉네임";
+        AlertDialog dialog = dialogBuilder().setTitle(cleanNickname.isEmpty() ? "이용자 도구" : cleanNickname)
+                .setItems(new String[] {"나만 보는 메모", label + "로 차단"}, (d, which) -> {
+                    if (which == 0) editUserNote(kind, value, label);
+                    else if (CommunityStore.addRule(this, kind, value)) {
+                        refreshCommunityOptions(); toast(label + "가 일치하는 글·댓글을 이 기기에서 숨겨요.");
+                    } else toast("차단을 저장하지 못했어요. 최대 200개까지 저장할 수 있어요.");
+                }).setNegativeButton("닫기", null).create();
+        userActionDialog = dialog;
+        dialog.setOnDismissListener(ignored -> { if (userActionDialog == dialog) userActionDialog = null; });
+        dialog.show(); tintDialogActions(dialog);
+    }
+
+    private void editUserNote(String kind, String value, String label) {
+        EditText memo = input("나만 보는 메모 · 최대 200자");
+        memo.setTag("user-note-text"); memo.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_MULTI_LINE);
+        memo.setFilters(new InputFilter[] {new InputFilter.LengthFilter(CommunityStore.MAX_NOTE_LENGTH)});
+        memo.setImeOptions(android.view.inputmethod.EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING);
+        for (CommunityStore.UserNote note : CommunityStore.notes(this)) {
+            if (kind.equals(note.kind) && value.equals(note.value)) { memo.setText(note.text); break; }
+        }
+        LinearLayout panel = vertical(); panel.setPadding(dp(24), dp(8), dp(24), dp(12));
+        panel.addView(text(label + " · " + value + "\n빈칸으로 저장하면 메모를 삭제해요.", 13, colors.mutedText, false));
+        panel.addView(memo);
+        AlertDialog dialog = dialogBuilder().setTitle("이용자 메모").setView(panel)
+                .setNegativeButton("취소", null).setPositiveButton("저장", null).create();
+        userActionDialog = dialog;
+        dialog.setOnDismissListener(ignored -> { if (userActionDialog == dialog) userActionDialog = null; });
+        dialog.show(); tintDialogActions(dialog);
+        dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
+            String entered = memo.getText().toString().trim();
+            boolean accepted = entered.isEmpty() || CommunityStore.putNote(this, kind, value, entered);
+            if (!accepted) { memo.setError("메모를 저장하지 못했어요. 총 200개까지 저장할 수 있어요."); return; }
+            if (entered.isEmpty()) CommunityStore.removeNote(this, kind, value);
+            dialog.dismiss(); refreshCommunityOptions();
+        });
+    }
+
+    private static String identityActionValue(String input) {
+        if (input == null || input.length() > CommunityStore.MAX_VALUE_LENGTH) return "";
+        String value = input.trim();
+        for (int i = 0; i < value.length(); i++) if (Character.isISOControl(value.charAt(i))) return "";
+        return value;
+    }
+
+    private void refreshCommunityOptions() {
+        browser.refreshCommunityOptions();
+        if (detailBrowser != null) detailBrowser.refreshCommunityOptions();
+    }
+
+    @Override public void onOwnArticlePublished(String url) {
+        String target = CommunityStore.canonicalArticleUrl(url);
+        if (target == null || target.equals(lastAutoWatchedArticle) || !CommunityOptions.autoWatchOwnPosts(this)) return;
+        lastAutoWatchedArticle = target;
+        if (!PushRelayClient.isPaired(this)) { toast("새 글 댓글 알림을 사용하려면 먼저 기기를 푸시 서버에 연결해주세요."); return; }
+        PushRelayClient.watch(this, target, new PushRelayClient.Callback() {
+            @Override public void onSuccess(String message) { if (!isFinishing() && !isDestroyed()) toast(message); }
+            @Override public void onError(String message) { if (!isFinishing() && !isDestroyed()) toast(message); }
+        });
+    }
+
+    private void showAccountProfiles() {
+        ScrollView scroll = new ScrollView(this);
+        LinearLayout panel = vertical(); panel.setTag("account-profiles"); panel.setPadding(dp(23), dp(10), dp(23), dp(18));
+        scroll.addView(panel);
+        boolean supported = AccountProfiles.supported();
+        TextView explanation = text(supported
+                ? "계정마다 WebView 로그인 공간을 따로 사용해요. 비밀번호를 앱에 저장하지 않으며 각 공간에서 직접 로그인합니다. 최대 5개까지 사용할 수 있어요."
+                : "이 기기의 Android System WebView는 별도 계정 공간을 지원하지 않아요. 현재 계정은 계속 사용할 수 있습니다. WebView를 업데이트한 뒤 다시 확인해주세요.", 13, colors.text, false);
+        explanation.setLineSpacing(dp(3), 1f); panel.addView(explanation);
+        AlertDialog dialog = dialogBuilder().setTitle("간편 계정").setView(scroll).setPositiveButton("닫기", null).create();
+        String active = AccountProfiles.activeId(this);
+        List<AccountProfiles.Entry> entries = AccountProfiles.entries(this);
+        for (AccountProfiles.Entry entry : entries) {
+            LinearLayout row = horizontal(); row.setPadding(0, dp(8), 0, dp(8));
+            TextView select = settingsRow(entry.label, active.equals(entry.id) ? "현재 계정" : "전환");
+            select.setTag("account-switch-" + entry.id);
+            select.setEnabled(supported || AccountProfiles.DEFAULT.equals(entry.id));
+            select.setOnClickListener(v -> { dialog.dismiss(); switchAccountProfile(entry.id, false); });
+            row.addView(select, new LinearLayout.LayoutParams(0, -2, 1));
+            TextView rename = plainAction("이름", "계정 이름 바꾸기", v -> { dialog.dismiss(); editAccountLabel(entry); });
+            rename.setTag("account-rename-" + entry.id);
+            row.addView(rename, new LinearLayout.LayoutParams(dp(56), dp(48)));
+            panel.addView(row, new LinearLayout.LayoutParams(-1, -2));
+        }
+        TextView add = settingsRow("새 계정 공간 추가", "+");
+        add.setTag("account-add"); add.setEnabled(supported && entries.size() < AccountProfiles.MAX_PROFILES);
+        add.setAlpha(add.isEnabled() ? 1f : .5f);
+        add.setOnClickListener(v -> { dialog.dismiss(); editAccountLabel(null); }); panel.addView(add);
+        if (entries.size() >= AccountProfiles.MAX_PROFILES) panel.addView(text("계정 공간 5개를 모두 사용하고 있어요.", 12, colors.mutedText, false));
+        TextView login = settingsRow("현재 계정에서 로그인", "›");
+        login.setOnClickListener(v -> { dialog.dismiss(); openLogin(); }); panel.addView(login);
+        showAdaptiveDialog(dialog, () -> { dialog.dismiss(); showAccountProfiles(); });
+    }
+
+    private void editAccountLabel(AccountProfiles.Entry entry) {
+        EditText name = input("계정 공간 이름");
+        name.setTag("account-label"); name.setSingleLine(true);
+        name.setFilters(new InputFilter[] {new InputFilter.LengthFilter(40)});
+        name.setImeOptions(android.view.inputmethod.EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING);
+        if (entry != null) name.setText(entry.label);
+        LinearLayout panel = vertical(); panel.setPadding(dp(24), dp(10), dp(24), dp(12)); panel.addView(name);
+        AlertDialog dialog = dialogBuilder().setTitle(entry == null ? "새 계정 공간" : "계정 이름 바꾸기").setView(panel)
+                .setNegativeButton("취소", null).setPositiveButton(entry == null ? "추가하고 로그인" : "저장", null).create();
+        dialog.show(); tintDialogActions(dialog);
+        dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
+            String label = name.getText().toString().trim();
+            if (label.isEmpty()) { name.setError("이름을 입력해주세요."); return; }
+            if (entry == null) {
+                AccountProfiles.Entry added = AccountProfiles.add(this, label);
+                if (added == null) { name.setError("새 계정 공간을 추가하지 못했어요. WebView 지원 여부와 개수를 확인해주세요."); return; }
+                dialog.dismiss(); switchAccountProfile(added.id, true);
+            } else {
+                if (!AccountProfiles.rename(this, entry.id, label)) { name.setError("이름을 저장하지 못했어요."); return; }
+                dialog.dismiss(); showAccountProfiles();
+            }
+        });
+    }
+
+    private void switchAccountProfile(String profile, boolean loginAfterSwitch) {
+        if (profile.equals(AccountProfiles.activeId(this))) { if (loginAfterSwitch) openLogin(); return; }
+        final long request = ++accountSwitchGeneration;
+        guardAllPanesAndSnapshot(() -> {
+            if (request != accountSwitchGeneration || isFinishing() || isDestroyed()) return;
+            if (!AccountProfiles.activate(this, profile)) { toast("계정을 전환하지 못했어요."); return; }
+            if (loginAfterSwitch) preferences.edit().putString("profile.loginPending", profile).commit();
+            recreate();
         });
     }
 
@@ -1086,7 +1447,7 @@ public final class MainActivity extends Activity implements BrowserController.Li
                 : !PushNotifications.canNotify(this) ? "휴대폰에서 알림이 차단되어 있어요"
                 : paired ? "푸시 연결 완료" : "기기 연결 대기";
         panel.addView(text(state, 17, colors.text, true));
-        TextView description = text("현재는 푸시 연결 테스트를 위한 미리보기입니다. 디시 댓글을 자동으로 확인하는 기능은 아직 연결되지 않았어요.", 13, colors.mutedText, false);
+        TextView description = text("이 화면에서 기기를 연결하고 테스트 알림을 확인할 수 있어요. 댓글 알림은 ‘댓글 알림 관리’에서 공개 글 주소를 직접 등록해 사용합니다. 서버가 약 5분 간격으로 댓글 수를 확인하므로 즉시 알림은 아니며 사이트 상태에 따라 늦어질 수 있어요.", 13, colors.mutedText, false);
         description.setPadding(0, dp(12), 0, dp(12));
         description.setLineSpacing(dp(3), 1f);
         panel.addView(description);
@@ -1261,9 +1622,9 @@ public final class MainActivity extends Activity implements BrowserController.Li
     private void showMenu(View anchor) {
         PopupMenu menu = new PopupMenu(this, anchor);
         if (browserVisible) {
-            menu.getMenu().add(0, 1, 0, "뒤로 가기").setEnabled(browser.canGoBack());
+            menu.getMenu().add(0, 1, 0, "뒤로 가기").setEnabled(detailOpen || currentBrowser().canGoBack());
             menu.getMenu().add(0, 2, 1, "새로고침");
-            menu.getMenu().add(0, 3, 2, browser.isOriginalMode() ? "테마 화면 보기" : "원본 화면 보기");
+            menu.getMenu().add(0, 3, 2, currentBrowser().isOriginalMode() ? "테마 화면 보기" : "원본 화면 보기");
             menu.getMenu().add(0, 4, 3, "현재 페이지 저장");
             menu.getMenu().add(0, 5, 4, "페이지 주소 공유");
         }
@@ -1272,14 +1633,17 @@ public final class MainActivity extends Activity implements BrowserController.Li
         menu.getMenu().add(0, 8, 7, "환경 설정");
         menu.getMenu().add(0, 9, 8, "앱 정보 · 개인정보");
         menu.getMenu().add(0, 10, 9, "글쓰기");
+        menu.getMenu().add(0, 11, 10, "커뮤니티 도구");
+        menu.getMenu().add(0, 12, 11, "간편 계정");
+        menu.getMenu().add(0, 13, 12, "댓글 알림 관리");
         menu.setOnMenuItemClickListener(item -> {
             switch (item.getItemId()) {
                 case 1: navigateBack(); break;
-                case 2: guardComposerNavigation(() -> browser.reload()); break;
-                case 3: browser.setOriginalMode(!browser.isOriginalMode()); updateHeader(); break;
+                case 2: guardComposerNavigation(() -> currentBrowser().reload()); break;
+                case 3: currentBrowser().setOriginalMode(!currentBrowser().isOriginalMode()); updateHeader(); break;
                 case 4: saveCurrent(); break;
                 case 5:
-                    String url = browser.getUrl();
+                    String url = currentBrowser().getUrl();
                     if (url != null && url.startsWith("https://")) {
                         Intent share = new Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, url);
                         startActivity(Intent.createChooser(share, "페이지 주소 공유"));
@@ -1290,6 +1654,9 @@ public final class MainActivity extends Activity implements BrowserController.Li
                 case 8: showSettings(); break;
                 case 9: showAbout(); break;
                 case 10: compose(); break;
+                case 11: showCommunityTools(); break;
+                case 12: showAccountProfiles(); break;
+                case 13: showCommentWatches(); break;
                 default: return false;
             }
             return true;
@@ -1325,15 +1692,18 @@ public final class MainActivity extends Activity implements BrowserController.Li
         panel.addView(line(), new LinearLayout.LayoutParams(-1, dp(1)));
         if (browserVisible) {
             addDrawerAction(panel, dialog, "back", "뒤로 가기", this::navigateBack);
-            addDrawerAction(panel, dialog, "refresh", "새로고침", () -> guardComposerNavigation(() -> browser.reload()));
-            addDrawerAction(panel, dialog, "page", browser.isOriginalMode() ? "테마 화면 보기" : "원본 화면 보기", () -> {
-                browser.setOriginalMode(!browser.isOriginalMode()); updateHeader();
+            addDrawerAction(panel, dialog, "refresh", "새로고침", () -> guardComposerNavigation(() -> currentBrowser().reload()));
+            addDrawerAction(panel, dialog, "page", currentBrowser().isOriginalMode() ? "테마 화면 보기" : "원본 화면 보기", () -> {
+                currentBrowser().setOriginalMode(!currentBrowser().isOriginalMode()); updateHeader();
             });
             addDrawerAction(panel, dialog, "bookmark", "현재 페이지 저장", this::saveCurrent);
             addDrawerAction(panel, dialog, "share", "페이지 주소 공유", this::shareCurrent);
         }
         addDrawerAction(panel, dialog, "grid", "화면 스타일", this::showThemes);
         addDrawerAction(panel, dialog, "settings", "환경 설정", this::showSettings);
+        addDrawerAction(panel, dialog, "settings", "커뮤니티 도구", this::showCommunityTools);
+        addDrawerAction(panel, dialog, "account", "간편 계정", this::showAccountProfiles);
+        addDrawerAction(panel, dialog, "inbox", "댓글 알림 관리", this::showCommentWatches);
         addDrawerAction(panel, dialog, "account", "로그인", this::openLogin);
         addDrawerAction(panel, dialog, "page", "앱 정보 · 개인정보", this::showAbout);
         showAdaptiveDialog(dialog, () -> { dialog.dismiss(); showMailDrawer(); });
@@ -1359,7 +1729,7 @@ public final class MainActivity extends Activity implements BrowserController.Li
     }
 
     private void shareCurrent() {
-        String url = browser.getUrl();
+        String url = currentBrowser().getUrl();
         if (url != null && url.startsWith("https://")) {
             Intent share = new Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, url);
             startActivity(Intent.createChooser(share, "페이지 주소 공유"));
@@ -1367,8 +1737,13 @@ public final class MainActivity extends Activity implements BrowserController.Li
     }
 
     private void saveCurrent() {
-        String url = browser.getUrl();
+        String url = currentBrowser().getUrl();
         if (url == null || url.isEmpty()) return;
+        if (CommunityStore.canonicalArticleUrl(url) != null) {
+            CommunityStore.saveArticle(this, url, currentBrowser().getTitle());
+            toast("글 보관함에 저장했어요");
+            return;
+        }
         for (Favorite favorite : favorites) {
             if (favorite.url.equals(url)) { toast("이미 저장되어 있어요"); return; }
         }
@@ -1419,9 +1794,9 @@ public final class MainActivity extends Activity implements BrowserController.Li
                 + "알려진 광고 영역과 게시판 아래의 외부 추천·검색 영역은 화면에서 숨깁니다. 원본 보기에서도 같은 정리가 적용됩니다. 광고의 네트워크 요청이나 추적을 모두 차단하는 기능은 아닙니다.\n\n"
                 + "글·댓글·추천 등은 원본 서비스의 기능입니다. 테마는 화면 표현을 바꾸며 공개 범위와 이용 권한은 바꾸지 않습니다. 지원이 어려운 페이지는 원본 보기로 이용할 수 있습니다.\n\n"
                 + "개인정보와 기기 저장\n"
-                + "선택한 테마, 글자 크기, 직접 저장한 페이지는 이 기기에 저장됩니다. 작성 중인 텍스트 초안도 복원을 위해 기기에 임시 저장될 수 있습니다. 비밀번호와 첨부파일은 초안에 저장하지 않습니다. 로그인 쿠키와 웹 저장소는 Android WebView에 저장되고 로그인 정보·작성 내용은 해당 서비스로 전달됩니다. 앱은 별도의 계정 서버나 자체 분석 도구를 사용하지 않습니다.\n\n"
+                + "선택한 테마, 글자 크기, 직접 저장한 페이지, 차단 규칙, 이용자 메모, 글 보관함, 최근 본 글과 작성 문구는 이 기기에 저장됩니다. 최근 기록은 도구에서 끄거나 삭제할 수 있습니다. 작성 중인 텍스트 초안도 복원을 위해 기기에 임시 저장될 수 있습니다. 비밀번호와 첨부파일은 초안에 저장하지 않습니다. 간편 계정은 지원되는 WebView의 별도 로그인 공간을 사용하며 앱에는 공간 이름만 저장합니다. 로그인 쿠키와 웹 저장소는 Android WebView에 저장되고 로그인 정보·작성 내용은 해당 서비스로 전달됩니다. 앱은 별도의 계정 서버나 자체 분석 도구를 사용하지 않습니다.\n\n"
                 + "계정 즐겨찾기는 로그인한 서비스에서 불러옵니다. 이 목록을 별도 파일로 저장하지 않으며, 로그아웃 상태가 확인되거나 새로 불러오기에 실패하면 홈의 계정 목록을 비웁니다. 직접 저장한 페이지는 계정 즐겨찾기와 분리하여 이 기기에 보관합니다.\n\n"
-                + "푸시 알림은 선택 기능입니다. 켜면 Google FCM에 기기별 식별자가 등록되고, 연결 코드를 사용하면 Cloudflare 발송 서버에 푸시 토큰과 임의의 기기 연결 정보가 저장됩니다. 디시 로그인 비밀번호·쿠키·게시글 내용은 이 서버에 보내지 않습니다. 알림을 끄면 기기에서 표시를 중단하고 토큰 폐기·서버 연결 삭제를 요청합니다. 통신 실패 시 서버 삭제는 다음 연결 때 재시도합니다. 현재 댓글 자동 감지는 연결되지 않았습니다.\n\n"
+                + "푸시 알림은 선택 기능입니다. 켜면 Google FCM에 기기별 식별자가 등록되고, 연결 코드를 사용하면 Cloudflare 발송 서버에 푸시 토큰과 임의의 기기 연결 정보가 저장됩니다. 댓글 알림을 개별 등록하면 선택한 공개 글 주소와 댓글 수가 서버에 저장되며 약 5분 간격으로 확인합니다. 디시 로그인 비밀번호·쿠키와 비공개 글은 서버에 전달하지 않습니다. 공개 글을 서버가 조회하므로 해당 사이트에 서버의 접근 기록이 남을 수 있습니다. 즉시 알림은 아니며 네트워크·사이트 제한에 따라 지연되거나 중단될 수 있습니다. 알림을 끄면 기기에서 표시를 중단하고 토큰 폐기·서버 연결 삭제를 요청합니다. 통신 실패 시 서버 삭제는 다음 연결 때 재시도합니다.\n\n"
                 + "사진을 첨부할 때 Android 파일 선택창에서 직접 고릅니다. 원본 페이지가 외부 서비스를 포함하면 해당 서비스의 개인정보 처리방침이 적용됩니다.\n\n"
                 + "테마를 바꿔도 열린 페이지는 다시 불러오지 않습니다. 앱 강제 종료·기기 재시작 뒤 작성 중 내용 복구는 보장되지 않으니 긴 글은 등록 전 별도로 보관해 주세요.\n\n"
                 + "콘텐츠 출처: dcinside.com\n화면 스타일 참고: Gmail · X · Instagram · Excel · 네이버 카페\n각 서비스의 공식 앱이 아닌 모아 테마 뷰어입니다.";
@@ -1462,7 +1837,14 @@ public final class MainActivity extends Activity implements BrowserController.Li
     }
 
     @Override public void onPageState(String title, String url, boolean isLoading) {
+        onPanePageState(browser, title, url, isLoading);
+    }
+
+    private void onPanePageState(BrowserController source, String title, String url, boolean isLoading) {
         runOnUiThread(() -> {
+            if (isDestroyed() || source == null || (source != browser && source != detailBrowser)) return;
+            if (source == browser) primaryLoading = isLoading; else detailLoading = isLoading;
+            if (source != currentBrowser()) return;
             pageTitle = title == null ? "" : title;
             pageUrl = url == null ? "" : url;
             loading = isLoading;
@@ -1476,13 +1858,18 @@ public final class MainActivity extends Activity implements BrowserController.Li
             if (!isLoading && !pendingComposerTarget.isEmpty()
                     && pendingComposerTarget.equals(UrlPolicy.galleryId(pageUrl))) {
                 pendingComposerTarget = "";
-                browser.openComposer();
+                source.openComposer();
             }
         });
     }
 
     @Override public void onError(String message) {
+        onPaneError(browser, message);
+    }
+
+    private void onPaneError(BrowserController source, String message) {
         runOnUiThread(() -> {
+            if (source != null && source != currentBrowser()) return;
             latestError = message;
             pendingComposerTarget = "";
             loading = false;
@@ -1522,11 +1909,11 @@ public final class MainActivity extends Activity implements BrowserController.Li
         setTitle(theme.displayName);
     }
     private void openLogin() {
-        guardComposerNavigation(() -> {
+        guardAllPanesAndSnapshot(() -> {
             pendingComposerTarget = "";
             setBrowserVisible(true);
             hideComposeForNavigation();
-            browser.open(LOGIN_URL);
+            currentBrowser().open(LOGIN_URL);
         });
     }
 
@@ -1535,7 +1922,7 @@ public final class MainActivity extends Activity implements BrowserController.Li
             pendingComposerTarget = "";
             setBrowserVisible(true);
             hideComposeForNavigation();
-            browser.openAccountFavorites();
+            currentBrowser().openAccountFavorites();
         });
     }
 
@@ -1555,15 +1942,22 @@ public final class MainActivity extends Activity implements BrowserController.Li
 
     private void navigateBack() {
         if (browserVisible) {
-            if (browser.canGoBack()) guardComposerNavigation(() -> browser.goBack());
+            if (detailOpen && detailBrowser != null) {
+                BrowserController detail = detailBrowser;
+                detail.guardNavigation(() -> detail.snapshotDraft(this::discardDetailBrowser), () -> setBrowserVisible(true));
+            } else if (browser.canGoBack()) guardComposerNavigation(() -> browser.goBack());
             else showHome();
-        } else finish();
+        } else if (hasOpenPage()) guardAllPanesAndSnapshot(this::finish);
+        else finish();
     }
 
     @Override public void onBackPressed() { navigateBack(); }
 
     @Override protected void onActivityResult(int requestCode, int resultCode, Intent data) {
-        if (!browser.onActivityResult(requestCode, resultCode, data)) super.onActivityResult(requestCode, resultCode, data);
+        if (detailBrowser != null && detailBrowser.ownsActivityResult(requestCode)
+                && detailBrowser.onActivityResult(requestCode, resultCode, data)) return;
+        if (browser.ownsActivityResult(requestCode) && browser.onActivityResult(requestCode, resultCode, data)) return;
+        super.onActivityResult(requestCode, resultCode, data);
     }
 
     @Override public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
@@ -1575,23 +1969,41 @@ public final class MainActivity extends Activity implements BrowserController.Li
             }
             return;
         }
-        if (!browser.onRequestPermissionsResult(requestCode, permissions, grantResults)) {
-            super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-        }
+        if (detailBrowser != null && detailBrowser.ownsPermissionRequest(requestCode)
+                && detailBrowser.onRequestPermissionsResult(requestCode, permissions, grantResults)) return;
+        if (browser.ownsPermissionRequest(requestCode)
+                && browser.onRequestPermissionsResult(requestCode, permissions, grantResults)) return;
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
     }
 
     @Override public void onSaveInstanceState(Bundle state) {
         state.putBoolean("ui.browserVisible", browserVisible);
         state.putBoolean("ui.originalMode", browser.isOriginalMode());
         browser.onSaveInstanceState(state);
+        state.putBoolean("ui.detailOpen", detailOpen && detailBrowser != null);
+        if (detailOpen && detailBrowser != null) {
+            Bundle detailState = new Bundle();
+            detailState.putBoolean("ui.originalMode", detailBrowser.isOriginalMode());
+            detailBrowser.onSaveInstanceState(detailState);
+            state.putBundle("ui.detailState", detailState);
+        }
         super.onSaveInstanceState(state);
     }
 
-    @Override protected void onPause() { if (browser != null) browser.onPause(); super.onPause(); }
-    @Override protected void onResume() { super.onResume(); if (browser != null && browserVisible) browser.onResume(); }
+    @Override protected void onPause() {
+        activityResumed = false;
+        if (browser != null) browser.onPause(); primaryResumed = false;
+        if (detailBrowser != null) detailBrowser.onPause(); detailResumed = false;
+        super.onPause();
+    }
+    @Override protected void onResume() { super.onResume(); activityResumed = true; applyPaneLayout(); }
     @Override protected void onDestroy() {
         pushUiGeneration++;
         if (pushDialog != null) { pushDialog.dismiss(); pushDialog = null; }
+        accountSwitchGeneration++;
+        if (communityDialog != null) { communityDialog.dismiss(); communityDialog = null; }
+        if (commentWatchDialog != null) { commentWatchDialog.dismiss(); commentWatchDialog = null; }
+        if (userActionDialog != null) { userActionDialog.dismiss(); userActionDialog = null; }
         launcherChangeGeneration++;
         launcherChangePending = false;
         if (launcherTimeout != null && root != null) root.removeCallbacks(launcherTimeout);
@@ -1603,6 +2015,7 @@ public final class MainActivity extends Activity implements BrowserController.Li
             rebuildDialog = null;
         }
         if (browser != null) browser.destroy();
+        if (detailBrowser != null) detailBrowser.destroy();
         super.onDestroy();
     }
 
@@ -1615,6 +2028,9 @@ public final class MainActivity extends Activity implements BrowserController.Li
         int scrollY = homeView == null ? 0 : homeView.getScrollY();
         Runnable restoreDialog = adaptiveDialog != null && adaptiveDialog.isShowing() ? rebuildDialog : null;
         buildChrome();
+        applyPaneLayout();
+        if (communityDialog != null) communityDialog.resize();
+        if (commentWatchDialog != null) commentWatchDialog.resize();
         root.requestApplyInsets();
         if (homeView != null) homeView.post(() -> homeView.scrollTo(0, scrollY));
         if (restoreDialog != null) restoreDialog.run();
