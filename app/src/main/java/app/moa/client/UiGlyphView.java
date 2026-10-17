@@ -27,6 +27,25 @@ final class UiGlyphView extends View {
         canvas.scale(getWidth() / 24f, getHeight() / 24f);
         Path path = new Path();
         switch (kind) {
+            case "x-mark":
+                paint.setStyle(Paint.Style.FILL);
+                path.moveTo(3, 2); path.lineTo(8, 2); path.lineTo(14, 10);
+                path.lineTo(21, 2); path.lineTo(23, 2); path.lineTo(15, 12);
+                path.lineTo(23, 22); path.lineTo(17, 22); path.lineTo(11, 14);
+                path.lineTo(4, 22); path.lineTo(2, 22); path.lineTo(10, 12); path.close();
+                canvas.drawPath(path, paint);
+                paint.setStyle(Paint.Style.STROKE);
+                break;
+            case "plus":
+                canvas.drawLine(5, 12, 19, 12, paint);
+                canvas.drawLine(12, 5, 12, 19, paint);
+                break;
+            case "pencil":
+                path.moveTo(4, 16); path.lineTo(4, 21); path.lineTo(9, 20);
+                path.lineTo(21, 8); path.lineTo(16, 3); path.close();
+                canvas.drawPath(path, paint);
+                canvas.drawLine(13, 6, 18, 11, paint);
+                break;
             case "back":
                 path.moveTo(11, 4); path.lineTo(3, 12); path.lineTo(11, 20);
                 canvas.drawPath(path, paint); canvas.drawLine(3, 12, 21, 12, paint);
@@ -89,6 +108,17 @@ final class UiGlyphView extends View {
                 path.cubicTo(5, 19, 8, 18, 12, 21); path.cubicTo(16, 18, 19, 19, 22, 20);
                 path.lineTo(22, 4); path.cubicTo(19, 3, 16, 2, 12, 5); path.close();
                 canvas.drawPath(path, paint); canvas.drawLine(12, 5, 12, 21, paint);
+                break;
+            case "home-filled":
+                path.setFillType(Path.FillType.EVEN_ODD);
+                path.moveTo(2, 10); path.lineTo(12, 2); path.lineTo(22, 10);
+                path.lineTo(20, 12); path.lineTo(20, 22); path.lineTo(4, 22);
+                path.lineTo(4, 12); path.close();
+                path.moveTo(10, 15); path.lineTo(14, 15); path.lineTo(14, 22);
+                path.lineTo(10, 22); path.close();
+                paint.setStyle(Paint.Style.FILL);
+                canvas.drawPath(path, paint);
+                paint.setStyle(Paint.Style.STROKE);
                 break;
             case "home":
                 path.moveTo(3, 10); path.lineTo(12, 3); path.lineTo(21, 10);

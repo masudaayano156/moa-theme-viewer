@@ -7,15 +7,15 @@
 (function () {
   'use strict';
   if (window.top !== window) return;
-  if (window.MoaSkin && window.MoaSkin.version === '3.0.2') return;
+  if (window.MoaSkin && window.MoaSkin.version === '3.0.5') return;
   if (window.MoaSkin && typeof window.MoaSkin.disable === 'function') window.MoaSkin.disable();
 
   var themes = {
-    mail: { noun: '주제함', name: '메일함' },
-    post: { noun: '채널', name: '포스트' },
-    photogram: { noun: '주제 피드', name: '포토그램' },
-    sheet: { noun: '시트', name: '스프레드 시트' },
-    cafe: { noun: '게시판', name: '카페' },
+    mail: { noun: '라벨', name: '메일함' },
+    post: { noun: '커뮤니티', name: 'X' },
+    photogram: { noun: '피드', name: '인스타그램' },
+    sheet: { noun: '시트', name: '엑셀' },
+    cafe: { noun: '카페', name: '네이버 카페' },
     ebook: { noun: '서가', name: 'E-book' },
     magazine: { noun: '섹션', name: '매거진' }
   };
@@ -35,6 +35,7 @@
   var pageHeader = null;
   var listHeading = null;
   var sheetHeader = null;
+  var sheetFormula = null;
   var lastStatus = { applied: false, reason: 'not-applied', pageType: 'original' };
 
   // User content is never traversed for naming. Even an exact UI phrase in a
@@ -89,6 +90,9 @@
   function updateUiLabels() {
     if (!current) return;
     var noun = current.groupNoun;
+    var composeLabels = {mail:'편지 쓰기',post:'게시하기',photogram:'만들기',sheet:'새 행',cafe:'글쓰기',ebook:'새 글',magazine:'기고'};
+    var listLabels = {mail:'받은편지함',post:'게시물',photogram:'피드',sheet:'워크시트',cafe:'글 목록',ebook:'목차',magazine:'기사 목록'};
+    var popularLabels = {mail:'중요 글',post:'인기',photogram:'인기 게시물',sheet:'인기 행',cafe:'인기글',ebook:'추천 글',magazine:'인기 기사'};
     var fixedLabels = {
       '갤러리': noun,
       '마이너갤': '마이너 ' + noun,
@@ -100,15 +104,25 @@
       '갤러리 관리 내역': noun + ' 관리 내역',
       '현재 갤러리': '현재 ' + noun,
       '전체 갤러리': '전체 ' + noun,
-      '연관 갤러리': '연관 ' + noun
+      '연관 갤러리': '연관 ' + noun,
+      '갤로그 가기': '프로필',
+      '개념글': popularLabels[current.theme],
+      '개념글보기': popularLabels[current.theme],
+      '개념글 추천하기': current.theme === 'post' ? '마음에 들어요' : current.theme === 'photogram' ? '좋아요' : '추천',
+      '목록보기': listLabels[current.theme],
+      '글쓰기': composeLabels[current.theme]
     };
     // A deliberately narrow allowlist: fixed search/navigation/popup labels.
     document.querySelectorAll([
       '.header .fld-sch legend', '.nav .menu-scroll-lst > li > a', '#minor_info_pop .pp-tit2',
       '#major_info_pop .pp-tit2', '#gall_history_btn',
-      '#userMemoPopup .lflbl', '.rel-group .rel-tit'
+      '#userMemoPopup .lflbl', '.rel-group .rel-tit',
+      '.gall-lst-group > .tab-basic .tab-lst > li > a',
+      '.gallview-tit-box .btm > .rt > a.btn-line-gray',
+      '.reco-circle #recommend_join', '#view_btn_area > button',
+      '.gall-btns .btn-reco', '.gall-btns .btn-write'
     ].join(',')).forEach(function (element) {
-      if (element.closest(protectedSelector)) return;
+      if (element.closest(protectedSelector) && !element.matches('.gallview-tit-box .btm > .rt > a.btn-line-gray')) return;
       Array.prototype.forEach.call(element.childNodes, function (node) {
         if (node.nodeType !== 3) return;
         var record = textEdits.get(node);
@@ -178,7 +192,9 @@
       heart: 'M12 20S3 14 3 8.5A4.5 4.5 0 0 1 12 7a4.5 4.5 0 0 1 9 1.5C21 14 12 20 12 20Z',
       views: 'M5 20V12M10 20V4M15 20V9M20 20V6',
       edit: 'm14 4 6 6M4 20l5-1L21 7l-5-5L4 14Z',
-      back: 'm14 5-7 7 7 7'
+      back: 'm14 5-7 7 7 7',
+      grid: 'M3 3h18v18H3ZM3 9h18M3 15h18M9 3v18M15 3v18',
+      feed: 'M4 3h16v18H4ZM4 8h16M4 16h16'
     };
     path.setAttribute('d', paths[kind] || paths.comment); svg.appendChild(path); return svg;
   }
@@ -285,16 +301,22 @@
     },
     photogram: function (d,p) {
       var profile = append(region('moa-entry-header'),p.avatar,p.name,p.date);
-      var caption = append(region('moa-entry-caption'),p.title,append(region('moa-entry-meta'),p.category));
-      return append(entryRoot('moa-photo-entry',d),profile,p.media,caption,append(region('moa-entry-actions'),p.comments,p.recommend,p.views));
+      var caption = append(region('moa-entry-caption'),node('span','moa-entry-caption-author',d.author),p.title,append(region('moa-entry-meta'),p.category));
+      return append(entryRoot('moa-photo-entry',d),profile,p.media,caption,append(region('moa-entry-actions'),p.recommend,p.comments,p.views));
     },
     cafe: function (d,p) {
       var main = append(region('moa-entry-main'),p.category,p.title,append(region('moa-entry-meta'),p.name,p.date,p.views));
       return append(entryRoot('moa-cafe-entry',d),main,p.media,p.comments);
     },
     sheet: function (d,p) {
-      var key = node('span','moa-entry-key',String(d.index)); key.setAttribute('aria-label','행 '+d.index);
-      return append(entryRoot('moa-sheet-entry',d),key,p.title,p.name,p.comments || node('span','moa-entry-comments','—'),p.views || node('span','moa-entry-views','—'));
+      var number = d.index + 1;
+      var key = node('span','moa-entry-key',String(number)); key.setAttribute('aria-label','행 '+number);
+      var entry = append(entryRoot('moa-sheet-entry',d),key,p.title,p.name,p.comments || node('span','moa-entry-comments','—'),p.views || node('span','moa-entry-views','—'));
+      p.title.setAttribute('data-moa-cell','A'+number);
+      p.title.addEventListener('focus',function () { selectSheetCell(p.title,d.title); });
+      p.title.addEventListener('pointerdown',function () { selectSheetCell(p.title,d.title); });
+      if (d.index === 1) p.title.setAttribute('data-moa-cell-selected','true');
+      return entry;
     },
     ebook: function (d,p) {
       var key = node('span','moa-entry-key',String(d.index).padStart(2,'0'));
@@ -307,6 +329,20 @@
       return append(entryRoot('moa-mag-entry',d),key,main,p.media);
     }
   };
+
+  // A real source title is previewed in the formula strip; this does not imply
+  // that a community post is an editable workbook cell or install an editor.
+  function selectSheetCell(cell,value) {
+    if (!current || current.theme !== 'sheet' || !sheetFormula) return;
+    rows.forEach(function (state) {
+      state.entry.querySelectorAll('[data-moa-cell-selected]').forEach(function (selected) {
+        if (selected !== cell) selected.removeAttribute('data-moa-cell-selected');
+      });
+    });
+    if (cell.getAttribute('data-moa-cell-selected') !== 'true') cell.setAttribute('data-moa-cell-selected','true');
+    text(sheetFormula.querySelector('.moa-sheet-address'),cell.getAttribute('data-moa-cell'));
+    text(sheetFormula.querySelector('.moa-sheet-value'),value);
+  }
 
   function restoreRow(row, state) {
     if (state.sheetScroll) row.removeEventListener('scroll',state.sheetScroll);
@@ -422,7 +458,9 @@
         var photoSwitch = node('div','moa-photo-switch');
         photoSwitch.setAttribute('role','group'); photoSwitch.setAttribute('aria-label','사진 피드 보기 방식');
         ['feed','grid'].forEach(function (value) {
-          var choice = node('button','moa-photo-choice',value === 'feed' ? '피드' : '모아보기');
+          var choice = node('button','moa-photo-choice');
+          choice.appendChild(icon(value));
+          choice.appendChild(node('span','moa-photo-choice-label',value === 'feed' ? '피드' : '모아보기'));
           choice.type = 'button'; choice.setAttribute('data-view',value);
           choice.addEventListener('click',function () {
             setAttribute(root,'data-moa-photo-view',value);
@@ -442,8 +480,14 @@
     var name = words(title) || current.displayName;
     text(pageHeader.querySelector('.moa-page-title'), name);
     text(pageHeader.querySelector('.moa-community-mark'), Array.from(name)[0] || '·');
-    var contexts = {mail:'주제함', post:'채널', photogram:'피드', cafe:'카페', sheet:'워크시트', ebook:'서가', magazine:'섹션'};
+    var contexts = {mail:'라벨', post:'커뮤니티', photogram:'피드', cafe:'카페', sheet:'워크시트', ebook:'서가', magazine:'섹션'};
     text(pageHeader.querySelector('.moa-page-context'), contexts[current.theme]);
+    var composeLabel = pageHeader.querySelector('.moa-compose .moa-action-value');
+    if (composeLabel) {
+      var composeName = {mail:'편지 쓰기',post:'게시하기',photogram:'만들기',sheet:'새 행',cafe:'글쓰기',ebook:'새 글',magazine:'기고'}[current.theme];
+      text(composeLabel,composeName);
+      setAttribute(composeLabel.parentNode,'aria-label',composeName);
+    }
     var photoView = root.getAttribute('data-moa-photo-view');
     if (!photoView) { photoView = 'feed'; setAttribute(root,'data-moa-photo-view',photoView); }
     pageHeader.querySelectorAll('.moa-photo-choice').forEach(function (button) { button.setAttribute('aria-pressed',String(button.getAttribute('data-view') === photoView)); });
@@ -456,23 +500,35 @@
       listHeading = own(node('div', 'moa-list-heading'));
       list.parentNode.insertBefore(listHeading, list);
     }
-    text(listHeading, {mail:'받은편지함', post:'게시물', photogram:'피드', cafe:'전체글', sheet:'데이터 목록', ebook:'목차', magazine:'이야기'}[current.theme]);
+    text(listHeading, {mail:'받은편지함', post:'게시물', photogram:'게시물', cafe:'전체글', sheet:'워크시트', ebook:'목차', magazine:'이야기'}[current.theme]);
+    if (!sheetFormula || !sheetFormula.isConnected) {
+      sheetFormula = own(node('div','moa-sheet-formula'));
+      sheetFormula.setAttribute('aria-label','선택한 게시물 제목');
+      append(sheetFormula,node('span','moa-sheet-address','A2'),node('span','moa-sheet-fx','ƒx'),node('span','moa-sheet-value'));
+      list.parentNode.insertBefore(sheetFormula,list);
+    }
     if (!sheetHeader || !sheetHeader.isConnected) {
       sheetHeader = own(node('div','moa-sheet-header-scroll'));
       sheetHeader.setAttribute('aria-label','표 열 제목 · 가로 스크롤');
       var columns = node('div','moa-sheet-columns');
-      ['#','A · 제목','B · 작성자','C · 댓글','D · 조회'].forEach(function (label) { columns.appendChild(node('span','',label)); });
-      sheetHeader.appendChild(columns); list.parentNode.insertBefore(sheetHeader,list);
+      ['','A','B','C','D'].forEach(function (label) { columns.appendChild(node('span','',label)); });
+      var labels = node('div','moa-sheet-labels');
+      ['1','제목','작성자','댓글','조회'].forEach(function (label) { labels.appendChild(node('span','',label)); });
+      append(sheetHeader,columns,labels); list.parentNode.insertBefore(sheetHeader,list);
       sheetHeader.addEventListener('scroll',function () { if (current && current.theme === 'sheet') receiveSheetScroll(sheetHeader); },{passive:true});
     }
     renderEntries(list);
+    if (current.theme === 'sheet') {
+      var selected = list.querySelector('[data-moa-cell-selected="true"]') || list.querySelector('[data-moa-cell]');
+      if (selected) selectSheetCell(selected,words(selected));
+    }
   }
 
   function removePresentation() {
     if (window.MoaDetailLayout) window.MoaDetailLayout.disable();
     rows.forEach(function (state,row) { restoreRow(row,state); });
     ownedNodes.forEach(function (element) { element.remove(); });
-    ownedNodes.clear(); rows.clear(); pageHeader = null; listHeading = null; sheetHeader = null;
+    ownedNodes.clear(); rows.clear(); pageHeader = null; listHeading = null; sheetHeader = null; sheetFormula = null;
   }
 
   function observe() {
@@ -485,12 +541,23 @@
         queued = false;
         if (!current) return;
         observer.disconnect();
+        suppressSourceDarkMode();
         updateUiLabels();
         updatePresentation();
         observer.observe(root, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['class','id','src','data-src','href','alt','data-moa-cleanup-active','data-moa-cleanup-hidden'] });
       });
     });
     observer.observe(root, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['class','id','src','data-src','href','alt','data-moa-cleanup-active','data-moa-cleanup-hidden'] });
+  }
+
+  function suppressSourceDarkMode() {
+    var siteDark = root.classList.contains('darkmode');
+    if (rootDarkOriginal === null || siteDark !== rootDarkCurrent) rootDarkOriginal = siteDark;
+    rootDarkCurrent = false;
+    // The source night stylesheet inverts the entire article and media again,
+    // and overrides authored colors with !important. Our palette already owns
+    // night mode; keep that source class inactive until original view returns.
+    if (siteDark) root.classList.remove('darkmode');
   }
 
   function disable(reason) {
@@ -508,7 +575,8 @@
     });
     attributeEdits.clear();
     if (rootDarkOriginal !== null) {
-      if (root.classList.contains('darkmode') === rootDarkCurrent) root.classList.toggle('darkmode', rootDarkOriginal);
+      if (root.classList.contains('darkmode') === rootDarkCurrent && rootDarkCurrent !== rootDarkOriginal)
+        root.classList.toggle('darkmode', rootDarkOriginal);
       rootDarkOriginal = null;
       rootDarkCurrent = null;
     }
@@ -558,13 +626,7 @@
     setAttribute(root, 'data-moa-theme', theme);
     setAttribute(root, 'data-moa-dark', options.dark ? 'true' : 'false');
     setAttribute(root, 'data-moa-page', type);
-    // The site's stored night-mode class includes !important colors and image
-    // inversion. Keep it aligned with the app setting while themed, then return
-    // only this token to its original state without touching other site classes.
-    var siteDark = root.classList.contains('darkmode');
-    if (rootDarkOriginal === null || siteDark !== rootDarkCurrent) rootDarkOriginal = siteDark;
-    rootDarkCurrent = Boolean(options.dark);
-    root.classList.toggle('darkmode', rootDarkCurrent);
+    suppressSourceDarkMode();
     if (rootFontOriginal === null) rootFontOriginal = {
       value: root.style.getPropertyValue('--moa-font-scale'), priority: root.style.getPropertyPriority('--moa-font-scale')
     };
@@ -578,7 +640,7 @@
   }
 
   window.MoaSkin = Object.freeze({
-    version: '3.0.2', apply: apply, disable: disable,
+    version: '3.0.5', apply: apply, disable: disable,
     presentationState: function () {
       var currentRoot = document.documentElement;
       var style = document.getElementById('moa-skin-style');

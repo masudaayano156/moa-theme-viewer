@@ -54,6 +54,7 @@ public final class MainActivity extends Activity implements BrowserController.Li
     private LinearLayout errorBanner;
     private TextView errorText;
     private LinearLayout bottomNavigation;
+    private View composeFloatingAction;
     private boolean browserVisible;
     private boolean loading;
     private String latestError;
@@ -190,11 +191,11 @@ public final class MainActivity extends Activity implements BrowserController.Li
         header.setTag("header-" + theme.id);
         header.setPadding(dp(theme == ThemeSpec.MAIL ? 12 : 8), dp(4), dp(theme == ThemeSpec.MAIL ? 12 : 8), dp(4));
         header.setMinimumHeight(dp(theme == ThemeSpec.MAIL ? 64 : 56));
-        header.setBackgroundColor(colors.surface);
+        header.setBackgroundColor(theme == ThemeSpec.SHEET ? (dark ? 0xFF185C37 : 0xFF107C41) : colors.surface);
         if (theme == ThemeSpec.MAIL) {
             LinearLayout searchBar = horizontal();
             searchBar.setTag("mail-search-bar");
-            searchBar.setBackground(round(dark ? 0xFF293544 : 0xFFEAF1FB, 28, Color.TRANSPARENT));
+            searchBar.setBackground(round(colors.tint, 28, Color.TRANSPARENT));
             searchBar.addView(headerAction("menu", "메뉴", v -> showMailDrawer()), new LinearLayout.LayoutParams(dp(48), dp(48)));
             TextView search = text("메일함에서 검색", 15, colors.mutedText, false);
             search.setTag("header-search");
@@ -209,23 +210,25 @@ public final class MainActivity extends Activity implements BrowserController.Li
             searchBar.addView(account, new LinearLayout.LayoutParams(dp(48), dp(48)));
             header.addView(searchBar, new LinearLayout.LayoutParams(-1, -2));
         } else if (theme == ThemeSpec.POST) {
-            FrameLayout home = headerAction("home", theme.displayName + " 홈", v -> showHome());
-            home.setBackground(round(dark ? 0xFF24282C : 0xFFEFF3F4, 24, Color.TRANSPARENT));
+            FrameLayout home = headerAction("account", "메뉴", this::showMenu);
+            home.setBackground(round(colors.tint, 24, Color.TRANSPARENT));
             header.addView(home, new LinearLayout.LayoutParams(dp(48), dp(48)));
             FrameLayout center = new FrameLayout(this);
             center.setTag("post-centered-mark");
-            ImageView mark = new ImageView(this);
-            mark.setImageResource(theme.iconRes);
-            mark.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+            UiGlyphView mark = new UiGlyphView(this, "x-mark", colors.text);
+            center.setContentDescription(theme.displayName + " 홈");
+            center.setFocusable(true);
+            center.setOnClickListener(v -> showHome());
             center.addView(mark, new FrameLayout.LayoutParams(dp(30), dp(30), Gravity.CENTER));
             header.addView(center, new LinearLayout.LayoutParams(0, dp(48), 1));
-            header.addView(headerAction("menu", "메뉴", this::showMenu), new LinearLayout.LayoutParams(dp(48), dp(48)));
+            header.addView(headerAction("settings", "설정", v -> showSettings()), new LinearLayout.LayoutParams(dp(48), dp(48)));
         } else {
-            TextView title = text(theme == ThemeSpec.PHOTOGRAM ? "Photogram" : theme.displayName,
+            TextView title = text(theme == ThemeSpec.PHOTOGRAM ? "Instagram" : theme == ThemeSpec.CAFE ? "Café" : theme.displayName,
                     theme == ThemeSpec.PHOTOGRAM ? 28 : theme == ThemeSpec.SHEET ? 18 : 24,
-                    theme == ThemeSpec.CAFE || theme == ThemeSpec.SHEET ? colors.accent : colors.text, true);
+                    theme == ThemeSpec.SHEET ? Color.WHITE : colors.text, true);
             title.setTag("header-wordmark");
             if (theme == ThemeSpec.PHOTOGRAM) title.setTypeface(Typeface.create("cursive", Typeface.NORMAL));
+            if (theme == ThemeSpec.CAFE) title.setTypeface(Typeface.SERIF, Typeface.BOLD_ITALIC);
             if (theme == ThemeSpec.EBOOK || theme == ThemeSpec.MAGAZINE) title.setTypeface(Typeface.SERIF, Typeface.BOLD);
             title.setSingleLine(true);
             title.setEllipsize(android.text.TextUtils.TruncateAt.END);
@@ -235,7 +238,8 @@ public final class MainActivity extends Activity implements BrowserController.Li
             title.setContentDescription(theme.displayName + " 홈");
             title.setOnClickListener(v -> showHome());
             header.addView(title, new LinearLayout.LayoutParams(0, -2, 1));
-            header.addView(headerAction("search", theme.searchHint, v -> showExplore()), new LinearLayout.LayoutParams(dp(48), dp(48)));
+            if (theme == ThemeSpec.CAFE) header.addView(headerAction("plus", "글쓰기", v -> compose()), new LinearLayout.LayoutParams(dp(48), dp(48)));
+            header.addView(headerAction(theme == ThemeSpec.PHOTOGRAM ? "add" : "search", theme == ThemeSpec.PHOTOGRAM ? "글쓰기" : theme.searchHint, v -> { if (theme == ThemeSpec.PHOTOGRAM) compose(); else showExplore(); }), new LinearLayout.LayoutParams(dp(48), dp(48)));
             header.addView(headerAction("menu", "메뉴", this::showMenu), new LinearLayout.LayoutParams(dp(48), dp(48)));
         }
         return header;
@@ -246,7 +250,7 @@ public final class MainActivity extends Activity implements BrowserController.Li
         action.setContentDescription(description);
         action.setFocusable(true);
         action.setOnClickListener(click);
-        UiGlyphView icon = new UiGlyphView(this, glyph, colors.text);
+        UiGlyphView icon = new UiGlyphView(this, glyph, theme == ThemeSpec.SHEET ? Color.WHITE : colors.text);
         action.addView(icon, new FrameLayout.LayoutParams(dp(24), dp(24), Gravity.CENTER));
         return action;
     }
@@ -256,34 +260,39 @@ public final class MainActivity extends Activity implements BrowserController.Li
         navigation.setTag("navigation-" + theme.id);
         bottomNavigation = navigation;
         navigation.setGravity(Gravity.CENTER);
-        navigation.setBackgroundColor(theme == ThemeSpec.MAIL ? (dark ? 0xFF1B2633 : 0xFFF0F4F9) : colors.surface);
+        navigation.setBackgroundColor(theme == ThemeSpec.MAIL ? colors.tint : colors.surface);
         navigation.setPadding(dp(8), dp(3), dp(8), dp(3));
         switch (theme) {
             case MAIL:
                 navigation.setTag("mail-action-dock");
                 addNav(navigation, "inbox", "홈", !browserVisible, v -> showHome());
-                TextView compose = text("✎  편지 쓰기", 14, colors.text, true);
-                compose.setContentDescription("글쓰기");
-                compose.setGravity(Gravity.CENTER);
-                compose.setMinHeight(dp(48));
-                compose.setPadding(dp(14), dp(10), dp(14), dp(10));
-                compose.setBackground(round(dark ? 0xFF374E6B : 0xFFD3E3FD, 18, Color.TRANSPARENT));
-                compose.setOnClickListener(v -> compose());
-                navigation.addView(compose, new LinearLayout.LayoutParams(0, -2, 1));
+                addNav(navigation, "folder", "라벨", false, v -> showMailDrawer());
                 break;
             case POST:
+                addNav(navigation, "home", "홈", !browserVisible, v -> showHome());
+                addNav(navigation, "search", "탐색", false, v -> showExplore());
+                addNav(navigation, "bookmark", "계정 즐겨찾기", false, v -> openAccountFavorites());
+                addNav(navigation, "account", "설정", false, v -> showSettings());
+                break;
             case PHOTOGRAM:
                 addNav(navigation, "home", "홈", !browserVisible, v -> showHome());
                 addNav(navigation, "search", "탐색", false, v -> showExplore());
-                addNav(navigation, theme == ThemeSpec.PHOTOGRAM ? "add" : "edit", "글쓰기", false, v -> compose());
+                addNav(navigation, "add", "글쓰기", false, v -> compose());
                 addNav(navigation, "bookmark", "계정 즐겨찾기", false, v -> openAccountFavorites());
-                addNav(navigation, "settings", "설정", false, v -> showSettings());
+                addNav(navigation, "account", "설정", false, v -> showSettings());
                 break;
             case SHEET:
                 navigation.setTag("sheet-tabs");
-                addNav(navigation, "grid", "홈", !browserVisible, v -> showHome());
-                addNav(navigation, "add", "글쓰기", false, v -> compose());
-                addNav(navigation, "settings", "설정", false, v -> showSettings());
+                navigation.addView(sheetAction("grid", "홈", v -> showHome()), new LinearLayout.LayoutParams(dp(48), dp(48)));
+                TextView sheet = text("시트 목록", 13, colors.accent, true);
+                sheet.setContentDescription("시트 목록");
+                sheet.setGravity(Gravity.CENTER);
+                sheet.setMinHeight(dp(48));
+                sheet.setBackground(round(colors.tint, 0, colors.border));
+                sheet.setOnClickListener(v -> showHome());
+                navigation.addView(sheet, new LinearLayout.LayoutParams(0, -2, 1));
+                navigation.addView(sheetAction("plus", "글쓰기", v -> compose()), new LinearLayout.LayoutParams(dp(48), dp(48)));
+                navigation.addView(sheetAction("settings", "설정", v -> showSettings()), new LinearLayout.LayoutParams(dp(48), dp(48)));
                 break;
             case EBOOK:
                 navigation.setTag("reader-controls");
@@ -300,6 +309,65 @@ public final class MainActivity extends Activity implements BrowserController.Li
         return navigation;
     }
 
+    private FrameLayout sheetAction(String glyph, String description, View.OnClickListener click) {
+        FrameLayout action = new FrameLayout(this);
+        action.setContentDescription(description);
+        action.setFocusable(true);
+        action.setOnClickListener(click);
+        action.addView(new UiGlyphView(this, glyph, colors.text), new FrameLayout.LayoutParams(dp(22), dp(22), Gravity.CENTER));
+        return action;
+    }
+
+    private void rebuildComposeAction() {
+        if (composeFloatingAction != null) content.removeView(composeFloatingAction);
+        composeFloatingAction = null;
+        if (theme != ThemeSpec.MAIL && theme != ThemeSpec.POST) return;
+        LinearLayout button = horizontal();
+        button.setTag("compose-floating-" + theme.id);
+        button.setGravity(Gravity.CENTER);
+        button.setContentDescription("글쓰기");
+        button.setFocusable(true);
+        button.setMinimumHeight(dp(56));
+        button.setMinimumWidth(dp(56));
+        button.setPadding(dp(16), dp(14), dp(16), dp(14));
+        int fill = theme == ThemeSpec.MAIL ? (dark ? 0xFF004A77 : 0xFFC2E7FF) : colors.accent;
+        int ink = theme == ThemeSpec.MAIL ? (dark ? 0xFFC2E7FF : 0xFF001D35) : colors.onAccent;
+        button.setBackground(round(fill, theme == ThemeSpec.MAIL ? 16 : 32, Color.TRANSPARENT));
+        button.setElevation(dp(4));
+        button.addView(new UiGlyphView(this, theme == ThemeSpec.MAIL ? "pencil" : "plus", ink), new LinearLayout.LayoutParams(dp(24), dp(24)));
+        if (theme == ThemeSpec.MAIL && !compactLayout()) {
+            TextView caption = text("편지쓰기", 14, ink, true);
+            caption.setPadding(dp(12), 0, 0, 0);
+            button.addView(caption, new LinearLayout.LayoutParams(-2, -2));
+        }
+        button.setOnClickListener(v -> compose());
+        FrameLayout.LayoutParams position = new FrameLayout.LayoutParams(-2, -2, Gravity.END | Gravity.BOTTOM);
+        position.setMargins(dp(16), dp(16), dp(16), dp(16));
+        content.addView(button, position);
+        composeFloatingAction = button;
+        updateComposeActionVisibility();
+    }
+
+    private void updateComposeActionVisibility() {
+        if (composeFloatingAction == null) return;
+        boolean show = !browserVisible || (!loading && latestError == null && pendingComposerTarget.isEmpty()
+                && isFloatingComposeList(pageUrl));
+        composeFloatingAction.setVisibility(show ? View.VISIBLE : View.GONE);
+    }
+
+    private boolean isFloatingComposeList(String value) {
+        if (value == null || value.isEmpty()) return false;
+        Uri uri = Uri.parse(value);
+        String path = uri.getPath();
+        return "https".equalsIgnoreCase(uri.getScheme()) && "m.dcinside.com".equalsIgnoreCase(uri.getHost())
+                && uri.getUserInfo() == null && uri.getPort() == -1 && path != null
+                && path.matches("^/(?:board|mini|person)/[A-Za-z0-9_]+/?$");
+    }
+
+    private void hideComposeForNavigation() {
+        if (composeFloatingAction != null) composeFloatingAction.setVisibility(View.GONE);
+    }
+
     private void addNav(LinearLayout navigation, String icon, String label, boolean active, View.OnClickListener click) {
         navigation.addView(nav(icon, label, active, click), new LinearLayout.LayoutParams(0, -2, 1));
     }
@@ -314,19 +382,20 @@ public final class MainActivity extends Activity implements BrowserController.Li
         item.setContentDescription(label);
         item.setFocusable(true);
         item.setOnClickListener(click);
-        int tint = active ? colors.accent : colors.text;
+        int tint = active && !iconOnly ? colors.accent : colors.text;
+        item.setSelected(active);
         if (theme == ThemeSpec.MAIL) {
             FrameLayout capsule = new FrameLayout(this);
-            if (active) capsule.setBackground(round(dark ? 0xFF374E6B : 0xFFD3E3FD, 16, Color.TRANSPARENT));
+            if (active) capsule.setBackground(round(dark ? 0xFF004A77 : 0xFFD3E3FD, 16, Color.TRANSPARENT));
             capsule.addView(new UiGlyphView(this, symbol, tint), new FrameLayout.LayoutParams(dp(23), dp(23), Gravity.CENTER));
             item.addView(capsule, new LinearLayout.LayoutParams(dp(48), dp(28)));
         } else if (!textOnly) {
-            item.addView(new UiGlyphView(this, symbol, tint), new LinearLayout.LayoutParams(dp(25), dp(25)));
+            item.addView(new UiGlyphView(this, active && iconOnly && "home".equals(symbol) ? "home-filled" : symbol, tint), new LinearLayout.LayoutParams(dp(25), dp(25)));
         }
         if (!iconOnly) {
             String shown = label;
-            if (label.equals("홈")) shown = theme == ThemeSpec.MAIL ? "주제함" : theme == ThemeSpec.SHEET ? "시트 목록"
-                    : theme == ThemeSpec.EBOOK ? "서가" : theme == ThemeSpec.CAFE ? "내 게시판" : theme == ThemeSpec.MAGAZINE ? "섹션" : label;
+            if (label.equals("홈")) shown = theme == ThemeSpec.MAIL ? "메일" : theme == ThemeSpec.SHEET ? "시트 목록"
+                    : theme == ThemeSpec.EBOOK ? "서가" : theme == ThemeSpec.CAFE ? "내 카페" : theme == ThemeSpec.MAGAZINE ? "섹션" : label;
             if (theme == ThemeSpec.EBOOK && label.equals("설정")) shown = "Aa · 읽기 설정";
             if (theme == ThemeSpec.SHEET && label.equals("설정")) shown = "보기";
             if (theme == ThemeSpec.MAGAZINE && label.equals("글쓰기")) shown = "기고";
@@ -349,7 +418,7 @@ public final class MainActivity extends Activity implements BrowserController.Li
         homeView = new ScrollView(this);
         homeView.setFillViewport(true);
         homeView.setClipToPadding(false);
-        homeView.setBackgroundColor(colors.background);
+        homeView.setBackgroundColor(theme == ThemeSpec.CAFE ? colors.surface : colors.background);
         FrameLayout homeFrame = new FrameLayout(this) {
             @Override protected void onMeasure(int widthSpec, int heightSpec) {
                 if (getChildCount() > 0) getChildAt(0).getLayoutParams().width = Math.min(dp(720), View.MeasureSpec.getSize(widthSpec));
@@ -359,7 +428,7 @@ public final class MainActivity extends Activity implements BrowserController.Li
         LinearLayout home = vertical();
         home.setTag("home-content");
         int gutter = theme == ThemeSpec.MAIL || theme == ThemeSpec.POST || theme == ThemeSpec.SHEET ? 8 : compactLayout() ? 16 : 20;
-        home.setPadding(dp(gutter), dp(10), dp(gutter), dp(20));
+        home.setPadding(dp(gutter), dp(10), dp(gutter), dp(theme == ThemeSpec.MAIL || theme == ThemeSpec.POST ? 96 : 20));
         FrameLayout.LayoutParams homeParams = new FrameLayout.LayoutParams(
                 Math.min(dp(720), dp(getResources().getConfiguration().screenWidthDp)), -2, Gravity.TOP | Gravity.CENTER_HORIZONTAL);
         homeFrame.addView(home, homeParams);
@@ -379,7 +448,7 @@ public final class MainActivity extends Activity implements BrowserController.Li
 
         addHomeIdentity(home);
         LinearLayout section = compactLayout() ? vertical() : horizontal();
-        section.addView(text(favoritesHeading(), 18, colors.text, true), new LinearLayout.LayoutParams(compactLayout() ? -1 : 0, -2, compactLayout() ? 0 : 1));
+        section.addView(text(favoritesHeading(), theme == ThemeSpec.MAIL ? 12 : 16, theme == ThemeSpec.MAIL ? colors.mutedText : colors.text, true), new LinearLayout.LayoutParams(compactLayout() ? -1 : 0, -2, compactLayout() ? 0 : 1));
         TextView refreshFavorites = text("새로고침", 11, colors.accent, true);
         refreshFavorites.setPadding(dp(10), dp(12), 0, dp(12));
         refreshFavorites.setContentDescription("계정 즐겨찾기 새로고침");
@@ -451,27 +520,65 @@ public final class MainActivity extends Activity implements BrowserController.Li
         content.addView(homeView, new FrameLayout.LayoutParams(-1, -1));
         homeView.setVisibility(browserVisible ? View.GONE : View.VISIBLE);
         browserView.setVisibility(browserVisible ? View.VISIBLE : View.GONE);
+        rebuildComposeAction();
     }
 
     private void addHomeIdentity(LinearLayout home) {
-        if (theme == ThemeSpec.MAIL) return;
+        if (theme == ThemeSpec.MAIL || theme == ThemeSpec.PHOTOGRAM) return;
+        if (theme == ThemeSpec.POST || theme == ThemeSpec.CAFE) {
+            LinearLayout tabs = horizontal();
+            tabs.setTag("home-identity-" + theme.id);
+            tabs.setBackgroundColor(colors.surface);
+            String[] labels = theme == ThemeSpec.POST ? new String[]{"커뮤니티", "탐색"} : new String[]{"내 카페", "카페 검색"};
+            for (int i = 0; i < labels.length; i++) {
+                final boolean homeTab = i == 0;
+                LinearLayout tab = vertical();
+                tab.setGravity(Gravity.CENTER);
+                tab.setMinimumHeight(dp(48));
+                TextView label = text(labels[i], 15, homeTab ? colors.text : colors.mutedText, homeTab);
+                label.setGravity(Gravity.CENTER);
+                label.setPadding(dp(6), dp(11), dp(6), dp(9));
+                tab.addView(label);
+                View rule = new View(this);
+                rule.setBackgroundColor(homeTab ? colors.accent : Color.TRANSPARENT);
+                tab.addView(rule, new LinearLayout.LayoutParams(dp(44), dp(3)));
+                tab.setFocusable(true);
+                tab.setContentDescription(labels[i]);
+                tab.setOnClickListener(v -> { if (homeTab) showHome(); else showExplore(); });
+                tabs.addView(tab, new LinearLayout.LayoutParams(0, -2, 1));
+            }
+            home.addView(tabs, new LinearLayout.LayoutParams(-1, -2));
+            return;
+        }
         LinearLayout intro = vertical();
         intro.setTag("home-identity-" + theme.id);
         intro.setPadding(dp(12), dp(12), dp(12), dp(15));
-        String title;
-        String subtitle;
-        switch (theme) {
-            case POST: title = "나의 채널"; subtitle = "즐겨찾는 채널의 이야기를 이어서 읽으세요."; break;
-            case PHOTOGRAM: title = "Following"; subtitle = "내가 즐겨찾는 피드"; break;
-            case CAFE: title = "내 카페 공간"; subtitle = "관심 게시판으로 바로 들어가세요.";
-                intro.setBackground(round(alpha(colors.accent, .08f), 18, Color.TRANSPARENT)); break;
-            case SHEET: title = "내 통합 문서"; subtitle = "고정 시트를 선택하면 글 목록이 열립니다.";
-                intro.setBackground(round(colors.surface, 0, colors.border)); break;
-            case EBOOK: title = "책장"; subtitle = "좋아하는 이야기를 한 권씩 펼쳐 보세요."; break;
-            default: title = "THE COLLECTION"; subtitle = "내가 선택한 이야기의 지면"; break;
+        if (theme == ThemeSpec.SHEET) {
+            LinearLayout formula = horizontal();
+            formula.setTag("sheet-formula-context");
+            formula.setBackground(round(colors.surface, 0, colors.border));
+            TextView cell = text("A1", 13, colors.mutedText, false);
+            cell.setGravity(Gravity.CENTER);
+            cell.setSingleLine(true);
+            cell.setMinWidth(dp(48));
+            cell.setMinHeight(dp(40));
+            formula.addView(cell, new LinearLayout.LayoutParams(-2, -2));
+            TextView fx = text("ƒx", 17, colors.mutedText, false);
+            fx.setGravity(Gravity.CENTER);
+            fx.setSingleLine(true);
+            fx.setMinWidth(dp(42));
+            fx.setMinHeight(dp(40));
+            formula.addView(fx, new LinearLayout.LayoutParams(-2, -2));
+            TextView context = text("내 통합 문서", 13, colors.text, false);
+            context.setPadding(dp(10), dp(9), dp(8), dp(9));
+            formula.addView(context, new LinearLayout.LayoutParams(0, -2, 1));
+            home.addView(formula, new LinearLayout.LayoutParams(-1, -2));
+            return;
         }
-        TextView heading = text(title, theme == ThemeSpec.EBOOK || theme == ThemeSpec.MAGAZINE ? 28 : 22, colors.text, true);
-        if (theme == ThemeSpec.EBOOK || theme == ThemeSpec.MAGAZINE) heading.setTypeface(Typeface.SERIF, Typeface.BOLD);
+        String title = theme == ThemeSpec.EBOOK ? "책장" : "THE COLLECTION";
+        String subtitle = theme == ThemeSpec.EBOOK ? "좋아하는 이야기를 한 권씩 펼쳐 보세요." : "내가 선택한 이야기의 지면";
+        TextView heading = text(title, 28, colors.text, true);
+        heading.setTypeface(Typeface.SERIF, Typeface.BOLD);
         intro.addView(heading);
         TextView body = text(subtitle, 12, colors.mutedText, false);
         body.setPadding(0, dp(8), 0, 0);
@@ -481,6 +588,37 @@ public final class MainActivity extends Activity implements BrowserController.Li
 
     private void addFavoriteCollection(LinearLayout parent, List<Favorite> entries, boolean fromAccount) {
         if (entries.isEmpty()) return;
+        if (theme == ThemeSpec.CAFE && fromAccount) {
+            LinearLayout grid = vertical();
+            grid.setTag("cafe-favorites-grid");
+            int columns = compactLayout() ? (getResources().getConfiguration().fontScale * fontScale > 1.5f ? 2 : 3) : 4;
+            for (int index = 0; index < entries.size();) {
+                LinearLayout row = horizontal();
+                row.setGravity(Gravity.TOP);
+                for (int column = 0; column < columns; column++, index++) {
+                    LinearLayout.LayoutParams cell = new LinearLayout.LayoutParams(0, -2, 1);
+                    if (index >= entries.size()) { row.addView(new View(this), new LinearLayout.LayoutParams(0, 0, 1)); continue; }
+                    Favorite favorite = entries.get(index);
+                    LinearLayout tile = vertical();
+                    tile.setGravity(Gravity.CENTER_HORIZONTAL);
+                    tile.setPadding(dp(4), dp(12), dp(4), dp(18));
+                    TextView avatar = initial(favorite, 24);
+                    avatar.setBackground(round(colors.tint, 30, Color.TRANSPARENT));
+                    tile.addView(avatar, new LinearLayout.LayoutParams(dp(56), dp(56)));
+                    TextView name = text(favorite.name, 12, colors.text, false);
+                    name.setGravity(Gravity.CENTER);
+                    name.setMaxLines(2);
+                    name.setEllipsize(android.text.TextUtils.TruncateAt.END);
+                    name.setPadding(0, dp(8), 0, 0);
+                    tile.addView(name, new LinearLayout.LayoutParams(-1, -2));
+                    bindFavorite(tile, favorite, true);
+                    row.addView(tile, cell);
+                }
+                grid.addView(row, new LinearLayout.LayoutParams(-1, -2));
+            }
+            parent.addView(grid, new LinearLayout.LayoutParams(-1, -2));
+            return;
+        }
         if (theme == ThemeSpec.PHOTOGRAM && fromAccount) {
             HorizontalScrollView strip = new HorizontalScrollView(this);
             strip.setTag("photogram-channel-strip");
@@ -492,7 +630,7 @@ public final class MainActivity extends Activity implements BrowserController.Li
                 channel.setGravity(Gravity.CENTER_HORIZONTAL);
                 channel.setPadding(dp(5), dp(8), dp(5), dp(10));
                 TextView initial = initial(favorite, 26);
-                initial.setBackground(round(colors.surface, 30, colors.accent));
+                initial.setBackground(round(colors.tint, 30, colors.border));
                 channel.addView(initial, new LinearLayout.LayoutParams(dp(60), dp(60)));
                 TextView name = text(favorite.name, 11, colors.text, false);
                 name.setGravity(Gravity.CENTER);
@@ -518,10 +656,10 @@ public final class MainActivity extends Activity implements BrowserController.Li
             row.setGravity(Gravity.TOP);
             for (int column = 0; column < columns; column++, index++) {
                 LinearLayout.LayoutParams cell = new LinearLayout.LayoutParams(0, -2, 1);
-                cell.topMargin = dp(theme == ThemeSpec.SHEET || theme == ThemeSpec.MAIL ? 1 : 10);
+                cell.topMargin = dp(theme == ThemeSpec.SHEET || theme == ThemeSpec.MAIL || theme == ThemeSpec.POST || theme == ThemeSpec.CAFE ? 1 : 10);
                 if (column > 0) cell.leftMargin = dp(12);
                 if (index < entries.size()) row.addView(favoriteCard(entries.get(index), index, fromAccount), cell);
-                else row.addView(new View(this), cell);
+                else row.addView(new View(this), new LinearLayout.LayoutParams(0, 0, 1));
             }
             parent.addView(row, new LinearLayout.LayoutParams(-1, -2));
         }
@@ -566,9 +704,9 @@ public final class MainActivity extends Activity implements BrowserController.Li
         card.setTag(theme.id + "-favorite-row");
         card.setGravity(Gravity.CENTER_VERTICAL);
         boolean sheet = theme == ThemeSpec.SHEET;
-        card.setPadding(dp(sheet ? 0 : 12), dp(sheet ? 0 : 15), dp(12), dp(sheet ? 0 : 15));
+        card.setPadding(dp(sheet ? 0 : 12), dp(sheet ? 0 : 11), dp(12), dp(sheet ? 0 : 11));
         card.setMinimumHeight(dp(60));
-        int radius = theme == ThemeSpec.CAFE ? 16 : 0;
+        int radius = 0;
         card.setBackground(round(colors.surface, radius,
                 theme == ThemeSpec.POST || theme == ThemeSpec.PHOTOGRAM || theme == ThemeSpec.MAIL ? Color.TRANSPARENT : colors.border));
         TextView avatar = initial(favorite, sheet ? 13 : 21);
@@ -582,13 +720,13 @@ public final class MainActivity extends Activity implements BrowserController.Li
         LinearLayout info = vertical();
         TextView name = text(theme.labelFor(favorite.name), 15, colors.text, true);
         info.addView(name);
-        String detailLabel = !fromAccount ? "이 기기에 저장한 페이지" : theme == ThemeSpec.MAIL ? "주제함 열기"
-                : theme == ThemeSpec.POST ? "채널의 이야기 읽기" : theme == ThemeSpec.CAFE ? "게시판 둘러보기" : "계정 즐겨찾기";
+        String detailLabel = !fromAccount ? "이 기기에 저장한 페이지" : theme == ThemeSpec.MAIL ? "라벨의 메일 보기"
+                : theme == ThemeSpec.POST ? "커뮤니티 게시물" : theme == ThemeSpec.CAFE ? "카페글 보기" : "계정 즐겨찾기";
         TextView detail = text(detailLabel, 11, colors.mutedText, false);
         detail.setPadding(0, dp(6), 0, 0);
         info.addView(detail);
         card.addView(info, new LinearLayout.LayoutParams(0, -2, 1));
-        TextView chevron = text(theme == ThemeSpec.MAIL ? "★" : "›", 21, colors.mutedText, false);
+        TextView chevron = text(theme == ThemeSpec.MAIL ? "☆" : "›", 21, colors.mutedText, false);
         chevron.setTextSize(android.util.TypedValue.COMPLEX_UNIT_DIP, 23);
         chevron.setPadding(dp(8), 0, 0, 0);
         card.addView(chevron);
@@ -597,7 +735,7 @@ public final class MainActivity extends Activity implements BrowserController.Li
     }
 
     private TextView initial(Favorite favorite, int size) {
-        TextView initial = text(new String(Character.toChars(favorite.name.codePointAt(0))), size, colors.accent, true);
+        TextView initial = text(new String(Character.toChars(favorite.name.codePointAt(0))), size, theme == ThemeSpec.PHOTOGRAM ? colors.text : colors.accent, true);
         initial.setGravity(Gravity.CENTER);
         initial.setTextSize(android.util.TypedValue.COMPLEX_UNIT_DIP, size);
         initial.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
@@ -627,11 +765,11 @@ public final class MainActivity extends Activity implements BrowserController.Li
 
     private String favoritesHeading() {
         switch (theme) {
-            case MAIL: return "즐겨찾는 주제함";
-            case POST: return "관심 채널";
-            case PHOTOGRAM: return "즐겨찾는 피드";
+            case MAIL: return "라벨";
+            case POST: return "내 커뮤니티";
+            case PHOTOGRAM: return "즐겨찾기";
             case SHEET: return "고정 시트";
-            case CAFE: return "관심 게시판";
+            case CAFE: return "즐겨찾는 카페";
             case EBOOK: return "내 서가";
             default: return "관심 섹션";
         }
@@ -666,6 +804,7 @@ public final class MainActivity extends Activity implements BrowserController.Li
             root.addView(buildNavigation());
         }
         updateHeader();
+        updateComposeActionVisibility();
     }
 
     private void navigate(String url) {
@@ -675,6 +814,7 @@ public final class MainActivity extends Activity implements BrowserController.Li
             if (errorBanner != null) errorBanner.setVisibility(View.GONE);
             browser.setOriginalMode(false);
             setBrowserVisible(true);
+            hideComposeForNavigation();
             browser.open(url);
         });
     }
@@ -705,10 +845,11 @@ public final class MainActivity extends Activity implements BrowserController.Li
                             pendingComposerTarget = UrlPolicy.galleryId(targetUrl);
                             browser.setOriginalMode(false);
                             setBrowserVisible(true);
+                            hideComposeForNavigation();
                             browser.open(targetUrl);
                         });
                     }).setNegativeButton("닫기", null).show();
-        } else browser.openComposer();
+        } else { hideComposeForNavigation(); browser.openComposer(); }
     }
 
     private void showExplore() {
@@ -799,11 +940,11 @@ public final class MainActivity extends Activity implements BrowserController.Li
 
     private String themeDescription(ThemeSpec option) {
         switch (option) {
-            case MAIL: return "검색창 · 주제함 서랍 · 편지 목록";
-            case POST: return "중앙 심벌 · 채널 피드 · 아이콘 탐색";
-            case PHOTOGRAM: return "원형 피드 · 사진 카드 · 간결한 탐색";
-            case SHEET: return "행 번호 · 열 구분 · 시트 탭";
-            case CAFE: return "게시판 카드 · 카페 홈 · 글 목록";
+            case MAIL: return "Gmail 검색창 · 라벨 · 편지 목록";
+            case POST: return "X · 커뮤니티 피드 · 게시하기";
+            case PHOTOGRAM: return "Instagram · 피드 · 사진 카드";
+            case SHEET: return "Excel · 셀 격자 · 시트 탭";
+            case CAFE: return "네이버 카페 · 내 카페 · 카페글";
             case EBOOK: return "책 표지 서가 · 읽기 설정 · 독서 화면";
             default: return "섹션 타일 · 큰 제목 · 지면 구성";
         }
@@ -1168,11 +1309,11 @@ public final class MainActivity extends Activity implements BrowserController.Li
         scroll.addView(panel);
         AlertDialog dialog = dialogBuilder().setView(scroll).create();
         mailDrawer = dialog;
-        addDrawerAction(panel, dialog, "inbox", "모든 주제함", this::showHome);
-        addDrawerAction(panel, dialog, "search", "주제함 찾기", this::showExplore);
-        addDrawerAction(panel, dialog, "edit", "편지 쓰기", this::compose);
+        addDrawerAction(panel, dialog, "inbox", "전체보관함", this::showHome);
+        addDrawerAction(panel, dialog, "search", "메일 검색", this::showExplore);
+        addDrawerAction(panel, dialog, "edit", "편지쓰기", this::compose);
         panel.addView(line(), new LinearLayout.LayoutParams(-1, dp(1)));
-        TextView label = text("즐겨찾는 주제함", 11, colors.mutedText, true);
+        TextView label = text("라벨", 11, colors.mutedText, true);
         label.setPadding(dp(16), dp(22), dp(16), dp(8));
         panel.addView(label);
         if (accountFavorites.isEmpty()) {
@@ -1283,7 +1424,7 @@ public final class MainActivity extends Activity implements BrowserController.Li
                 + "푸시 알림은 선택 기능입니다. 켜면 Google FCM에 기기별 식별자가 등록되고, 연결 코드를 사용하면 Cloudflare 발송 서버에 푸시 토큰과 임의의 기기 연결 정보가 저장됩니다. 디시 로그인 비밀번호·쿠키·게시글 내용은 이 서버에 보내지 않습니다. 알림을 끄면 기기에서 표시를 중단하고 토큰 폐기·서버 연결 삭제를 요청합니다. 통신 실패 시 서버 삭제는 다음 연결 때 재시도합니다. 현재 댓글 자동 감지는 연결되지 않았습니다.\n\n"
                 + "사진을 첨부할 때 Android 파일 선택창에서 직접 고릅니다. 원본 페이지가 외부 서비스를 포함하면 해당 서비스의 개인정보 처리방침이 적용됩니다.\n\n"
                 + "테마를 바꿔도 열린 페이지는 다시 불러오지 않습니다. 앱 강제 종료·기기 재시작 뒤 작성 중 내용 복구는 보장되지 않으니 긴 글은 등록 전 별도로 보관해 주세요.\n\n"
-                + "콘텐츠 출처: dcinside.com\n테마 아이콘: 자체 제작 독립 심벌";
+                + "콘텐츠 출처: dcinside.com\n화면 스타일 참고: Gmail · X · Instagram · Excel · 네이버 카페\n각 서비스의 공식 앱이 아닌 모아 테마 뷰어입니다.";
         ScrollView scroll = new ScrollView(this);
         TextView body = text(details, 13, colors.text, false);
         body.setPadding(dp(24), dp(10), dp(24), dp(20));
@@ -1330,6 +1471,7 @@ public final class MainActivity extends Activity implements BrowserController.Li
                 if (errorBanner != null) errorBanner.setVisibility(View.GONE);
             }
             if (progress != null) progress.setVisibility(isLoading && browserVisible ? View.VISIBLE : View.INVISIBLE);
+            updateComposeActionVisibility();
             updateHeader();
             if (!isLoading && !pendingComposerTarget.isEmpty()
                     && pendingComposerTarget.equals(UrlPolicy.galleryId(pageUrl))) {
@@ -1347,6 +1489,7 @@ public final class MainActivity extends Activity implements BrowserController.Li
             if (progress != null) progress.setVisibility(View.INVISIBLE);
             if (errorText != null) errorText.setText(message);
             if (errorBanner != null) errorBanner.setVisibility(browserVisible ? View.VISIBLE : View.GONE);
+            updateComposeActionVisibility();
             if (!browserVisible) toast(message);
         });
     }
@@ -1382,6 +1525,7 @@ public final class MainActivity extends Activity implements BrowserController.Li
         guardComposerNavigation(() -> {
             pendingComposerTarget = "";
             setBrowserVisible(true);
+            hideComposeForNavigation();
             browser.open(LOGIN_URL);
         });
     }
@@ -1390,6 +1534,7 @@ public final class MainActivity extends Activity implements BrowserController.Li
         guardComposerNavigation(() -> {
             pendingComposerTarget = "";
             setBrowserVisible(true);
+            hideComposeForNavigation();
             browser.openAccountFavorites();
         });
     }

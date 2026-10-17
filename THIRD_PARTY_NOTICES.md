@@ -32,4 +32,4 @@ Android Gradle Plugin 8.7.3 is a build tool, separate from the application's run
 
 ## External services
 
-No license to third-party website content, branding, or services is conveyed by this repository. The application uses independent interface names and symbols and is not an official or affiliated client of the referenced services.
+No license to third-party website content, branding, or services is conveyed by this repository. The application uses locally implemented themes referencing Gmail, X, Instagram, Microsoft Excel, and Naver Cafe, including their names and visual conventions. It is not an official or affiliated client of those services. Theme names do not change the underlying DCInside service or create access to the referenced services' features.

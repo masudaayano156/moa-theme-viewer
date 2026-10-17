@@ -8,13 +8,14 @@
   var changes = new Map();
   var generated = new Set();
   var pieces = new Map();
+  var actionObservers = new Map();
   var activePage = null;
   var themes = {
-    mail: { article: '대화', compose: '새 메시지', destination: '받는 주제함', reply: '답장', subject: '제목' },
-    post: { article: '포스트', compose: '포스트 작성', destination: '게시할 채널', reply: '답글', subject: '첫 문장 · 제목' },
+    mail: { article: '받은편지함', compose: '편지쓰기', destination: '받는 라벨', reply: '답장', subject: '제목' },
+    post: { article: '게시물', compose: '게시물 작성', destination: '커뮤니티', reply: '답글', subject: '제목' },
     photogram: { article: '게시물', compose: '새 게시물', destination: '게시할 피드', reply: '댓글 달기', subject: '캡션 · 제목' },
     cafe: { article: '게시글', compose: '글쓰기', destination: '게시판', reply: '댓글 쓰기', subject: '제목' },
-    sheet: { article: '레코드', compose: '새 레코드', destination: '시트', reply: '메모', subject: 'A · 제목' },
+    sheet: { article: 'A1', compose: '새 행', destination: '시트', reply: '메모', subject: 'A1' },
     ebook: { article: '읽기', compose: '원고 쓰기', destination: '서가', reply: '독서 메모', subject: '장 제목' },
     magazine: { article: 'ARTICLE', compose: '새 이야기', destination: '섹션', reply: '독자 의견', subject: '헤드라인' }
   };
@@ -42,29 +43,48 @@
     }
     return element;
   }
-  function icon(kind) {
+  function icon(kind,theme) {
     var svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     svg.setAttribute('viewBox', '0 0 24 24'); svg.setAttribute('aria-hidden', 'true');
     var path = document.createElementNS(svg.namespaceURI, 'path');
-    path.setAttribute('d', { reply: 'M9 5 3 11l6 6M4 11h9a7 7 0 0 1 7 7', share: 'm8 7 4-4 4 4M12 3v12M5 11v10h14V11', save: 'M6 3h12v18l-6-4-6 4Z' }[kind]);
+    var shape = { reply: 'M9 5 3 11l6 6M4 11h9a7 7 0 0 1 7 7', like: 'M20.8 4.6a5.4 5.4 0 0 0-7.6 0L12 5.8l-1.2-1.2a5.4 5.4 0 0 0-7.6 7.6L12 21l8.8-8.8a5.4 5.4 0 0 0 0-7.6Z', share: 'm8 7 4-4 4 4M12 3v12M5 11v10h14V11', save: 'M6 3h12v18l-6-4-6 4Z' }[kind];
+    if (kind === 'reply' && (theme === 'post' || theme === 'photogram')) shape = 'M21 11.5a8.5 8.5 0 0 1-8.5 8.5H4l1.7-4.2A8.5 8.5 0 1 1 21 11.5Z';
+    if (kind === 'share' && theme === 'photogram') shape = 'm22 2-7 20-4-9-9-4 20-7ZM11 13 22 2';
+    path.setAttribute('d',shape);
     path.setAttribute('fill','none'); path.setAttribute('stroke','currentColor'); path.setAttribute('stroke-width','1.7');
     path.setAttribute('stroke-linejoin','round'); path.setAttribute('stroke-linecap','round'); svg.appendChild(path); return svg;
   }
-  function action(parent, kind, label, source) {
+  function action(parent, kind, label, source, theme) {
     var key = 'action-' + kind;
     var button = pieces.get(key);
-    if (!source) { if (button) button.remove(); pieces.delete(key); return; }
+    function stopObserving() { var watcher = actionObservers.get(key); if (watcher) watcher.disconnect(); actionObservers.delete(key); }
+    if (!source) { stopObserving(); if (button) button.remove(); pieces.delete(key); return; }
     if (!button || !button.isConnected || button._moaSource !== source) {
+      stopObserving();
       if (button) button.remove();
       button = make('button', 'moa-detail-action moa-detail-' + kind); button.type = 'button';
-      button._moaSource = source; button.appendChild(icon(kind)); button.appendChild(document.createElement('span'));
-      button.addEventListener('click', function () { if (source.isConnected && !source.disabled) source.click(); });
+      button._moaSource = source; button._moaIconTheme = theme; button.appendChild(icon(kind,theme)); button.appendChild(document.createElement('span'));
+      button.addEventListener('click', function () { if (source.isConnected && !source.disabled && source.getAttribute('aria-disabled') !== 'true') source.click(); });
       parent.appendChild(button); pieces.set(key,button);
+      if (kind === 'like') {
+        // Observe only the real vote control's enabled state, never the new
+        // action strip. This cannot loop with the page/theme DOM observers.
+        var syncEnabled = function () { var disabled = !!source.disabled || source.getAttribute('aria-disabled') === 'true'; if (button.disabled !== disabled) button.disabled = disabled; };
+        syncEnabled();
+        var watcher = new MutationObserver(syncEnabled);
+        watcher.observe(source,{attributes:true,attributeFilter:['disabled','aria-disabled']});
+        actionObservers.set(key,watcher);
+      }
     }
+    if (button._moaIconTheme !== theme) { button.replaceChild(icon(kind,theme),button.firstChild); button._moaIconTheme = theme; }
     text(button.lastElementChild,label); button.setAttribute('aria-label',label);
+    // Keep only one visible copy of an action while preserving the original
+    // node and its site-owned event handler for delegation and source mode.
+    if (kind === 'share' || kind === 'save') annotate(source,'data-moa-detail-delegated','true');
+    if (kind === 'like') annotate(source,'data-moa-detail-vote-proxy','true');
   }
   function community() { return words(document.querySelector('.gall-tit-lnk')) || words(document.querySelector('.gall-tit')); }
-  function article(config) {
+  function article(config,theme) {
     var title = document.querySelector('.gallview-tit-box');
     var body = document.querySelector('.thum-txtin');
     if (!title || !body) return false;
@@ -81,14 +101,20 @@
     // article, reorder authored paragraphs or move a nested advertising slot.
     var media = body.querySelector('img:not(.emoji),video,iframe');
     if (media && !media.closest('[class*="adv-"],ins,[id*="ad_"]')) annotate(media,'data-moa-detail-media','true');
+    // A photo caption follows the untouched media/body. Only the title is
+    // copied; authored paragraphs, media nodes and their order are preserved.
+    var caption = piece('article-caption',body.parentElement,'div','moa-detail-caption',body.nextSibling);
+    text(caption,words(title.querySelector('.tit')));
     var stats = document.querySelector('.gall-thum-btm-inner > .ginfo2');
     annotate(stats,'data-moa-detail-stats','true');
     var recommendations = document.querySelector('.reco-area');
     if (recommendations) {
       var tools = piece('article-actions',recommendations,'div','moa-detail-actions',recommendations.firstChild);
-      action(tools,'reply',config.reply,document.querySelector('.btn-commentgo'));
-      action(tools,'share','공유',recommendations.querySelector('a.sp-share'));
-      action(tools,'save','저장',recommendations.querySelector('a.sp-scrap'));
+      action(tools,'reply',config.reply,document.querySelector('.btn-commentgo'),theme);
+      var vote = (theme === 'post' || theme === 'photogram') ? recommendations.querySelector('button#recommend_join') : null;
+      action(tools,'like',theme === 'post' ? '마음에 들어요' : '좋아요',vote,theme);
+      action(tools,'share','공유',recommendations.querySelector('a.sp-share'),theme);
+      action(tools,'save','저장',recommendations.querySelector('a.sp-scrap'),theme);
     }
     document.querySelectorAll('.all-comment-lst > li.comment').forEach(function (comment) {
       annotate(comment,'data-moa-comment-initial',Array.from(words(comment.querySelector('.nick')))[0] || '·');
@@ -131,6 +157,7 @@
     return true;
   }
   function disable() {
+    actionObservers.forEach(function (watcher) { watcher.disconnect(); }); actionObservers.clear();
     generated.forEach(function (element) { element.remove(); }); generated.clear(); pieces.clear();
     changes.forEach(function (edits,element) { edits.forEach(function(edit,key) {
       if (element.getAttribute(key) !== edit.value) return;
@@ -144,9 +171,9 @@
     if (!themes[theme] || (page !== 'view' && page !== 'write')) { disable(); return false; }
     if (location.hostname !== 'm.dcinside.com' || location.protocol !== 'https:') { disable(); return false; }
     if (activePage && activePage !== page) disable();
-    var supported = page === 'view' ? article(themes[theme]) : compose(themes[theme]);
+    var supported = page === 'view' ? article(themes[theme],theme) : compose(themes[theme]);
     if (!supported) { disable(); return false; }
     annotate(root,'data-moa-detail',theme); annotate(root,'data-moa-detail-page',page); activePage=page; return true;
   }
-  window.MoaDetailLayout = Object.freeze({version:'3.0.0',apply:apply,disable:disable});
+  window.MoaDetailLayout = Object.freeze({version:'3.1.0',apply:apply,disable:disable});
 })();
