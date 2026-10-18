@@ -29,7 +29,7 @@
 | `POST /v1/pair` | `{code,installationId,installationSecret,fcmToken}` | `{paired:true,installationId}`; 201 |
 | `PUT /v1/devices/{installationId}/token` | 설치 비밀값 Bearer, `{fcmToken}` | `{updated:true}`; 200 |
 | `POST /v1/devices/{installationId}/test` | 설치 비밀값 Bearer, `{}` | `{queued:true,eventId}`; 202 |
-| `GET /v1/devices/{installationId}/watches` | 설치 비밀값 Bearer | `{watches:[...],intervalSeconds:300,listLimit:20,maxWatches:null,expiryDays:3,automaticRenewal:false,bestEffort:true,queueStatus,retryAfterSeconds}`; 200 |
+| `GET /v1/devices/{installationId}/watches` | 설치 비밀값 Bearer | `{watches:[...],intervalSeconds:150,listLimit:20,maxWatches:null,expiryDays:3,automaticRenewal:false,bestEffort:true,queueStatus,retryAfterSeconds}`; 200 |
 | `PUT /v1/devices/{installationId}/watches` | 설치 비밀값 Bearer, `{url,newPost?,publishedAt?}` | `{watch:{...}}` 또는 만료된 자동 요청의 `{expired:true}`; 200 |
 | `DELETE /v1/devices/{installationId}/watches/{watchId}` | 설치 비밀값 Bearer | `{removed:true}`; 200 |
 | `DELETE /v1/devices/{installationId}` | 설치 비밀값 Bearer | `{unpaired:true}`; 200 |
@@ -64,7 +64,7 @@ FCM에서 토큰이 만료되었다고 확인되면 서버의 해당 토큰을 �
 
 등록 URL은 정확한 `https://m.dcinside.com/{board|mini|person}/{게시판 ID}/{양의 글 번호}` 형식만 허용합니다. 개별 댓글은 같은 주소 뒤의 단일 `?comment={양의 댓글 번호}`만 허용합니다. 외부 호스트·사용자 정보·명시적 포트·다른 쿼리·해시·인코딩 경로·쓰기/로그인 주소는 거부합니다. 등록 API에서는 원본 페이지를 조회하지 않습니다. 직접 추가한 기존 글은 다음 예약 실행의 댓글 수를 기준값으로 저장하고 이후 증가부터 알립니다. 등록 성공을 확인한 새 글은 PUT 본문의 `newPost:true`로 구분하며 첫 확인에 이미 댓글이 있으면 알립니다. 이는 클라이언트의 새 글 등록 표시이며 서버가 원본 글 소유권을 검증한다는 뜻은 아닙니다. 최초 `0`도 유효하며 이후 증가 때 알립니다. PUT 재시도는 최초 알림을 반복 생성하지 않습니다. 수가 줄어들면 알림 없이 기준을 갱신합니다.
 
-기기당 구독 저장 개수 제한은 없습니다. GET은 인덱스를 이용해 최근 20개만 반환하고 `listLimit:20,maxWatches:null`로 표시 제한임을 구분합니다. PUT은 최근 목록에 없는 기존 구독도 정확한 URL과 소유 기기로 찾습니다. 같은 URL은 함께 조회합니다. 글마다 최소 5분 간격이며 대기열·오류·플랫폼 사정으로 더 늦어질 수 있습니다. 자동 새 글은 `publishedAt`(등록 성공 시각, Unix 초)부터 3일간만 확인합니다. 전송이 지연되어도 서버 등록 시점부터 다시 3일을 부여하지 않습니다. 이미 만료된 자동 등록 요청은 `200 {expired:true}`로 처리하고 저장하지 않습니다. `newPost:true` 요청에는 `publishedAt`이 필수입니다. 수동 연장한 글은 최근 관리 목록에도 다시 나타납니다. 수동 추가·명시적 연장은 요청 시점부터 3일입니다. 자동 등록 재시도·목록 조회·새 댓글·다른 글 등록은 기존 기한을 연장하지 않습니다. 기한이 지난 구독은 조회·알림 배분·발송에서 제외하고 작은 묶음으로 정리합니다. 기존 기기 전체 유지 기한은 더 이상 구독 기한 판단에 사용하지 않습니다. 등록/갱신은 기기당 시간당 60회로 제한합니다.
+기기당 구독 저장 개수 제한은 없습니다. GET은 인덱스를 이용해 최근 20개만 반환하고 `listLimit:20,maxWatches:null`로 표시 제한임을 구분합니다. PUT은 최근 목록에 없는 기존 구독도 정확한 URL과 소유 기기로 찾습니다. 같은 글의 서로 다른 댓글 URL도 하나의 article group에서 함께 조회합니다. 기준 간격은 150초이며 1분 단위 Cron 때문에 실제 정상 확인은 대개 약 3분 간격입니다. 알림 배분·발송 단계의 지연은 별도이고 대기열·오류·플랫폼 사정으로 더 늦어질 수 있습니다. 자동 새 글은 `publishedAt`(등록 성공 시각, Unix 초)부터 3일간만 확인합니다. 전송이 지연되어도 서버 등록 시점부터 다시 3일을 부여하지 않습니다. 이미 만료된 자동 등록 요청은 `200 {expired:true}`로 처리하고 저장하지 않습니다. `newPost:true` 요청에는 `publishedAt`이 필수입니다. 수동 연장한 글은 최근 관리 목록에도 다시 나타납니다. 수동 추가·명시적 연장은 요청 시점부터 3일입니다. 자동 등록 재시도·목록 조회·새 댓글·다른 글 등록은 기존 기한을 연장하지 않습니다. 기한이 지난 구독은 조회·알림 배분·발송에서 제외하고 작은 묶음으로 정리합니다. 기존 기기 전체 유지 기한은 더 이상 구독 기한 판단에 사용하지 않습니다. 등록/갱신은 기기당 시간당 60회로 제한합니다.
 
 댓글 수가 그대로일 때는 공통 조회 상태만 갱신하고 구독자 행은 갱신하지 않습니다. 댓글 수가 늘면 변경 번호를 부여하고, 한 번에 16개 구독씩 나누어 대기 알림을 만듭니다. 배분 중 새 변경이 와도 진행 중인 위치를 처음으로 돌리지 않습니다. 기기별 전송 순서를 두어 한 기기에 많은 글이 있어도 다른 기기가 기다릴 기회를 보장하며, 한 기기의 발송 사이에는 최소 1분 간격을 둡니다. 전송 중 더 새 변경이 들어온 경우 이전 전송 완료가 새 대기 알림을 지우지 않습니다.
 
@@ -87,3 +87,14 @@ Cloudflare Workers Free는 HTTP와 Cron 모두 실행당 CPU 10ms 제한이 있�
 참고: [D1 원자적 batch](https://developers.cloudflare.com/d1/worker-api/d1-database/), [FCM HTTP v1 인증](https://firebase.google.com/docs/cloud-messaging/send/v1-api), [Workers 실행 제한](https://developers.cloudflare.com/workers/platform/limits/).
 
 개별 댓글의 직접 답글은 `.comment-add`와 원본 `mntFocus(댓글번호, false)` 대상 표시로 구분합니다. 번호가 없거나 모호하면 추측하지 않습니다. 최고 답글 번호만 보관하고, 이미 본 답글이 복원되면 재알림하지 않습니다. FCM은 구버전도 일반 알림을 표시할 수 있도록 공개 글 URL과 선택적 `comment_id`를 분리해 보냅니다. 새 앱은 이를 엄격히 검증해 해당 댓글을 엽니다.
+
+
+## 글 단위 공유 조회
+
+`0009_article_groups.sql`은 기존 구독·만료·revision·대기 알림을 유지하며 글별 공유 clock을 추가합니다. 기존 target clock과 구독·fanout의 좌표를 같은 offset으로 옮기고 구버전 요청이 마무리되는 배포 구간도 트리거로 연결합니다.
+
+한 수집 작업은 최대 512개의 활성 target을 읽습니다. 첫 공개 GET 응답에서 여러 댓글을 동시에 판별하고, 미발견 대상은 익명 focus 조회로 최대 3회 더 확인합니다. 찾지 못한 댓글을 0개로 판단하지 않습니다. 나머지 focus와 512개를 넘는 대상은 cursor로 순환합니다. 512는 저장 제한이 아니라 한 작업의 처리 묶음입니다. 쿠키·HTML·본문·닉네임은 저장하지 않습니다.
+
+일시 snapshot은 target 번호·개수·최신 답글 번호만 최대 64KiB로 저장합니다. 변화가 없는 target은 UPDATE하지 않고 글별 확인 시각을 공유합니다. 신규·변경 상태는 호출당 최대 24개씩 적용하고 snapshot을 재사용하므로 분할 처리마다 원본을 다시 읽지 않습니다. 마지막 target 삭제 때 article row와 snapshot도 함께 삭제합니다. 새로운 수동 구독은 진행 중인 snapshot을 과거 알림으로 받지 않으며, 원래 작성 후 3일 만료는 연장하지 않습니다.
+
+같은 글에 모인 500개 댓글의 합성 검사에서는 조용한 한 사이클이 공개 GET 1회와 D1 메타데이터 기준 쓰기 약 9행으로 처리됐습니다. 실제 원본 페이지·인덱스·플랫폼 CPU 사용량은 다를 수 있습니다. 서로 다른 글 500개나 500개 알림의 동시 발송을 같은 비용·속도로 처리한다는 뜻은 아닙니다. 현재 수집 최대 6작업/분, 기기별 발송 최대 6작업/분과 일일 자체 예산은 유지합니다. 무료 한도와 CPU 실행 한계 내의 최선 노력 방식이며 처리 속도를 보장하지 않습니다.

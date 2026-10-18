@@ -1,13 +1,14 @@
-import { commentTarget, laterCommentId, readPublicReplySnapshot, ReplyReadError } from './reply-parser.mjs';
+import { commentTarget, laterCommentId } from './reply-parser.mjs';
+import { checkArticleGroup, ARTICLE_CHECK_INTERVAL } from './article-checks.mjs';
 
 const WATCH_TTL = 3 * 86400;
-const CHECK_INTERVAL = 300;
+const CHECK_INTERVAL = ARTICLE_CHECK_INTERVAL;
 const LIST_LIMIT = 20;
 const FANOUT_CHUNK = 16;
 const DAY_JOBS = 20000;
 const DAY_WRITES = 70000;
 const DAY_READS = 3000000;
-const JOB_COST = { check: [8, 128], deliver: [14, 160], fanout: [144, 256] };
+const JOB_COST = { check: [200, 20000], deliver: [14, 160], fanout: [144, 256] };
 const MAX_PAGE_BYTES = 512 * 1024;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
@@ -47,11 +48,13 @@ async function ownWatches(env, installationId, now) {
   const result = await env.DB.prepare(`WITH recent AS (SELECT * FROM watch_subscriptions
     WHERE installation_id = ? ORDER BY created_at DESC, watch_id DESC LIMIT ?)
     SELECT s.watch_id, t.url,
-    CASE WHEN t.poll_seq >= s.start_poll_seq THEN t.baseline_count ELSE NULL END AS baseline_count,
-    t.last_checked, CASE WHEN e.attempts > 0 THEN 'delivery_error' ELSE t.status END AS status,
+    CASE WHEN COALESCE(a.poll_seq,t.poll_seq) >= s.start_poll_seq THEN t.baseline_count ELSE NULL END AS baseline_count,
+    CASE WHEN t.status = 'unavailable' AND a.status = 'active' THEN t.last_checked ELSE MAX(t.last_checked,COALESCE(a.last_checked,0)) END AS last_checked,
+    CASE WHEN e.attempts > 0 THEN 'delivery_error' WHEN a.status NOT IN ('active','pending') THEN a.status ELSE t.status END AS status,
     s.expires_at AS expires_at, d.fcm_token
     FROM recent s JOIN watch_targets t USING(target_id)
     JOIN devices d USING(installation_id)
+    LEFT JOIN watch_articles a ON a.article_url = t.article_url
     LEFT JOIN watch_events e USING(watch_id)
     WHERE s.expires_at > ? ORDER BY s.created_at DESC, s.watch_id DESC`)
     .bind(installationId, LIST_LIMIT, now).all();
@@ -60,10 +63,12 @@ async function ownWatches(env, installationId, now) {
 
 async function ownWatchAtUrl(env, installationId, url, now) {
   const row = await env.DB.prepare(`SELECT s.watch_id, t.url,
-    CASE WHEN t.poll_seq >= s.start_poll_seq THEN t.baseline_count ELSE NULL END AS baseline_count,
-    t.last_checked, CASE WHEN e.attempts > 0 THEN 'delivery_error' ELSE t.status END AS status,
+    CASE WHEN COALESCE(a.poll_seq,t.poll_seq) >= s.start_poll_seq THEN t.baseline_count ELSE NULL END AS baseline_count,
+    CASE WHEN t.status = 'unavailable' AND a.status = 'active' THEN t.last_checked ELSE MAX(t.last_checked,COALESCE(a.last_checked,0)) END AS last_checked,
+    CASE WHEN e.attempts > 0 THEN 'delivery_error' WHEN a.status NOT IN ('active','pending') THEN a.status ELSE t.status END AS status,
     s.expires_at AS expires_at, d.fcm_token
     FROM watch_targets t JOIN watch_subscriptions s USING(target_id) JOIN devices d USING(installation_id)
+    LEFT JOIN watch_articles a ON a.article_url = t.article_url
     LEFT JOIN watch_events e USING(watch_id)
     WHERE t.url = ? AND s.installation_id = ? AND s.expires_at > ? LIMIT 1`)
     .bind(url, installationId, now).first();
@@ -107,6 +112,7 @@ export async function watchRoute(request, env, installationId, watchId, now, hel
       || value.publishedAt <= 0 || value.publishedAt > 4102444800)) throw new WatchError(400, 'invalid_payload');
   const url = canonicalWatchUrl(value.url);
   if (!url) throw new WatchError(400, 'invalid_watch_url');
+  const articleUrl = url.split('?')[0];
   const newPost = value.newPost === true;
   const initialNotification = newPost && value.notifyExisting !== false;
   // A future client clock cannot request a period beyond three days from now.
@@ -119,16 +125,20 @@ export async function watchRoute(request, env, installationId, watchId, now, hel
   await env.DB.batch([
     env.DB.prepare('DELETE FROM watch_subscriptions WHERE installation_id = ? AND expires_at <= ?')
       .bind(installationId, now),
-    env.DB.prepare(`INSERT INTO watch_targets(target_id, url, next_check_at)
-      SELECT ?, ?, ? WHERE EXISTS (SELECT 1 FROM devices WHERE installation_id = ? AND fcm_token IS NOT NULL)
-      ON CONFLICT(url) DO NOTHING`).bind(crypto.randomUUID(), url, now, installationId),
+    env.DB.prepare(`INSERT INTO watch_articles(article_url,next_check_at) SELECT ?,? WHERE EXISTS(SELECT 1 FROM devices WHERE installation_id = ? AND fcm_token IS NOT NULL) ON CONFLICT(article_url) DO NOTHING`).bind(articleUrl, now, installationId),
+    env.DB.prepare(`INSERT INTO watch_targets(target_id, url, next_check_at, article_url)
+      SELECT ?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM devices WHERE installation_id = ? AND fcm_token IS NOT NULL)
+      ON CONFLICT(url) DO NOTHING`).bind(crypto.randomUUID(), url, now, articleUrl, installationId),
     env.DB.prepare(`INSERT INTO watch_subscriptions(watch_id, installation_id, target_id, created_at, expires_at, start_poll_seq, delivered_revision)
-      SELECT ?, ?, t.target_id, ?, ?, CASE WHEN ? THEN 0 ELSE t.poll_seq + 1 END, t.revision FROM watch_targets t
+      SELECT ?, ?, t.target_id, ?, ?, CASE WHEN ? THEN 0 ELSE MAX(a.poll_seq,t.poll_seq) + 1 END, t.revision FROM watch_targets t JOIN watch_articles a USING(article_url)
       WHERE t.url = ? AND EXISTS (SELECT 1 FROM devices WHERE installation_id = ? AND fcm_token IS NOT NULL)
       ON CONFLICT(installation_id, target_id) DO UPDATE SET
         expires_at = CASE WHEN ? THEN watch_subscriptions.expires_at ELSE excluded.expires_at END,
         created_at = CASE WHEN ? THEN watch_subscriptions.created_at ELSE excluded.created_at END`)
       .bind(newWatchId, installationId, startedAt, expiresAt, initialNotification ? 1 : 0, url, installationId, newPost ? 1 : 0, newPost ? 1 : 0),
+    env.DB.prepare(`UPDATE watch_articles SET dirty = 1, next_check_at = CASE WHEN snapshot IS NULL AND status NOT IN ('blocked','rate_limited') THEN MIN(next_check_at,?) ELSE next_check_at END
+      WHERE article_url = ? AND EXISTS(SELECT 1 FROM watch_subscriptions s JOIN watch_targets t USING(target_id)
+        WHERE s.watch_id = ? AND t.baseline_count IS NULL)`).bind(now, articleUrl, newWatchId),
     // The UUID belongs only to this insertion. A retried PUT cannot replay an
     // initial notification or silently change an existing manual subscription.
     env.DB.prepare(`UPDATE watch_targets SET initial_watch = 1 WHERE baseline_count IS NULL
@@ -291,74 +301,56 @@ export async function resumeWatchDelivery(env, installationId, now) {
     .bind(now, installationId, installationId, now).run();
   // Only the no-active-device pause is lifted. A genuine source 403/429 or
   // parsing backoff must survive token renewal and new subscriptions.
-  await env.DB.prepare(`UPDATE watch_targets SET next_check_at = MIN(next_check_at, ?), paused_no_device = 0
-    WHERE paused_no_device = 1 AND target_id IN
-      (SELECT s.target_id FROM watch_subscriptions s JOIN devices d USING(installation_id)
-       JOIN watch_targets t USING(target_id) WHERE s.installation_id = ? AND t.paused_no_device = 1
+  await env.DB.prepare(`UPDATE watch_articles SET next_check_at = MIN(next_check_at, ?), paused_no_device = 0
+    WHERE paused_no_device = 1 AND article_url IN
+      (SELECT DISTINCT t.article_url FROM watch_subscriptions s JOIN devices d USING(installation_id)
+       JOIN watch_targets t USING(target_id) JOIN watch_articles a ON a.article_url = t.article_url
+       WHERE s.installation_id = ? AND a.paused_no_device = 1
        AND s.expires_at > ? AND d.fcm_token IS NOT NULL LIMIT 20)`)
     .bind(now, installationId, now).run();
 }
 
-async function checkOneTarget(env, now) {
-  const lease = crypto.randomUUID();
-  const target = await env.DB.prepare(`UPDATE watch_targets SET lease_until = ?, lease_token = ?
-    WHERE target_id = (SELECT target_id FROM watch_targets WHERE next_check_at <= ? AND lease_until <= ?
-      ORDER BY next_check_at, target_id LIMIT 1)
-    RETURNING target_id, url, failures, poll_seq, last_reply_no`).bind(now + 90, lease, now, now).first();
-  if (!target) return { state: 'idle' };
-  const active = await env.DB.prepare(`SELECT 1 AS found FROM watch_subscriptions s JOIN devices d USING(installation_id)
-    WHERE s.target_id = ? AND s.expires_at > ? AND d.fcm_token IS NOT NULL LIMIT 1`)
-    .bind(target.target_id, now).first();
-  if (!active) {
-    await env.DB.batch([
-      env.DB.prepare(`DELETE FROM watch_targets WHERE target_id = ? AND lease_token = ? AND NOT EXISTS
-        (SELECT 1 FROM watch_subscriptions WHERE target_id = ?)`)
-        .bind(target.target_id, lease, target.target_id),
-      env.DB.prepare(`UPDATE watch_targets SET next_check_at = ?, paused_no_device = 1, lease_until = 0, lease_token = NULL
-        WHERE target_id = ? AND lease_token = ?`).bind(now + 86400, target.target_id, lease),
-    ]);
-    return { state: 'inactive' };
-  }
-  let count, replyNo = null;
-  const replyTarget = commentTarget(target.url);
-  try {
-    if (replyTarget) { const state = await readPublicReplySnapshot(target.url); count = state.count; replyNo = state.latestReplyNo; }
-    else count = await readPublicCount(target.url);
-  }
-  catch (error) {
-    const status = error instanceof WatchError || error instanceof ReplyReadError ? error.code : 'unavailable';
-    const delay = status === 'blocked' ? 21600 : status === 'rate_limited' ? 3600
-      : Math.min(21600, CHECK_INTERVAL * 2 ** Math.min(target.failures + 1, 6));
-    await env.DB.prepare(`UPDATE watch_targets SET status = ?, last_checked = ?, next_check_at = ?,
-      failures = MIN(failures + 1, 16), lease_until = 0, lease_token = NULL WHERE target_id = ? AND lease_token = ?`)
-      .bind(status, now, now + delay, target.target_id, lease).run();
-    return { state: status };
-  }
-  const eventId = crypto.randomUUID();
-  // Manual subscriptions use the first sample only as a baseline. A newly
-  // authored-post opt-in starts at zero, so its first positive count is eligible.
-  // start_poll_seq keeps manual subscribers out of that initial revision.
-  const increase = replyTarget
-    ? '((baseline_count IS NOT NULL AND ?7 = 1) OR (baseline_count IS NULL AND initial_watch = 1 AND ?1 > 0))'
-    : '((baseline_count IS NOT NULL AND baseline_count < ?1) OR (baseline_count IS NULL AND initial_watch = 1 AND ?1 > 0))';
-  const newerReply = replyTarget && laterCommentId(replyNo, target.last_reply_no);
-  const highWater = replyTarget ? (newerReply ? replyNo : target.last_reply_no || replyNo) : null;
-  await env.DB.prepare(`UPDATE watch_targets SET
-    revision = revision + CASE WHEN ${increase} THEN 1 ELSE 0 END,
-    increase_from_seq = CASE WHEN ${increase} THEN poll_seq ELSE increase_from_seq END,
-    latest_event_id = CASE WHEN ${increase} THEN ?2 ELSE latest_event_id END,
-    fanout_revision = CASE WHEN ${increase} AND fanout_pending = 0 THEN revision + 1 ELSE fanout_revision END,
-    fanout_from_seq = CASE WHEN ${increase} AND fanout_pending = 0 THEN poll_seq ELSE fanout_from_seq END,
-    fanout_event_id = CASE WHEN ${increase} AND fanout_pending = 0 THEN ?2 ELSE fanout_event_id END,
-    fanout_cursor = CASE WHEN ${increase} AND fanout_pending = 0 THEN '' ELSE fanout_cursor END,
-    fanout_next_at = CASE WHEN ${increase} AND fanout_pending = 0 THEN ?3 ELSE fanout_next_at END,
-    fanout_pending = CASE WHEN ${increase} THEN 1 ELSE fanout_pending END,
-    baseline_count = ?1, poll_seq = poll_seq + 1, last_checked = ?3, next_check_at = ?4, last_reply_no = ?8,
-    status = 'active', failures = 0, paused_no_device = 0, lease_until = 0, lease_token = NULL
-    WHERE target_id = ?5 AND lease_token = ?6`)
-    .bind(count, eventId, now, now + CHECK_INTERVAL, target.target_id, lease, newerReply ? 1 : 0, highWater).run();
-  return { state: 'checked' };
+function targetNeedsUpdate(target, count, replyNo, now, fromSeq) {
+  if (target.last_checked > now || target.poll_seq > fromSeq) return false;
+  if (count === null) return target.status !== (commentTarget(target.url) ? 'unavailable' : 'parse_error');
+  const reply = commentTarget(target.url), newer = reply && replyNo !== '0' && laterCommentId(replyNo, target.last_reply_no);
+  return target.baseline_count !== count || newer || target.status !== 'active' || target.paused_no_device !== 0;
 }
+
+async function applyArticleTarget(env, target, count, replyNo, now, fromSeq, articleUrl, lease) {
+  if (!targetNeedsUpdate(target, count, replyNo, now, fromSeq)) return false;
+  const guard = `EXISTS(SELECT 1 FROM watch_articles a WHERE a.article_url = ? AND a.lease_token = ?)`;
+  if (count === null) {
+    const status = commentTarget(target.url) ? 'unavailable' : 'parse_error';
+    if (target.status === status) return false;
+    const failed = await env.DB.prepare(`UPDATE watch_targets SET status = ?, last_checked = ?
+      WHERE target_id = ? AND ${guard}`).bind(status, now, target.target_id, articleUrl, lease).run();
+    return failed.meta?.changes === 1;
+  }
+  const reply = commentTarget(target.url), newer = reply && replyNo !== '0' && laterCommentId(replyNo, target.last_reply_no);
+  if (target.baseline_count === count && !newer && target.status === 'active' && !target.paused_no_device) return false;
+  const increase = target.baseline_count === null ? target.initial_watch === 1 && count > 0
+    : reply ? newer : count > target.baseline_count;
+  const highWater = reply ? newer ? replyNo : target.last_reply_no || replyNo : null;
+  const event = crypto.randomUUID();
+  const result = await env.DB.prepare(`UPDATE watch_targets SET
+    revision = revision + CASE WHEN ?1 THEN 1 ELSE 0 END,
+    increase_from_seq = CASE WHEN ?1 THEN ?9 ELSE increase_from_seq END,
+    latest_event_id = CASE WHEN ?1 THEN ?2 ELSE latest_event_id END,
+    fanout_revision = CASE WHEN ?1 AND fanout_pending = 0 THEN revision + 1 ELSE fanout_revision END,
+    fanout_from_seq = CASE WHEN ?1 AND fanout_pending = 0 THEN ?9 ELSE fanout_from_seq END,
+    fanout_event_id = CASE WHEN ?1 AND fanout_pending = 0 THEN ?2 ELSE fanout_event_id END,
+    fanout_cursor = CASE WHEN ?1 AND fanout_pending = 0 THEN '' ELSE fanout_cursor END,
+    fanout_next_at = CASE WHEN ?1 AND fanout_pending = 0 THEN ?3 ELSE fanout_next_at END,
+    fanout_pending = CASE WHEN ?1 THEN 1 ELSE fanout_pending END,
+    baseline_count = ?7, poll_seq = ?9 + 1, last_checked = ?3, next_check_at = ?4, last_reply_no = ?8,
+    status = 'active', failures = 0, paused_no_device = 0, lease_until = 0, lease_token = NULL
+    WHERE target_id = ?5 AND EXISTS(SELECT 1 FROM watch_articles a WHERE a.article_url = ?10 AND a.lease_token = ?6)`)
+    .bind(increase ? 1 : 0, event, now, now + CHECK_INTERVAL, target.target_id, lease, count, highWater, fromSeq, articleUrl).run();
+  return result.meta?.changes === 1;
+}
+
+async function checkOneTarget(env, now) { return checkArticleGroup(env, now, applyArticleTarget, targetNeedsUpdate); }
 
 async function fanoutOneChunk(env, now) {
   const lease = crypto.randomUUID();
@@ -499,10 +491,17 @@ async function pruneExpired(env, now) {
 
 export async function planWatchJobs(env, now) {
   const usage = await env.DB.prepare('SELECT jobs, writes_reserved, reads_reserved FROM watch_job_budget WHERE day = ?').bind(day(now)).first();
-  if (exhausted(usage)) return [];
+  if (Object.keys(JOB_COST).every(kind => exhausted(usage, kind))) return [];
   await pruneExpired(env, now);
+  // Token recovery also resumes large installations while the app is closed.
+  // Excluding resumed groups makes each bounded sweep advance to the next set.
+  await env.DB.prepare(`UPDATE watch_articles SET paused_no_device = 0, next_check_at = MIN(next_check_at, ?)
+    WHERE article_url IN (SELECT a.article_url FROM watch_articles a WHERE a.paused_no_device = 1 AND EXISTS
+      (SELECT 1 FROM watch_targets t JOIN watch_subscriptions s USING(target_id) JOIN devices d USING(installation_id)
+       WHERE t.article_url = a.article_url AND s.expires_at > ? AND d.fcm_token IS NOT NULL)
+      ORDER BY a.article_url LIMIT 20)`).bind(now, now).run();
   const [checks, deliveries, fanouts] = await env.DB.batch([
-    env.DB.prepare('SELECT target_id FROM watch_targets WHERE next_check_at <= ? AND lease_until <= ? ORDER BY next_check_at, target_id LIMIT 6').bind(now, now),
+    env.DB.prepare('SELECT article_url FROM watch_articles WHERE next_check_at <= ? AND lease_until <= ? ORDER BY next_check_at, article_url LIMIT 6').bind(now, now),
     env.DB.prepare('SELECT installation_id FROM watch_delivery_queue WHERE paused = 0 AND ready_at <= ? AND lease_until <= ? ORDER BY ready_at, installation_id LIMIT 6').bind(now, now),
     env.DB.prepare('SELECT target_id FROM watch_targets WHERE fanout_pending = 1 AND fanout_next_at <= ? AND fanout_lease_until <= ? ORDER BY fanout_next_at, target_id LIMIT 2').bind(now, now),
   ]);

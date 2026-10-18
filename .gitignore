@@ -145,3 +145,6 @@
 !/app/src/main/assets/web/comment-notifications.js
 !/push-worker/src/reply-parser.mjs
 !/push-worker/migrations/0008_comment_replies.sql
+!/app/src/main/java/app/moa/client/GalleryImageStore.java
+!/push-worker/src/article-checks.mjs
+!/push-worker/migrations/0009_article_groups.sql
