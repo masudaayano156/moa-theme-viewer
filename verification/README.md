@@ -33,6 +33,16 @@
 
 0.9.0 재현에는 Firebase 설정이나 APK 클라이언트 값 추출이 필요하지 않습니다. 키·계정 정보 없이 빌드합니다. 기존 서버의 조회·발송 예약과 DB 연결을 종료했으며, 서버 기록은 명시적 선택에 따라 보존합니다.
 
+### AI에 전달할 검토 자료
+
+[moa-0.9.0-ai-security-review.txt 다운로드](https://github.com/masudaayano156/moa-theme-viewer/releases/download/v0.9.0/moa-0.9.0-ai-security-review.txt) — 약 0.91MB의 UTF-8 텍스트 파일 하나입니다.
+
+파일 앞부분의 검토 요청 예시와 목차를 이용하세요. 정확한 0.9.0 앱 소스83개·빌드 자료·APK에서 직접 읽은 평문 Manifest·실제 권한·VirusTotal·의존성·재빌드·CI 결과를 합쳤습니다. 각 원문의 경로·커밋·바이트 수·SHA-256을 함께 기록합니다. 실제 앱 코드를 바꾸거나 새 APK를 만든 것은 아닙니다.
+
+제3자 라이브러리 전체 소스와 DEX 전체 역컴파일은 포함하지 않으며 그 범위를 명시합니다. 당시 공개 저장소에서 관찰한 CodeQL 경고10개도 포함했습니다. AI가 읽지 못한 부분은 미검증으로 구분해야 하며, 이 자료는 보안 인증서가 아닙니다. 사용자 자료·로그·계정 정보·개인키를 넣지 않았습니다.
+
+자료 파일 SHA-256: `98b383ec4aa973dcdee52cfbf4c2ea4f6bb714c46572ad7836314f6df2e9a2f8`
+
 ## 이전 0.8.2 검사 결과
 
 **완료된 실제 실행:** [소스·lint·CodeQL·OSV](https://github.com/masudaayano156/moa-theme-viewer/actions/runs/39096346205) · [APK 재빌드·서명·검증 증명 확인](https://github.com/masudaayano156/moa-theme-viewer/actions/runs/39096883369) · [정리된 CI 기록](reports/v0.8.2-ci.json)
