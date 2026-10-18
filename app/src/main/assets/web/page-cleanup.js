@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.top !== window) return;
-  if (window.MoaPageCleanup && window.MoaPageCleanup.version === '1.0.2') {
+  if (window.MoaPageCleanup && window.MoaPageCleanup.version === '1.0.3') {
     window.MoaPageCleanup.apply();
     return;
   }
@@ -43,7 +43,7 @@
     'ins.adsbygoogle[data-ad-client][data-ad-slot]';
   var editorSelector = '#textbox,[contenteditable],form,.capcha-code-box,' +
     '.upload-wrap,.upload-img-lst';
-  var extraSelectors = ['.view-btm-con', '.outside-search-box'];
+  var extraSelectors = ['.outside-search-box'];
   var hidden = new Map();
   var style = null;
   var observer = null;
@@ -78,8 +78,46 @@
        /^[0-9]{1,20}$/.test(node.getAttribute('data-ad-slot') || ''));
   }
 
+  function discoveryModule(node) {
+    if (!node || node.nodeType !== 1 || node.ownerDocument !== document ||
+        !node.isConnected || !node.matches('.view-btm-con') ||
+        node.closest(protectedSelector)) return false;
+    var tabs = node.querySelector(':scope > .tab-basic');
+    var content = node.querySelector(':scope > #bottom_contentbox');
+    if (!tabs || !content || ![1, 2, 6, 8].every(function (id) {
+      return tabs.querySelector('#bottom_box_tab' + id);
+    })) return false;
+    // The service media/issue cards themselves use .thum-txt. Once their
+    // delayed response arrives, that shared class must not make this verified
+    // footer look like the article. Real input/search/comment/article regions
+    // remain protected, as does any copy inside authored content.
+    var forbidden = editorSelector + ',.thum-txtin,.gallview-tit-box,' +
+      '.all-comment-lst,#comment_box,.gall-detail-lst,.con-search-box,' +
+      '#pagination_div,#auto_picture_area';
+    if (node.querySelector(forbidden)) return false;
+    return Array.prototype.every.call(node.childNodes, function (child) {
+      return inert(child) || child === tabs || child === content;
+    });
+  }
+
+  function discoverySection(section) {
+    if (!section || section.nodeType !== 1 || section.ownerDocument !== document ||
+        !section.isConnected || !section.matches('section.grid') ||
+        section.closest(protectedSelector)) return false;
+    var found = false;
+    var onlyModules = Array.prototype.every.call(section.childNodes, function (child) {
+      if (inert(child)) return true;
+      if (!discoveryModule(child)) return false;
+      found = true;
+      return true;
+    });
+    return found && onlyModules;
+  }
+
   function valid(node, kind) {
     return kind === 'external' ? externalSection(node) :
+      kind === 'discovery' ? discoveryModule(node) :
+      kind === 'discovery-wrapper' ? discoverySection(node) :
       kind === 'embedded-ad' ? embeddedAd(node) : safe(node);
   }
 
@@ -189,9 +227,9 @@
         if (row.querySelector('.detail-top-lnk > a > .ntc-line-ad')) hide(row);
       });
       document.querySelectorAll('.view-btm-con').forEach(function (node) {
-        if (!safe(node) || !node.querySelector('#bottom_contentbox')) return;
-        hide(node);
-        collapseSection(node);
+        if (!discoveryModule(node)) return;
+        hide(node, 'discovery');
+        if (discoverySection(node.parentElement)) hide(node.parentElement, 'discovery-wrapper');
       });
       document.querySelectorAll('.outside-search-box').forEach(function (node) {
         // The external search has its own source form, unlike an ad slot.
@@ -267,6 +305,6 @@
     if (document.documentElement) document.documentElement.removeAttribute(rootMarker);
   }
 
-  window.MoaPageCleanup = Object.freeze({ version: '1.0.2', apply: apply, disable: disable });
+  window.MoaPageCleanup = Object.freeze({ version: '1.0.3', apply: apply, disable: disable });
   apply();
 })();

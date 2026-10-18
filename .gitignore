@@ -140,3 +140,4 @@
 !/push-worker/migrations/0005_notification_diagnostics.sql
 !/push-worker/migrations/0006_new_post_watch.sql
 !/push-worker/migrations/0007_three_day_watches.sql
+!/app/src/main/java/app/moa/client/ImageContextMenu.java

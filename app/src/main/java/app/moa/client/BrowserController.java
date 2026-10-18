@@ -104,6 +104,9 @@ public final class BrowserController {
     private String communityScript = "", communityCss = "";
     private int lastDraftPromptGeneration = -1;
     private AlertDialog draftDialog, permissionDialog;
+    private AlertDialog imageMenu;
+    private ImageSelection imageSelection;
+    private long imageSelectionGeneration;
     private NavigationCheck navigationCheck;
     private PageContext approvedNavigationContext;
     private ScriptHandler documentScript;
@@ -140,6 +143,9 @@ public final class BrowserController {
         this.cookies = AccountProfiles.cookies(profileName);
         drafts = activity.getSharedPreferences("moa_editor_drafts", Activity.MODE_PRIVATE);
         container = new FrameLayout(activity);
+        container.addOnLayoutChangeListener((view, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> {
+            if (imageMenu != null) ImageContextMenu.resize(activity, imageMenu);
+        });
         web = createWebView();
         attachWebSurface();
         try {
@@ -350,6 +356,7 @@ public final class BrowserController {
     }
 
     public void setTheme(ThemeSpec theme, boolean dark) {
+        cancelImageSelection();
         cancelNavigationGuard();
         this.theme = theme == null ? ThemeSpec.MAIL : theme;
         this.dark = dark;
@@ -361,6 +368,7 @@ public final class BrowserController {
         applyTheme();
     }
     public void setFontScale(float scale) {
+        cancelImageSelection();
         fontScale = Math.max(.85f, Math.min(1.4f, scale));
         refreshDocumentScript();
         restartCoveredPresentation();
@@ -410,7 +418,90 @@ public final class BrowserController {
         target.setWebViewClient(new Client());
         target.setWebChromeClient(new Chrome(target));
         target.setDownloadListener((url, userAgent, disposition, mime, size) -> requestDownload(target, url, userAgent, disposition, mime));
+        target.setOnLongClickListener(ignored -> imageLongPress(target));
         if (target == web) installLocalActions(target);
+    }
+
+    private boolean imageLongPress(WebView source) {
+        if (!isLive(source) || browserPaused || activity.isFinishing() || activity.isDestroyed()
+                || !ImageContextMenu.readDocument(source.getUrl()) || fullscreenView != null
+                || siteDialogs.containsKey(source) || source == web && (loading || presentation != null || peerPageStale)) return false;
+        WebView.HitTestResult hit = source.getHitTestResult();
+        if (hit == null || hit.getType() != WebView.HitTestResult.IMAGE_TYPE
+                && hit.getType() != WebView.HitTestResult.SRC_IMAGE_ANCHOR_TYPE) return false;
+        if (savePickerOutstanding || imageSelection != null || imageMenu != null) return true;
+        ImageSelection selected = new ImageSelection(source, ++imageSelectionGeneration);
+        imageSelection = selected;
+        if (hit.getType() == WebView.HitTestResult.IMAGE_TYPE) {
+            resolveImageSelection(selected, hit.getExtra());
+        } else {
+            // A linked image's hit extra can be the link destination; request its image URL explicitly.
+            Handler reply = new Handler(Looper.getMainLooper(), message -> {
+                String image = message.getData().getString("url");
+                if (image == null && message.obj instanceof String) image = (String) message.obj;
+                resolveImageSelection(selected, image); return true;
+            });
+            try { source.requestImageRef(reply.obtainMessage()); }
+            catch (RuntimeException unavailable) { resolveImageSelection(selected, null); }
+            handler.postDelayed(() -> {
+                if (selected.current() && selected.imageUrl == null) {
+                    cancelImageSelection(); listener.onError("이미지 주소를 확인하지 못했어요. 이미지를 다시 길게 눌러 주세요.");
+                }
+            }, 2000);
+        }
+        return true;
+    }
+
+    private void resolveImageSelection(ImageSelection selected, String value) {
+        if (!selected.current()) return;
+        selected.imageUrl = ImageContextMenu.imageUrl(value);
+        if (selected.imageUrl == null) {
+            cancelImageSelection(); listener.onError("이 이미지는 직접 저장할 수 있는 HTTPS 이미지가 아니에요."); return;
+        }
+        ThemeSpec.Palette colors = theme.palette(dark).withAccent(CommunityOptions.accentColor(activity, theme.palette(dark).accent));
+        AlertDialog dialog = ImageContextMenu.create(activity, colors, dark, fontScale, index -> {
+            if (!selected.current()) return;
+            if (index == 0) prepareImageDownload(selected);
+            else if (index == 1) {
+                android.content.ClipboardManager clipboard = activity.getSystemService(android.content.ClipboardManager.class);
+                if (clipboard != null) clipboard.setPrimaryClip(android.content.ClipData.newPlainText("이미지 주소", selected.imageUrl));
+                Toast.makeText(activity, "이미지 주소를 복사했어요.", Toast.LENGTH_SHORT).show();
+                cancelImageSelection();
+            } else if (index == 2) { String image = selected.imageUrl; cancelImageSelection(); openExternal(image); }
+        });
+        imageMenu = dialog;
+        dialog.setOnDismissListener(ignored -> {
+            if (imageMenu == dialog) imageMenu = null;
+            if (imageSelection == selected && !selected.downloading) cancelImageSelection();
+        });
+        dialog.show();
+    }
+
+    private final class ImageSelection {
+        final WebView source;
+        final long generation;
+        final int auth = authenticationGeneration, account = accountGeneration;
+        final String page, userAgent;
+        String imageUrl;
+        boolean downloading;
+        volatile boolean cancelled;
+        ImageSelection(WebView source, long generation) {
+            this.source = source; this.generation = generation; page = source.getUrl(); userAgent = source.getSettings().getUserAgentString();
+        }
+        boolean current() {
+            return imageSelection == this && imageSelectionGeneration == generation && isLive(source)
+                    && !activity.isFinishing() && !activity.isDestroyed() && !browserPaused
+                    && auth == authenticationGeneration && account == accountGeneration
+                    && Objects.equals(page, source.getUrl()) && ImageContextMenu.readDocument(source.getUrl());
+        }
+    }
+
+    private void cancelImageSelection() {
+        imageSelectionGeneration++;
+        if (imageSelection != null) imageSelection.cancelled = true;
+        imageSelection = null;
+        AlertDialog dialog = imageMenu; imageMenu = null;
+        if (dialog != null) dialog.dismiss();
     }
 
     private void installLocalActions(WebView target) {
@@ -472,6 +563,7 @@ public final class BrowserController {
             cancelPageRequests(view);
             if (view == web) peerPageStale = false;
             if (UrlPolicy.isAuthenticationPage(url)) {
+                cancelImageSelection();
                 if (!authNavigationPending) listener.onAuthenticationChanged();
                 if (view != web) beginPeerAuthentication();
                 invalidatePendingDownload("로그인 상태가 변경되어 저장을 취소했습니다. 파일을 다시 선택해 주세요.");
@@ -764,6 +856,7 @@ public final class BrowserController {
     }
 
     private void cancelPageRequests(WebView view) {
+        if (imageSelection != null && imageSelection.source == view) cancelImageSelection();
         if (view == web) cancelNavigationGuard();
         SiteDialog siteDialog = siteDialogs.get(view);
         if (siteDialog != null) siteDialog.finish(false);
@@ -998,6 +1091,7 @@ public final class BrowserController {
     }
 
     public void refreshCommunityOptions() {
+        cancelImageSelection();
         if (destroyed) return;
         imagePolicy.update(CommunityOptions.imageMode(activity),getUrl());
         adPolicy.update(getUrl());
@@ -1285,9 +1379,85 @@ public final class BrowserController {
 
     private static final class DownloadRequest {
         final String url, userAgent, referrer, cookie;
+        final boolean imageOnly;
         DownloadRequest(String url, String userAgent, String referrer, String cookie) {
-            this.url = url; this.userAgent = userAgent; this.referrer = referrer; this.cookie = cookie;
+            this(url, userAgent, referrer, cookie, false);
         }
+        DownloadRequest(String url, String userAgent, String referrer, String cookie, boolean imageOnly) {
+            this.url = url; this.userAgent = userAgent; this.referrer = referrer; this.cookie = cookie;
+            this.imageOnly = imageOnly;
+        }
+    }
+
+    private void prepareImageDownload(ImageSelection selected) {
+        if (!selected.current() || selected.downloading || savePickerOutstanding) return;
+        selected.downloading = true;
+        DownloadRequest request = new DownloadRequest(selected.imageUrl, selected.userAgent, selected.page,
+                downloadCookie(selected.imageUrl), true);
+        Toast.makeText(activity, "이미지 파일 정보를 확인하고 있어요.", Toast.LENGTH_SHORT).show();
+        downloadExecutor.execute(() -> {
+            ImageContextMenu.Metadata found = null;
+            long deadline = System.nanoTime() + 15_000_000_000L;
+            for (String method : new String[]{"HEAD", "GET"}) {
+                if (selected.cancelled || destroyed || System.nanoTime() >= deadline) return;
+                try { found = imageMetadata(request, method, selected, deadline); }
+                catch (Exception unavailable) { /* Some image hosts do not support HEAD; inspect GET headers only. */ }
+                if (found != null) break;
+            }
+            ImageContextMenu.Metadata metadata = found;
+            handler.post(() -> {
+                if (!selected.current()) return;
+                if (!Objects.equals(request.cookie, downloadCookie(request.url))) {
+                    cancelImageSelection(); listener.onError("로그인 상태가 변경되었어요. 이미지를 다시 선택해 주세요."); return;
+                }
+                if (metadata == null) {
+                    cancelImageSelection(); listener.onError("이미지 파일 형식을 확인하지 못했어요. 다시 길게 눌러 ‘브라우저에서 이미지 열기’로 저장해 주세요."); return;
+                }
+                WebView source = selected.source; cancelImageSelection();
+                requestDownload(source, request.url, request.userAgent, metadata.disposition, metadata.mime, true);
+            });
+        });
+        handler.postDelayed(() -> {
+            if (selected.current() && selected.downloading) {
+                cancelImageSelection(); listener.onError("이미지 정보 확인이 지연되고 있어요. 잠시 뒤 다시 시도해 주세요.");
+            }
+        }, 20_000);
+    }
+
+    private ImageContextMenu.Metadata imageMetadata(DownloadRequest request, String method, ImageSelection selected,
+                                                    long deadline) throws Exception {
+        URL target = new URL(request.url);
+        for (int redirects = 0; redirects < 6; redirects++) {
+            if (selected.cancelled || destroyed || ImageContextMenu.imageUrl(target.toString()) == null) return null;
+            int remaining = (int)Math.min(5000, (deadline - System.nanoTime()) / 1_000_000);
+            if (remaining <= 0) return null;
+            HttpURLConnection connection = openDownloadConnection(request, target, method, remaining);
+            try {
+                int status = connection.getResponseCode();
+                if (status >= 300 && status < 400) {
+                    String next = connection.getHeaderField("Location");
+                    if (next == null) return null;
+                    target = new URL(target, next); continue;
+                }
+                if (status < 200 || status >= 300) return null;
+                return ImageContextMenu.metadata(target.toString(), connection.getContentType(), connection.getHeaderField("Content-Disposition"));
+            } finally { connection.disconnect(); }
+        }
+        return null;
+    }
+
+    private HttpURLConnection openDownloadConnection(DownloadRequest request, URL target, String method, int timeout) throws Exception {
+        if (ImageContextMenu.imageUrl(target.toString()) == null) throw new IllegalArgumentException("HTTPS required");
+        HttpURLConnection connection = (HttpURLConnection) target.openConnection();
+        connection.setInstanceFollowRedirects(false); connection.setRequestMethod(method);
+        connection.setConnectTimeout(timeout); connection.setReadTimeout(timeout);
+        connection.setRequestProperty("User-Agent", request.userAgent);
+        if (UrlPolicy.isDcHttps(target.toString()) && target.getHost().equalsIgnoreCase(new URL(request.url).getHost())
+                && request.cookie != null) connection.setRequestProperty("Cookie", request.cookie);
+        if (UrlPolicy.isDcHttps(request.referrer) && (UrlPolicy.isDcHttps(target.toString())
+                || request.imageOnly && ImageRequestPolicy.isUploadedImage(target.toString())))
+            connection.setRequestProperty("Referer", request.referrer);
+        return connection;
     }
 
     private String downloadCookie(String url) {
@@ -1302,11 +1472,14 @@ public final class BrowserController {
     }
 
     private void requestDownload(WebView source, String url, String userAgent, String disposition, String mime) {
+        requestDownload(source, url, userAgent, disposition, mime, false);
+    }
+    private void requestDownload(WebView source, String url, String userAgent, String disposition, String mime, boolean imageOnly) {
         if (!isLive(source) || savePickerOutstanding) return;
-        if (!"https".equalsIgnoreCase(Uri.parse(url).getScheme())) { listener.onError("이 파일은 원본 브라우저에서 저장해 주세요."); return; }
+        if (ImageContextMenu.imageUrl(url) == null) { listener.onError("이 파일은 원본 브라우저에서 저장해 주세요."); return; }
         String downloadMime = mime == null ? "application/octet-stream" : mime;
         pendingDownload = new DownloadRequest(url, userAgent == null ? source.getSettings().getUserAgentString() : userAgent,
-            source.getUrl(), downloadCookie(url));
+            source.getUrl(), downloadCookie(url), imageOnly);
         savePickerOutstanding = true;
         downloadCancellationNotice = null;
         Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType(downloadMime)
@@ -1322,15 +1495,8 @@ public final class BrowserController {
             try {
                 URL target = new URL(originalUrl);
                 for (int redirects = 0; redirects < 6; redirects++) {
-                    if (!"https".equalsIgnoreCase(target.getProtocol())) throw new IllegalArgumentException("HTTPS required");
-                    connection = (HttpURLConnection) target.openConnection();
-                    connection.setInstanceFollowRedirects(false);
-                    connection.setConnectTimeout(20000); connection.setReadTimeout(30000);
-                    connection.setRequestProperty("User-Agent", userAgent);
-                    if (UrlPolicy.isDcHttps(target.toString())) {
-                        if (target.getHost().equalsIgnoreCase(new URL(originalUrl).getHost()) && cookie != null) connection.setRequestProperty("Cookie", cookie);
-                        if (UrlPolicy.isDcHttps(referrer)) connection.setRequestProperty("Referer", referrer);
-                    }
+                    connection = openDownloadConnection(request, target, "GET", 20000);
+                    connection.setReadTimeout(30000);
                     int response = connection.getResponseCode();
                     if (response >= 300 && response < 400) {
                         String next = connection.getHeaderField("Location");
@@ -1339,6 +1505,8 @@ public final class BrowserController {
                         target = new URL(target, next); continue;
                     }
                     if (response < 200 || response >= 300) throw new IllegalStateException("Download failed");
+                    if (request.imageOnly && ImageContextMenu.metadata(target.toString(), connection.getContentType(),
+                            connection.getHeaderField("Content-Disposition")) == null) throw new IllegalStateException("Image response required");
                     try (InputStream input = connection.getInputStream(); OutputStream output = activity.getContentResolver().openOutputStream(destination)) {
                         if (output == null) throw new IllegalStateException("No destination");
                         byte[] buffer = new byte[32768]; int count;
@@ -1571,6 +1739,7 @@ public final class BrowserController {
     }
     public void onPause() {
         if (!destroyed) {
+            cancelImageSelection();
             browserPaused = true;
             swipeRefresh.finish();
             if (presentation != null) presentation.suspend();
@@ -1589,6 +1758,7 @@ public final class BrowserController {
     }
     public void destroy() {
         if (destroyed) return;
+        cancelImageSelection();
         cancelNavigationGuard();
         clearPresentation();
         destroyed = true; handler.removeCallbacksAndMessages(null);
