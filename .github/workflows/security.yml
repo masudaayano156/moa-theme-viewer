@@ -27,7 +27,7 @@ jobs:
         run: python3 verification/audit_source.py --root . --report "$RUNNER_TEMP/source-audit.json"
       - name: Upload only the structured source report
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: source-audit
           path: ${{ runner.temp }}/source-audit.json
@@ -79,7 +79,7 @@ jobs:
           category: /language:java-kotlin
       - name: Upload only structured dependency reports
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: android-runtime-dependencies
           path: |
