@@ -189,3 +189,4 @@
 !/verification/reports/v0.8.2-dependencies.cdx.json
 !/verification/reports/v0.8.2-dependencies-osv.json
 !/verification/reports/v0.8.2-codeql.json
+!/verification/reports/v0.8.2-ci.json

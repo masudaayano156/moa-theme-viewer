@@ -1,0 +1,21 @@
+{
+  "schema": 1,
+  "version": "0.8.2",
+  "apk_sha256": "862c0b7f81ab9a75d5d96d74e1b0bec771a0ae22aac6c24b29fb7ed29db5e9e9",
+  "build_source_commit": "c4161725a690310665c9a2505e746ccf39874c43",
+  "verification_tool_commit": "1bce57aaf6d1d99e4d14601ed975607b16bc281a",
+  "observed_at_utc": "2026-10-18T04:26:29.309601+00:00",
+  "verification_workflow": "https://github.com/masudaayano156/moa-theme-viewer/actions/runs/39096883369",
+  "verification_result": "success",
+  "source_analysis_workflow": "https://github.com/masudaayano156/moa-theme-viewer/actions/runs/39096346205",
+  "source_analysis_result": "success",
+  "custom_verification_attestation_published": true,
+  "github_cli_attestation_verify_step": "success",
+  "attestation_predicate_type": "https://github.com/masudaayano156/moa-theme-viewer/verification/apk/v1",
+  "scope": "Existing APK digest, publisher signature, permissions, source metadata and all packaged entry bytes. Not original APK build provenance.",
+  "bit_exact_reproduction": false,
+  "container_difference_disclosed": true,
+  "codeql_warnings_are_not_zero": true,
+  "signing_or_server_private_keys_supplied_to_actions": false,
+  "user_fixtures_or_logs_uploaded": false
+}

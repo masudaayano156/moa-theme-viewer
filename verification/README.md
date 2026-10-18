@@ -12,6 +12,8 @@
 
 ## 최신 0.8.2 검사 결과
 
+**완료된 실제 실행:** [소스·lint·CodeQL·OSV](https://github.com/masudaayano156/moa-theme-viewer/actions/runs/39096346205) · [APK 재빌드·서명·검증 증명 확인](https://github.com/masudaayano156/moa-theme-viewer/actions/runs/39096883369) · [정리된 CI 기록](reports/v0.8.2-ci.json)
+
 | 검사 | 결과와 한계 |
 |---|---|
 | APK 해시·서명·권한 | 전용 인증서와 v2/v3 서명 유효, 디버깅 꺼짐. 권한 9개(구형 OS의 암묵적 읽기 1개 포함). 카메라·마이크 없음 |

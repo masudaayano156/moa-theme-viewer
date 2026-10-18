@@ -62,5 +62,12 @@
     "unsupported_engines": 7
   },
   "source_content_rebuild_verified": true,
-  "bit_exact_reproduction": false
+  "bit_exact_reproduction": false,
+  "ci_verification": {
+    "status": "completed",
+    "url": "https://github.com/masudaayano156/moa-theme-viewer/actions/runs/39096883369",
+    "github_cli_attestation_verified": true,
+    "scope": "all packaged entry content and release identity; raw ZIP container differs",
+    "bit_exact_reproduction": false
+  }
 }
