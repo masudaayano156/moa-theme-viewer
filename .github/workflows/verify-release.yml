@@ -1,0 +1,111 @@
+name: Verify a published APK
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Published numeric version, without v (for example 0.8.1)'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: verify-release-${{ inputs.version }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: Read-only APK identity and source rebuild
+    if: github.repository == 'masudaayano156/moa-theme-viewer' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    outputs:
+      report_artifact_id: ${{ steps.reports.outputs.artifact-id }}
+      version: ${{ steps.prepare.outputs.version }}
+    env:
+      MOA_VERSION: ${{ inputs.version }}
+      GRADLE_USER_HOME: ${{ runner.temp }}/release-verification-gradle
+    steps:
+      - name: Read verification tools and release manifest from main
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.sha }}
+          path: verification-tools
+          persist-credentials: false
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
+        with:
+          distribution: temurin
+          java-version: '17.0.20.1+1'
+      - name: Install the matching public Android SDK packages
+        run: sdkmanager 'platforms;android-35' 'build-tools;34.0.0' 'build-tools;35.0.0'
+      - name: Validate version and download the reviewed public APK
+        id: prepare
+        run: >-
+          python3 verification-tools/verification/ci_verify_release.py prepare
+          --version "$MOA_VERSION" --state "$RUNNER_TEMP/release-verification"
+      - name: Checkout the exact reviewed APK source commit
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ steps.prepare.outputs.source_commit }}
+          path: release-source
+          persist-credentials: false
+      - name: Verify identity, rebuild unsigned source and compare all bytes
+        run: >-
+          python3 verification-tools/verification/ci_verify_release.py verify
+          --version "$MOA_VERSION" --state "$RUNNER_TEMP/release-verification"
+          --source-root "$GITHUB_WORKSPACE/release-source" --sdk "$ANDROID_HOME"
+      - name: Upload only sanitized verification reports and runtime SBOM
+        id: reports
+        if: always() && steps.prepare.outcome == 'success'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-verification-v${{ steps.prepare.outputs.version }}
+          path: |
+            ${{ runner.temp }}/release-verification/public/apk-identity.json
+            ${{ runner.temp }}/release-verification/public/comparison.json
+            ${{ runner.temp }}/release-verification/public/dependencies.cdx.json
+            ${{ runner.temp }}/release-verification/public/verification.json
+          if-no-files-found: warn
+          retention-days: 90
+
+  attest-verification:
+    name: Attest the verification result, not APK build provenance
+    needs: verify
+    if: needs.verify.result == 'success' && github.repository == 'masudaayano156/moa-theme-viewer' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    env:
+      MOA_VERSION: ${{ needs.verify.outputs.version }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.sha }}
+          path: verification-tools
+          persist-credentials: false
+      - name: Download the reports from this successful verification job
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          artifact-ids: ${{ needs.verify.outputs.report_artifact_id }}
+          path: ${{ runner.temp }}/verified-reports
+          merge-multiple: true
+      - name: Revalidate reports and form a custom verification predicate
+        id: predicate
+        run: >-
+          python3 verification-tools/verification/ci_verify_release.py attestation
+          --version "$MOA_VERSION" --reports "$RUNNER_TEMP/verified-reports"
+          --predicate "$RUNNER_TEMP/apk-verification-predicate.json"
+      - name: Publish the custom verification attestation
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
+        with:
+          subject-name: ${{ steps.predicate.outputs.subject_name }}
+          subject-digest: ${{ steps.predicate.outputs.subject_digest }}
+          predicate-type: https://github.com/masudaayano156/moa-theme-viewer/verification/apk/v1
+          predicate-path: ${{ runner.temp }}/apk-verification-predicate.json
+          create-storage-record: false
+          push-to-registry: false

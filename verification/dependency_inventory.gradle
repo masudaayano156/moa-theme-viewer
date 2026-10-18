@@ -1,0 +1,27 @@
+// Public release-runtime dependency inventory; never reads signing/server files.
+gradle.projectsEvaluated {
+    def app = gradle.rootProject.project(':app')
+    app.tasks.register('writeSecurityInventory') {
+        doLast {
+            def outputPath = app.providers.gradleProperty('verificationInventoryPath')
+                .orElse(new File(app.layout.buildDirectory.get().asFile, 'verification/dependencies.cdx.json').absolutePath).get()
+            def destination = new File(outputPath)
+            if (destination.exists()) throw new GradleException('Choose a new inventory output file.')
+            def components = app.configurations.releaseRuntimeClasspath.resolvedConfiguration.resolvedArtifacts.collect { artifact ->
+                def id = artifact.moduleVersion.id
+                def sha = java.security.MessageDigest.getInstance('SHA-256').digest(artifact.file.bytes).encodeHex().toString()
+                def encoded = { String value -> java.net.URLEncoder.encode(value, 'UTF-8').replace('+','%20') }
+                [type:'library', group:id.group, name:id.name, version:id.version,
+                 purl:'pkg:maven/'+encoded(id.group)+'/'+encoded(id.name)+'@'+encoded(id.version)+'?type='+encoded(artifact.type),
+                 hashes:[[alg:'SHA-256',content:sha]]]
+            }.sort { a,b -> (a.group+':'+a.name+':'+a.version) <=> (b.group+':'+b.name+':'+b.version) }
+            def report = [bomFormat:'CycloneDX',specVersion:'1.6',version:1,
+                metadata:[component:[type:'application',name:'app.moa.client',version:app.android.defaultConfig.versionName],
+                    properties:[[name:'scope',value:'Resolved Android releaseRuntimeClasspath inputs only; excludes OS, WebView, build toolchain and remote services.']]],
+                components:components]
+            destination.parentFile.mkdirs()
+            destination.setText(groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(report))+'\n','UTF-8')
+            println('Runtime dependency components: '+components.size())
+        }
+    }
+}

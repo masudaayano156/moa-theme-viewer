@@ -1,0 +1,71 @@
+{
+  "schema": 1,
+  "repository": "masudaayano156/moa-theme-viewer",
+  "version": "0.8.0",
+  "version_code": 18,
+  "package": "app.moa.client",
+  "source_commit": "8edaec0b04fde6f309adbd15152660487dafe6f3",
+  "embedded_vcs_revision": "da87a9ee11823d02d163a03f3011a6ae7578a7c1",
+  "certificate_sha256": "d425e1a47b90276aefb8d8ae1617fd44b0528113be25712faea20079b1211993",
+  "apk": {
+    "filename": "moa-0.8.0.apk",
+    "bytes": 3166675,
+    "sha256": "376ab9db79f017f2228ad54971490335580d195e7d0cc307744c51c327ccfb3e",
+    "url": "https://github.com/masudaayano156/moa-theme-viewer/releases/download/v0.8.0/moa-0.8.0.apk"
+  },
+  "permissions": [
+    {
+      "name": "android.permission.ACCESS_NETWORK_STATE",
+      "max_sdk": null
+    },
+    {
+      "name": "android.permission.CAMERA",
+      "max_sdk": null
+    },
+    {
+      "name": "android.permission.INTERNET",
+      "max_sdk": null
+    },
+    {
+      "name": "android.permission.POST_NOTIFICATIONS",
+      "max_sdk": null
+    },
+    {
+      "name": "android.permission.READ_EXTERNAL_STORAGE",
+      "max_sdk": 28
+    },
+    {
+      "name": "android.permission.RECEIVE_BOOT_COMPLETED",
+      "max_sdk": null
+    },
+    {
+      "name": "android.permission.RECORD_AUDIO",
+      "max_sdk": null
+    },
+    {
+      "name": "android.permission.WAKE_LOCK",
+      "max_sdk": null
+    },
+    {
+      "name": "android.permission.WRITE_EXTERNAL_STORAGE",
+      "max_sdk": 28
+    },
+    {
+      "name": "app.moa.client.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION",
+      "max_sdk": null
+    },
+    {
+      "name": "com.google.android.c2dm.permission.RECEIVE",
+      "max_sdk": null
+    }
+  ],
+  "allowed_rebuild_differences": [
+    "META-INF/version-control-info.textproto"
+  ],
+  "provenance_note": "Locally built before the source commit; packaged VCS revision differs. All other 188 entries matched a source rebuild. Not an exact-bit reproducibility pass.",
+  "external_antivirus": {
+    "status": "not_submitted",
+    "lookup_status": "item_not_found_on_2026-10-18",
+    "url": "https://www.virustotal.com/gui/file/376ab9db79f017f2228ad54971490335580d195e7d0cc307744c51c327ccfb3e"
+  }
+}

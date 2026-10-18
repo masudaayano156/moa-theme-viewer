@@ -9,12 +9,11 @@ public final class NotificationConsent {
     private static final int VERSION = 1;
     private NotificationConsent() { }
 
-    /** The old hidden per-post option must not mute an already enabled notification connection. */
+    /** A connected notification token is not consent to send public post/comment URLs.
+     * Keep every existing explicit choice; needsPrompt/settings handle missing consent. */
     public static void migrateEnabledConnection(Context context) {
-        SharedPreferences prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+        SharedPreferences prefs = prefs(context);
         if (prefs.getBoolean("global_connection_migrated", false)) return;
-        if (PushClient.isEnabled(context) && PushRelayClient.isPaired(context) && PushNotifications.canNotify(context))
-            CommunityOptions.setAutoWatchOwnPosts(context, true);
         prefs.edit().putBoolean("global_connection_migrated", true).commit();
     }
     private static SharedPreferences prefs(Context context) {

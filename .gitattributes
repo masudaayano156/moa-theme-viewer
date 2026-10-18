@@ -15,3 +15,6 @@ gradlew.bat text eol=crlf
 *.mjs text eol=lf
 *.jsonc text eol=lf
 *.sql text eol=lf
+*.py text eol=lf
+*.yml text eol=lf
+*.json text eol=lf

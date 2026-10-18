@@ -79,7 +79,7 @@ public final class BrowserController {
         public FavoriteEntry(String name, String url) { this.name = name; this.url = url; }
     }
     private static final java.util.concurrent.atomic.AtomicInteger NEXT_REQUEST_BLOCK = new java.util.concurrent.atomic.AtomicInteger(4100);
-    private final int FILE_PICK, SAVE_FILE, WEB_PERMISSION, MEDIA_PICK, IMAGE_PERMISSION;
+    private final int FILE_PICK, SAVE_FILE, MEDIA_PICK, IMAGE_PERMISSION;
     private final Activity activity;
     private final Listener listener;
     private final String profileName;
@@ -94,6 +94,7 @@ public final class BrowserController {
     private final SharedPreferences drafts;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final ExecutorService downloadExecutor = Executors.newSingleThreadExecutor();
+    private final java.util.concurrent.ScheduledExecutorService imageSaveTimeouts = Executors.newSingleThreadScheduledExecutor();
     private final Map<WebView, Dialog> popups = new HashMap<>();
     private final Map<WebView, SiteDialog> siteDialogs = new HashMap<>();
     private ThemeSpec theme = ThemeSpec.MAIL;
@@ -105,7 +106,7 @@ public final class BrowserController {
     private String css = "", script = "", favoritesScript = "", draftScript = "", cleanupScript = "", recoveryUrl = "", draftOwner = "";
     private String communityScript = "", communityCss = "", commentNotificationScript = "";
     private int lastDraftPromptGeneration = -1;
-    private AlertDialog draftDialog, permissionDialog;
+    private AlertDialog draftDialog;
     private AlertDialog imageMenu;
     private ImageSelection imageSelection;
     private ImageSelection permissionImageSelection, grantedImageSelection;
@@ -122,8 +123,8 @@ public final class BrowserController {
     private boolean browserPaused;
     private long presentationWork;
     private ValueCallback<Uri[]> fileCallback;
-    private WebView fileOwner, permissionOwner;
-    private boolean filePickerOutstanding, fileMultiple, permissionAwaitingSystem;
+    private WebView fileOwner;
+    private boolean filePickerOutstanding, fileMultiple;
     private boolean mediaPickerOutstanding;
     private AlertDialog fileActionDialog;
     private final PostSubmissionTracker postSubmissions = new PostSubmissionTracker();
@@ -133,7 +134,6 @@ public final class BrowserController {
     private DownloadRequest pendingDownload;
     private boolean savePickerOutstanding;
     private String downloadCancellationNotice;
-    private PermissionRequest pendingPermission;
     private View fullscreenView;
     private WebView fullscreenOwner;
     private WebChromeClient.CustomViewCallback fullscreenCallback;
@@ -143,7 +143,7 @@ public final class BrowserController {
         this.listener = listener;
         int requestBlock = NEXT_REQUEST_BLOCK.getAndAdd(10);
         if (requestBlock > 65000) throw new IllegalStateException("Restart the application before creating more browser instances");
-        FILE_PICK=requestBlock+1; SAVE_FILE=requestBlock+2; WEB_PERMISSION=requestBlock+3; MEDIA_PICK=requestBlock+4; IMAGE_PERMISSION=requestBlock+5;
+        FILE_PICK=requestBlock+1; SAVE_FILE=requestBlock+2; MEDIA_PICK=requestBlock+4; IMAGE_PERMISSION=requestBlock+5;
         this.profileName = AccountProfiles.activeId(activity);
         this.cookies = AccountProfiles.cookies(profileName);
         drafts = activity.getSharedPreferences("moa_editor_drafts", Activity.MODE_PRIVATE);
@@ -185,10 +185,9 @@ public final class BrowserController {
                 && !peerIdentityWaiting && !peerPageStale && !authNavigationPending
                 && fullscreenView == null && popups.isEmpty() && siteDialogs.isEmpty()
                 && (draftDialog == null || !draftDialog.isShowing())
-                && (permissionDialog == null || !permissionDialog.isShowing())
                 && (fileActionDialog == null || !fileActionDialog.isShowing())
-                && !filePickerOutstanding && !mediaPickerOutstanding && !permissionAwaitingSystem
-                && isListPage(getUrl()) && !web.canScrollVertically(-1)
+                && !filePickerOutstanding && !mediaPickerOutstanding && !imagePermissionAwaitingSystem
+                && isPullRefreshReadingPage(getUrl()) && !web.canScrollVertically(-1)
                 && pageScale <= activity.getResources().getDisplayMetrics().density * 1.02f;
     }
 
@@ -596,6 +595,9 @@ public final class BrowserController {
                 if (view == web && !sameDocumentFragment(getUrl(), url)) prepareNavigation(url);
                 return false;
             }
+            // A page redirect or script cannot open another application on its own.
+            // Native menu actions call openExternal directly after the user's choice.
+            if (!request.hasGesture()) return true;
             Dialog popup = popups.get(view);
             if (popup != null) handler.post(popup::dismiss);
             openExternal(url); return true;
@@ -828,13 +830,9 @@ public final class BrowserController {
         }
         @Override public void onHideCustomView() { if (fullscreenOwner == owner) hideFullscreen(); }
         @Override public void onPermissionRequest(PermissionRequest request) {
-            activity.runOnUiThread(() -> requestWebPermission(owner, request));
-        }
-        @Override public void onPermissionRequestCanceled(PermissionRequest request) {
-            if (pendingPermission == request) {
-                pendingPermission = null; permissionOwner = null;
-                if (permissionDialog != null) { permissionDialog.dismiss(); permissionDialog = null; }
-            }
+            // This viewer has no supported recording/camera-capture feature.
+            // Photo selection and edited uploads use the system document picker.
+            activity.runOnUiThread(request::deny);
         }
     }
 
@@ -892,13 +890,6 @@ public final class BrowserController {
         if (callback != null) callback.onReceiveValue(selected);
     }
 
-    private void denyPermissionIfCurrent(PermissionRequest request) {
-        if (pendingPermission != request) return;
-        pendingPermission = null; permissionOwner = null;
-        request.deny();
-        if (permissionDialog != null) { permissionDialog.dismiss(); permissionDialog = null; }
-    }
-
     private void cancelPageRequests(WebView view) {
         if (imageSelection != null && imageSelection.source == view) cancelImageSelection();
         if (view == web) cancelNavigationGuard();
@@ -912,7 +903,6 @@ public final class BrowserController {
             if (callback != null) callback.onReceiveValue(null);
             if (fileActionDialog != null) fileActionDialog.dismiss();
         }
-        if (permissionOwner == view && pendingPermission != null) denyPermissionIfCurrent(pendingPermission);
     }
 
     private boolean isSafeDocument(Uri uri, boolean forWrite) {
@@ -929,26 +919,6 @@ public final class BrowserController {
         } catch (Exception invalidDocument) { return false; }
     }
 
-    private void requestWebPermission(WebView owner, PermissionRequest request) {
-        if (!isLive(owner) || pendingPermission != null || permissionAwaitingSystem
-                || !UrlPolicy.isDcHttps(request.getOrigin().toString())) { request.deny(); return; }
-        pendingPermission = request;
-        permissionOwner = owner;
-        List<String> permissions = new ArrayList<>();
-        for (String resource : request.getResources()) {
-            if (PermissionRequest.RESOURCE_AUDIO_CAPTURE.equals(resource)) permissions.add(Manifest.permission.RECORD_AUDIO);
-            if (PermissionRequest.RESOURCE_VIDEO_CAPTURE.equals(resource)) permissions.add(Manifest.permission.CAMERA);
-        }
-        if (permissions.isEmpty()) { request.deny(); pendingPermission = null; permissionOwner = null; return; }
-        permissionDialog = new AlertDialog.Builder(activity).setTitle("사이트 권한 요청")
-            .setMessage("디시인사이드에서 선택한 녹음 또는 촬영 기능에 마이크·카메라 권한이 필요합니다.")
-            .setPositiveButton("계속", (dialog, which) -> {
-                if (pendingPermission != request) return;
-                permissionAwaitingSystem = true;
-                activity.requestPermissions(permissions.toArray(new String[0]), WEB_PERMISSION);
-            }).setNegativeButton("취소", (dialog, which) -> denyPermissionIfCurrent(request))
-            .setOnCancelListener(dialog -> denyPermissionIfCurrent(request)).show();
-    }
     public boolean onRequestPermissionsResult(int code, String[] permissions, int[] results) {
         if (code == IMAGE_PERMISSION) {
             if (!imagePermissionAwaitingSystem) return true;
@@ -963,23 +933,7 @@ public final class BrowserController {
             resumeImagePermission();
             return true;
         }
-        if (code != WEB_PERMISSION) return false;
-        if (!permissionAwaitingSystem) return true;
-        permissionAwaitingSystem = false;
-        PermissionRequest request = pendingPermission; pendingPermission = null;
-        WebView owner = permissionOwner; permissionOwner = null;
-        if (request == null) return true;
-        if (!isLive(owner)) { request.deny(); return true; }
-        List<String> accepted = new ArrayList<>();
-        for (int index=0; index<Math.min(permissions.length,results.length); index++)
-            if (results[index] == PackageManager.PERMISSION_GRANTED) accepted.add(permissions[index]);
-        List<String> granted = new ArrayList<>();
-        for (String resource : request.getResources()) {
-            if (PermissionRequest.RESOURCE_AUDIO_CAPTURE.equals(resource) && accepted.contains(Manifest.permission.RECORD_AUDIO)) granted.add(resource);
-            if (PermissionRequest.RESOURCE_VIDEO_CAPTURE.equals(resource) && accepted.contains(Manifest.permission.CAMERA)) granted.add(resource);
-        }
-        if (granted.isEmpty()) request.deny(); else request.grant(granted.toArray(new String[0]));
-        return true;
+        return false;
     }
 
     public boolean onActivityResult(int requestCode, int resultCode, Intent data) {
@@ -1024,8 +978,7 @@ public final class BrowserController {
         return code == MEDIA_PICK && mediaPickerOutstanding || code == FILE_PICK && filePickerOutstanding && !mediaPickerOutstanding
                 || code == SAVE_FILE && savePickerOutstanding;
     }
-    public boolean ownsPermissionRequest(int code) { return code == WEB_PERMISSION && permissionAwaitingSystem
-            || code == IMAGE_PERMISSION && imagePermissionAwaitingSystem; }
+    public boolean ownsPermissionRequest(int code) { return code == IMAGE_PERMISSION && imagePermissionAwaitingSystem; }
 
     private boolean isSafeEditedMedia(Uri uri) {
         if (!MediaToolsActivity.validOutputUri(uri)) return false;
@@ -1123,6 +1076,11 @@ public final class BrowserController {
         authNavigationPending = false;
         finishPeerAuthentication();
         listener.onAuthenticationSettled();
+    }
+
+    private boolean isPullRefreshReadingPage(String value) {
+        return UrlPolicy.mobileReadingUrl(value) != null && ImageContextMenu.readDocument(value)
+                && (isListPage(value) || CommunityStore.canonicalArticleUrl(value) != null);
     }
 
     private boolean isListPage(String value) {
@@ -1427,7 +1385,7 @@ public final class BrowserController {
                 }
                 boolean officialDcApp = "dcapp".equals(targetScheme) && "com.dcinside.app.android".equals(intent.getPackage());
                 new AlertDialog.Builder(activity).setTitle(officialDcApp ? "디시 공식앱에서 열기" : "외부 앱 열기")
-                    .setMessage(officialDcApp ? "선택한 기능은 디시 공식앱에서 제공됩니다. 보이스 녹음 등을 이용하려면 공식앱으로 이동해야 합니다." : "선택한 링크를 다른 앱에서 엽니다.")
+                    .setMessage(officialDcApp ? "선택한 연결 기능은 디시 공식앱에서 제공됩니다." : "선택한 링크를 다른 앱에서 엽니다.")
                     .setPositiveButton("열기", (dialog, which) -> {
                         try { activity.startActivity(intent); }
                         catch (ActivityNotFoundException missing) {
@@ -1514,6 +1472,20 @@ public final class BrowserController {
     }
 
     private void saveImageToGallery(ImageSelection selected, DownloadRequest request) {
+        final long byteLimit = 100L * 1024 * 1024;
+        final long deadline = android.os.SystemClock.elapsedRealtime() + 120_000;
+        final String sizeError = "이미지 한 장은 100MiB까지 저장할 수 있어요.";
+        final String timeError = "이미지 저장 시간이 2분을 넘어 중단했어요. 연결 상태를 확인한 뒤 다시 시도해 주세요.";
+        java.util.concurrent.atomic.AtomicBoolean finished = new java.util.concurrent.atomic.AtomicBoolean();
+        java.util.concurrent.atomic.AtomicReference<HttpURLConnection> active = new java.util.concurrent.atomic.AtomicReference<>();
+        java.util.concurrent.ScheduledFuture<?> timeout = imageSaveTimeouts.schedule(() -> {
+            if (!finished.compareAndSet(false, true)) return;
+            handler.post(() -> {
+                if (selected.current()) { cancelImageSelection(); listener.onError(timeError); }
+            });
+            HttpURLConnection blocked = active.getAndSet(null);
+            if (blocked != null) blocked.disconnect();
+        }, 120_000, java.util.concurrent.TimeUnit.MILLISECONDS);
         Toast.makeText(activity, "갤러리에 이미지를 저장하고 있어요.", Toast.LENGTH_SHORT).show();
         downloadExecutor.execute(() -> {
             GalleryImageStore.Pending pending = null;
@@ -1522,10 +1494,13 @@ public final class BrowserController {
             try {
                 URL target = new URL(request.url);
                 for (int redirects=0; redirects<6; redirects++) {
-                    requireImageSaveActive(selected);
-                    connection = openDownloadConnection(request, target, "GET", 20000);
-                    connection.setReadTimeout(30000);
+                    requireImageSaveActive(selected, deadline, timeError);
+                    int remaining = (int)Math.max(1, deadline - android.os.SystemClock.elapsedRealtime());
+                    connection = openDownloadConnection(request, target, "GET", Math.min(20000, remaining));
+                    active.set(connection);
+                    connection.setReadTimeout(Math.min(30000, remaining));
                     int response = connection.getResponseCode();
+                    requireImageSaveActive(selected, deadline, timeError);
                     if (response >= 300 && response < 400) {
                         String next = connection.getHeaderField("Location");
                         connection.disconnect(); connection = null;
@@ -1533,24 +1508,31 @@ public final class BrowserController {
                         target = new URL(target, next); continue;
                     }
                     if (response < 200 || response >= 300) throw new java.io.IOException("Download failed");
+                    long expectedBytes = connection.getContentLengthLong();
+                    if (expectedBytes > byteLimit) throw new ImageSaveLimitException(sizeError);
                     // GET headers are authoritative if the image changed since HEAD.
                     ImageContextMenu.Metadata metadata = ImageContextMenu.metadata(target.toString(), connection.getContentType(), connection.getHeaderField("Content-Disposition"));
                     if (metadata == null) throw new java.io.IOException("Image response required");
-                    requireImageSaveActive(selected);
+                    requireImageSaveActive(selected, deadline, timeError);
                     pending = GalleryImageStore.begin(activity, metadata);
-                    long expectedBytes = connection.getContentLengthLong();
                     long bytes = 0;
                     try (InputStream input = connection.getInputStream(); OutputStream output = pending.open()) {
                         byte[] buffer = new byte[32768]; int count;
-                        while ((count = input.read(buffer)) != -1) {
-                            requireImageSaveActive(selected);
+                        while (true) {
+                            requireImageSaveActive(selected, deadline, timeError);
+                            connection.setReadTimeout((int)Math.max(1, Math.min(30000, deadline - android.os.SystemClock.elapsedRealtime())));
+                            count = input.read(buffer);
+                            requireImageSaveActive(selected, deadline, timeError);
+                            if (count == -1) break;
+                            if (count > byteLimit - bytes) throw new ImageSaveLimitException(sizeError);
                             output.write(buffer, 0, count); bytes += count;
                         }
                     }
                     if (bytes == 0 || expectedBytes >= 0 && bytes != expectedBytes)
                         throw new java.io.IOException("Incomplete image response");
                     if (!authorizeImageCommit(selected, request)) throw new java.io.IOException("Image save cancelled");
-                    requireImageSaveActive(selected); pending.publish(); requireImageSaveActive(selected);
+                    requireImageSaveActive(selected, deadline, timeError); pending.publish(); requireImageSaveActive(selected, deadline, timeError);
+                    if (!finished.compareAndSet(false, true)) throw new ImageSaveLimitException(timeError);
                     complete = true;
                     handler.post(() -> {
                         if (selected.current()) { cancelImageSelection(); Toast.makeText(activity, "갤러리의 Pictures/Moa에 저장했어요.", Toast.LENGTH_LONG).show(); }
@@ -1559,18 +1541,27 @@ public final class BrowserController {
                 }
                 throw new java.io.IOException("Too many redirects");
             } catch (Exception failure) {
+                String message = failure instanceof ImageSaveLimitException ? failure.getMessage()
+                        : android.os.SystemClock.elapsedRealtime() >= deadline ? timeError
+                        : "이미지를 갤러리에 저장하지 못했어요. 저장 공간과 연결 상태를 확인한 뒤 다시 시도해 주세요.";
                 handler.post(() -> {
-                    if (selected.current()) { cancelImageSelection(); listener.onError("이미지를 갤러리에 저장하지 못했어요. 저장 공간과 연결 상태를 확인한 뒤 다시 시도해 주세요."); }
+                    if (selected.current()) { cancelImageSelection(); listener.onError(message); }
                 });
             } finally {
+                finished.set(true); timeout.cancel(false); active.set(null);
                 if (connection != null) connection.disconnect();
                 if (!complete && pending != null) pending.abort();
             }
         });
     }
 
-    private void requireImageSaveActive(ImageSelection selected) throws java.io.IOException {
+    private static final class ImageSaveLimitException extends java.io.IOException {
+        ImageSaveLimitException(String message) { super(message); }
+    }
+
+    private void requireImageSaveActive(ImageSelection selected, long deadline, String timeError) throws java.io.IOException {
         if (selected.cancelled || destroyed || Thread.currentThread().isInterrupted()) throw new java.io.IOException("Image save cancelled");
+        if (android.os.SystemClock.elapsedRealtime() >= deadline) throw new ImageSaveLimitException(timeError);
     }
 
     private boolean authorizeImageCommit(ImageSelection selected, DownloadRequest request) throws InterruptedException {
@@ -1882,7 +1873,6 @@ public final class BrowserController {
         state.putString("browser.profile", profileName);
         state.putBoolean("browser.filePickerOutstanding", filePickerOutstanding);
         state.putBoolean("browser.mediaPickerOutstanding", mediaPickerOutstanding);
-        state.putBoolean("browser.permissionAwaitingSystem", permissionAwaitingSystem);
         state.putBoolean("browser.savePickerOutstanding", savePickerOutstanding);
         state.putBoolean("browser.imagePermissionAwaitingSystem", imagePermissionAwaitingSystem);
     }
@@ -1894,7 +1884,7 @@ public final class BrowserController {
         boolean interruptedPicker = state.getBoolean("browser.filePickerOutstanding", false)
                 || state.getBoolean("browser.mediaPickerOutstanding", false)
                 || state.getBoolean("browser.savePickerOutstanding", false) || state.getBoolean("browser.imagePermissionAwaitingSystem", false) || state.getString("browser.pendingDownload", null) != null;
-        filePickerOutstanding = false; mediaPickerOutstanding = false; permissionAwaitingSystem = false; savePickerOutstanding = false; imagePermissionAwaitingSystem = false;
+        filePickerOutstanding = false; mediaPickerOutstanding = false; savePickerOutstanding = false; imagePermissionAwaitingSystem = false;
         if (interruptedPicker) listener.onError("화면이 다시 생성되어 이전 첨부·저장 선택을 취소했습니다. 다시 선택해 주세요.");
         String restoredUrl = state.getString("browser.presentationUrl", "");
         prepareNavigation(restoredUrl);
@@ -1935,12 +1925,12 @@ public final class BrowserController {
         dismissDraftDialog();
         favoritesGeneration++;
         if (favoritesWeb != null) { container.removeView(favoritesWeb); favoritesWeb.destroy(); favoritesWeb = null; }
-        if (pendingPermission != null) denyPermissionIfCurrent(pendingPermission);
         finishFileSelection(null);
         for (Dialog dialog : new ArrayList<>(popups.values())) dialog.dismiss();
         popups.clear();
         if (documentScript != null) documentScript.remove();
         swipeRefresh.finish(); web.stopLoading(); swipeRefresh.removeView(web); container.removeView(swipeRefresh); web.destroy();
         downloadExecutor.shutdownNow();
+        imageSaveTimeouts.shutdownNow();
     }
 }

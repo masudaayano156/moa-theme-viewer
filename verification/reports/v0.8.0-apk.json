@@ -1,0 +1,75 @@
+{
+  "schema": 1,
+  "version": "0.8.0",
+  "sha256": "376ab9db79f017f2228ad54971490335580d195e7d0cc307744c51c327ccfb3e",
+  "bytes": 3166675,
+  "package": "app.moa.client",
+  "version_code": 18,
+  "signature_verified": true,
+  "certificate_sha256": "d425e1a47b90276aefb8d8ae1617fd44b0528113be25712faea20079b1211993",
+  "debuggable": false,
+  "permissions": [
+    {
+      "name": "android.permission.ACCESS_NETWORK_STATE",
+      "max_sdk": null,
+      "implied": false
+    },
+    {
+      "name": "android.permission.CAMERA",
+      "max_sdk": null,
+      "implied": false
+    },
+    {
+      "name": "android.permission.INTERNET",
+      "max_sdk": null,
+      "implied": false
+    },
+    {
+      "name": "android.permission.POST_NOTIFICATIONS",
+      "max_sdk": null,
+      "implied": false
+    },
+    {
+      "name": "android.permission.READ_EXTERNAL_STORAGE",
+      "max_sdk": 28,
+      "implied": true,
+      "reason": "requested WRITE_EXTERNAL_STORAGE"
+    },
+    {
+      "name": "android.permission.RECEIVE_BOOT_COMPLETED",
+      "max_sdk": null,
+      "implied": false
+    },
+    {
+      "name": "android.permission.RECORD_AUDIO",
+      "max_sdk": null,
+      "implied": false
+    },
+    {
+      "name": "android.permission.WAKE_LOCK",
+      "max_sdk": null,
+      "implied": false
+    },
+    {
+      "name": "android.permission.WRITE_EXTERNAL_STORAGE",
+      "max_sdk": 28,
+      "implied": false
+    },
+    {
+      "name": "app.moa.client.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION",
+      "max_sdk": null,
+      "implied": false
+    },
+    {
+      "name": "com.google.android.c2dm.permission.RECEIVE",
+      "max_sdk": null,
+      "implied": false
+    }
+  ],
+  "source_commit": "8edaec0b04fde6f309adbd15152660487dafe6f3",
+  "embedded_vcs_revision": "da87a9ee11823d02d163a03f3011a6ae7578a7c1",
+  "embedded_revision_matches_source": false,
+  "private_material_checks": "no_detected_match",
+  "identity_result": "pass",
+  "scope": "Release identity, declared/effective permissions and limited forbidden-file/key patterns; not a malware-free certification."
+}

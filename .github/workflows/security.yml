@@ -1,0 +1,109 @@
+name: Source security checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: source-security-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  source-audit:
+    name: Public source and permission audit
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Check reviewed source invariants
+        run: python3 verification/audit_source.py --root . --report "$RUNNER_TEMP/source-audit.json"
+      - name: Upload only the structured source report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: source-audit
+          path: ${{ runner.temp }}/source-audit.json
+          if-no-files-found: warn
+          retention-days: 30
+
+  android:
+    name: Android lint, runtime dependencies and CodeQL
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      security-events: write
+    env:
+      GRADLE_USER_HOME: ${{ runner.temp }}/security-gradle
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
+        with:
+          distribution: temurin
+          java-version: '17.0.20.1+1'
+      - name: Install the public Android SDK packages
+        run: sdkmanager 'platforms;android-35' 'build-tools;34.0.0' 'build-tools;35.0.0'
+      - name: Initialize Java analysis
+        uses: github/codeql-action/init@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4
+        with:
+          languages: java-kotlin
+          build-mode: manual
+          queries: security-extended
+      - name: Build unsigned release and run Android lint
+        run: bash ./gradlew --no-daemon --no-build-cache --no-configuration-cache :app:assembleRelease :app:lintRelease
+      - name: Inventory resolved runtime dependencies
+        run: >-
+          bash ./gradlew --no-daemon --no-build-cache --no-configuration-cache
+          --init-script verification/dependency_inventory.gradle
+          -PverificationInventoryPath="$RUNNER_TEMP/runtime-dependencies.cdx.json"
+          :app:writeSecurityInventory
+      - name: Query OSV for public dependency coordinates
+        run: >-
+          python3 verification/scan_dependencies.py
+          --inventory "$RUNNER_TEMP/runtime-dependencies.cdx.json"
+          --report "$RUNNER_TEMP/dependency-vulnerabilities.json"
+      - name: Complete Java CodeQL analysis
+        if: always() && !cancelled()
+        uses: github/codeql-action/analyze@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4
+        with:
+          category: /language:java-kotlin
+      - name: Upload only structured dependency reports
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: android-runtime-dependencies
+          path: |
+            ${{ runner.temp }}/runtime-dependencies.cdx.json
+            ${{ runner.temp }}/dependency-vulnerabilities.json
+          if-no-files-found: warn
+          retention-days: 30
+
+  javascript:
+    name: JavaScript CodeQL
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: github/codeql-action/init@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4
+        with:
+          languages: javascript-typescript
+          build-mode: none
+          queries: security-extended
+      - uses: github/codeql-action/analyze@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4
+        with:
+          category: /language:javascript-typescript
