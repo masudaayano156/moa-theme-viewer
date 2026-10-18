@@ -16,7 +16,6 @@ Android 10 이상에서는 전체 사진 접근 권한 없이 앱이 만든 이�
 | 권한 | 용도 |
 |---|---|
 | `INTERNET` | 디시 웹, 이미지·첨부파일, 사용자가 선택한 링크와 직접 통신 |
-| `app.moa.client.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION` | AndroidX가 앱 내부 동적 수신기를 외부 앱으로부터 보호하는 서명 수준 권한. APK 병합 결과에 포함될 수 있습니다. |
 
 0.9.0은 Firebase SDK·푸시 서비스를 제거합니다. `POST_NOTIFICATIONS`, `RECEIVE_BOOT_COMPLETED`, `WAKE_LOCK`, Google FCM 수신 권한을 요구하지 않습니다. 앱 안 팝업은 Android 시스템 알림이 아니므로 알림 권한 요청이 없습니다. 별도 상시 실행 서비스나 예약 작업도 없습니다.
 

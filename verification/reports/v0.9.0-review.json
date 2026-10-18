@@ -1,0 +1,38 @@
+{
+  "schema": 1,
+  "version": "0.9.0",
+  "source_commit": "23a1931b856dacc207cc0ed0c9b0eba8f1c00726",
+  "review_date": "2026-10-18",
+  "review_type": "AI-assisted source review, automated developer regressions and original-site-function offline checks; not an independent professional audit.",
+  "android_jvm_regression": {
+    "tests": 513,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "web_regression": {
+    "tests": 224,
+    "failures": 0
+  },
+  "android_lint_errors": 0,
+  "background_push_removed": true,
+  "firebase_sdk_removed": true,
+  "system_notification_permission_removed": true,
+  "server_cron_disabled": true,
+  "server_outbound_requests": false,
+  "server_database_bound_to_retired_worker": false,
+  "legacy_server_records": "retained at explicit operator request",
+  "foreground_popup_themes": 7,
+  "site_poll_interval_seconds": 90,
+  "site_poll_single_owner": true,
+  "source_payload_bytes_match": "109/109",
+  "test_code_fixtures_personal_logs_published": false,
+  "theme_names_icons_palette_unchanged": true,
+  "limitations": [
+    "No live Android login-account notification-delivery test for this new APK.",
+    "Original site notification DOM/functions and account settings can change.",
+    "An already in-flight original site response/confirmation is not cancelled by the app popup switch.",
+    "No external antivirus submission for this new APK; old scan results do not apply.",
+    "All entry bytes match; raw ZIP packaging differs, so not bit-exact reproduction."
+  ]
+}

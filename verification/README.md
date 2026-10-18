@@ -10,7 +10,29 @@
 - [발견 사항과 수정 기록](source-review.md)
 - [공개 자동 검사 실행 기록](https://github.com/masudaayano156/moa-theme-viewer/actions)
 
-## 최신 0.8.2 검사 결과
+## 최신 0.9.0 검사 결과
+
+백그라운드 푸시·Firebase SDK·기기 등록·글별 추적과 알림 권한을 제거했습니다. 앱 이름·테마 이름·색상·아이콘은 그대로입니다. 운영자 요청으로 구버전 릴리스와 APK를 삭제하며, 아래 과거 보고서는 기록으로만 남깁니다. 구버전 APK 다운로드는 제공하지 않습니다.
+
+| 검사 | 실제 결과와 범위 |
+|---|---|
+| APK | 전용 인증서 v2/v3 서명 유효·디버깅 꺼짐, 약 1.15MB |
+| 실제 권한 | 인터넷, Android 8~9 이미지 저장 쓰기·암묵적 읽기 3개. 알림·재부팅·Wake lock·FCM 수신 권한 없음 |
+| 공개 소스 재빌드 | VCS·DEX·Manifest·리소스·자산을 포함해 **109/109 항목 내용 동일** |
+| 파일 전체 재현 | 서명 블록만 제거해도 ZIP 포장 차이가 남아 **완전한 비트 단위 일치 아님** |
+| 의존성 | 공개 Maven 15개, OSV 조회 완료·알려진 취약점 일치 없음. Firebase·Google Play services 런타임 제거 |
+| 개발 검사 | Android JVM 513개·웹 224개 통과, 실패 0·lint 오류 0. 테스트 코드와 개인 자료는 공개하지 않음 |
+| 팝업 | 7개 테마·밝음/어두움·강조색, 한 화면의 90초 주기, 비활성화·중복 방지 검사. 실제 휴대폰 계정의 새 알림 수신은 미검증 |
+| 외부 다중 백신 | 새 APK 미제출. 0.8.1·0.8.2 VirusTotal 결과를 이 버전에 적용하지 않음 |
+| GitHub 자동 검사 | [워크플로 실제 실행 상태](https://github.com/masudaayano156/moa-theme-viewer/actions) 확인. 완료 기록은 별도로 갱신 |
+
+- [0.9.0 APK 다운로드](https://github.com/masudaayano156/moa-theme-viewer/releases/download/v0.9.0/moa-0.9.0.apk) · [릴리스와 SHA-256](https://github.com/masudaayano156/moa-theme-viewer/releases/tag/v0.9.0)
+- [버전·해시·권한](releases/v0.9.0.json) · [APK 검사](reports/v0.9.0-apk.json) · [재빌드 비교](reports/v0.9.0-rebuild.json)
+- [검토·개발 검사 범위](reports/v0.9.0-review.json) · [의존성 목록](reports/v0.9.0-dependencies.cdx.json) · [OSV 결과](reports/v0.9.0-dependencies-osv.json)
+
+0.9.0 재현에는 Firebase 설정이나 APK 클라이언트 값 추출이 필요하지 않습니다. 키·계정 정보 없이 빌드합니다. 기존 서버의 조회·발송 예약과 DB 연결을 종료했으며, 서버 기록은 명시적 선택에 따라 보존합니다.
+
+## 이전 0.8.2 검사 결과
 
 **완료된 실제 실행:** [소스·lint·CodeQL·OSV](https://github.com/masudaayano156/moa-theme-viewer/actions/runs/39096346205) · [APK 재빌드·서명·검증 증명 확인](https://github.com/masudaayano156/moa-theme-viewer/actions/runs/39096883369) · [정리된 CI 기록](reports/v0.8.2-ci.json)
 
@@ -24,7 +46,7 @@
 | 개발 검증 | Android JVM 755회 통과·실패/오류/스킵 0, lint 오류 0. 별도 검증 도구 합성 입력 45회 통과. 전문 보안 감사가 아님 |
 | 공개 자동 검사 | [소스 검사·lint·CodeQL·OSV 실행](https://github.com/masudaayano156/moa-theme-viewer/actions/workflows/security.yml), [APK 검증 실행](https://github.com/masudaayano156/moa-theme-viewer/actions/workflows/verify-release.yml)의 실제 상태 확인 |
 
-- [APK 다운로드](https://github.com/masudaayano156/moa-theme-viewer/releases/download/v0.8.2/moa-0.8.2.apk) · [릴리스·체크섬](https://github.com/masudaayano156/moa-theme-viewer/releases/tag/v0.8.2)
+- 해당 구버전 릴리스·APK 배포는 종료했습니다. 아래 검사 자료는 당시 기록입니다.
 - [VirusTotal 원본 보고서](https://www.virustotal.com/gui/file/862c0b7f81ab9a75d5d96d74e1b0bec771a0ae22aac6c24b29fb7ed29db5e9e9) · [검사 시점 요약](reports/v0.8.2-virustotal.json)
 - [버전 정보](releases/v0.8.2.json) · [APK 검사](reports/v0.8.2-apk.json) · [재빌드 상세 비교](reports/v0.8.2-rebuild.json)
 - [검토·개발 검증 범위](reports/v0.8.2-review.json) · [실제 비밀값 제외 대조 범위](reports/v0.8.2-secret-exclusion.json)
@@ -47,7 +69,7 @@
 | 개발 검증 | Android JVM 747회 통과·실패/오류/스킵 0, lint 오류 0. 별도 검증 도구 합성 입력 44회 통과. 전문 보안 감사가 아님 |
 | 공개 자동 검사 | [소스 검사·lint·CodeQL·OSV 실행](https://github.com/masudaayano156/moa-theme-viewer/actions/workflows/security.yml), [APK 검증 실행](https://github.com/masudaayano156/moa-theme-viewer/actions/workflows/verify-release.yml)의 실제 상태 확인 |
 
-- [APK 다운로드](https://github.com/masudaayano156/moa-theme-viewer/releases/download/v0.8.1/moa-0.8.1.apk) · [릴리스·체크섬](https://github.com/masudaayano156/moa-theme-viewer/releases/tag/v0.8.1)
+- 해당 구버전 릴리스·APK 배포는 종료했습니다. 아래 검사 자료는 당시 기록입니다.
 - [VirusTotal 원본 보고서](https://www.virustotal.com/gui/file/4923612ab3bdf0106816befcf27350731ceb16039aa6ae3675247e2476e4e9ed) · [검사 시점 요약](reports/v0.8.1-virustotal.json)
 - [버전 정보](releases/v0.8.1.json) · [APK 검사](reports/v0.8.1-apk.json) · [재빌드 상세 비교](reports/v0.8.1-rebuild.json)
 - [검토·개발 검증 범위](reports/v0.8.1-review.json) · [실제 비밀값 제외 대조 범위](reports/v0.8.1-secret-exclusion.json)
@@ -79,7 +101,7 @@
 Python 3와 Android SDK Build Tools 35.0.0, Java가 준비된 환경에서 실행합니다. 이 도구는 APK를 설치하거나 실행하지 않으며 개인키를 요구하지 않습니다.
 
 ```sh
-python verification/verify_apk.py --apk moa-0.8.2.apk --manifest verification/releases/v0.8.2.json --sdk "$ANDROID_HOME" --report apk-report.json
+python verification/verify_apk.py --apk moa-0.9.0.apk --manifest verification/releases/v0.9.0.json --sdk "$ANDROID_HOME" --report apk-report.json
 ```
 
 재현 빌드는 지정 source commit의 깨끗한 checkout에서 실행해야 합니다. 서명 블록 외의 차이를 숨기지 않습니다. 개인 빌드 로그나 추출한 임시 설정을 이슈·PR·검사 사이트에 올리지 마세요.

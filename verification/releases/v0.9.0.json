@@ -1,0 +1,44 @@
+{
+  "schema": 1,
+  "repository": "masudaayano156/moa-theme-viewer",
+  "version": "0.9.0",
+  "version_code": 21,
+  "package": "app.moa.client",
+  "source_commit": "23a1931b856dacc207cc0ed0c9b0eba8f1c00726",
+  "embedded_vcs_revision": "23a1931b856dacc207cc0ed0c9b0eba8f1c00726",
+  "certificate_sha256": "d425e1a47b90276aefb8d8ae1617fd44b0528113be25712faea20079b1211993",
+  "apk": {
+    "filename": "moa-0.9.0.apk",
+    "bytes": 1149736,
+    "sha256": "f5bf1f1e0d9d2387b4d3c231add96b5ebcd9111b8d0a1288e19fd1200f3996aa",
+    "url": "https://github.com/masudaayano156/moa-theme-viewer/releases/download/v0.9.0/moa-0.9.0.apk"
+  },
+  "permissions": [
+    {
+      "name": "android.permission.INTERNET",
+      "max_sdk": null
+    },
+    {
+      "name": "android.permission.READ_EXTERNAL_STORAGE",
+      "max_sdk": 28
+    },
+    {
+      "name": "android.permission.WRITE_EXTERNAL_STORAGE",
+      "max_sdk": 28
+    }
+  ],
+  "allowed_rebuild_differences": [],
+  "provenance_note": "Locally built and signed from the identified clean public source. All 109 packaged entry bytes match an independent clean-source rebuild, including VCS. ZIP packaging differs after removing the signing block; not bit-exact reproduction.",
+  "external_antivirus": {
+    "status": "not_submitted",
+    "reason": "This new APK has not been submitted. Earlier-version scan results do not apply."
+  },
+  "source_content_rebuild_verified": true,
+  "bit_exact_reproduction": false,
+  "background_push_removed": true,
+  "firebase_sdk_removed": true,
+  "ci_verification": {
+    "status": "pending",
+    "scope": "source checks and packaged entry comparison; no signing key uploaded"
+  }
+}

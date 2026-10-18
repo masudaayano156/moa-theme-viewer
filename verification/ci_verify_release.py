@@ -130,6 +130,39 @@ def entry_map(values):
     return result
 
 
+def reviewed_client_mode(expected):
+    removed = expected.get("firebase_sdk_removed", False)
+    if type(removed) is not bool:
+        raise ValueError("Reviewed Firebase removal metadata must be a boolean")
+    return "none_required" if removed else "legacy_apk_resources"
+
+
+def client_input_claim(value, expected_mode):
+    """Validate an explicit input mode without accepting partially empty claims."""
+    fields = ("client_input_mode", "selected_apk_client_resource_names",
+              "selected_client_inputs_sha256", "temporary_client_inputs_created",
+              "temporary_client_inputs_deleted")
+    if any(field not in value for field in fields) or value["client_input_mode"] != expected_mode:
+        raise ValueError("Client input mode differs from the reviewed source configuration")
+    names = value["selected_apk_client_resource_names"]
+    digest = value["selected_client_inputs_sha256"]
+    created = value["temporary_client_inputs_created"]
+    deleted = value["temporary_client_inputs_deleted"]
+    if expected_mode == "none_required":
+        if names != [] or digest is not None or created is not False or deleted is not False:
+            raise ValueError("A build requiring no client inputs must report no extraction or temporary input")
+        origin = "none-required-by-reviewed-source"
+    elif expected_mode == "legacy_apk_resources":
+        if (names != list(reproduce_apk.CLIENT_NAMES) or not isinstance(digest, str)
+                or not HEX.fullmatch(digest) or created is not True or deleted is not True):
+            raise ValueError("Historical client inputs require the complete allowlist, digest and cleanup")
+        origin = "five-allowlisted-public-resource-values-from-reference-apk"
+    else:
+        raise ValueError("Unsupported client input mode")
+    return {"mode": expected_mode, "origin": origin, "names": names, "sha256": digest,
+            "temporaryInputsCreated": created, "temporaryInputsDeleted": deleted}
+
+
 def sanitized_comparison(value):
     # Explicit fields only: no paths, environment variables, logs or client values.
     fields = ("reference_apk_sha256", "rebuilt_apk_sha256", "reference_without_signing_block_sha256",
@@ -137,9 +170,10 @@ def sanitized_comparison(value):
               "rebuilt_entry_count", "identical_entry_count", "all_zip_entry_bytes_equal",
               "exact_bytes_equal_after_removing_only_signing_block", "ignored_entries", "source_commit",
               "reference_vcs_matches_source_commit", "rebuilt_vcs_matches_source_commit", "reference_vcs",
-              "rebuilt_vcs", "selected_apk_client_resource_names", "selected_client_inputs_sha256",
+              "rebuilt_vcs", "client_input_mode", "selected_apk_client_resource_names", "selected_client_inputs_sha256",
               "wrapper_jar_sha256", "wrapper_properties_sha256", "jdk", "gradle_build_cache_used",
-              "configuration_cache_used", "all_tasks_rerun", "temporary_client_inputs_deleted")
+              "configuration_cache_used", "all_tasks_rerun", "temporary_client_inputs_created",
+              "temporary_client_inputs_deleted")
     result = {key: value[key] for key in fields if key in value}
     result["reference_entries"] = entry_map(value["reference_entries"])
     result["rebuilt_entries"] = entry_map(value["rebuilt_entries"])
@@ -202,6 +236,7 @@ def inventory(source, state, sdk):
 def verify(args):
     require_main_context()
     expected = manifest(args.version)
+    expected_client_mode = reviewed_client_mode(expected)
     state, source, sdk = args.state.resolve(), args.source_root.resolve(), args.sdk.resolve()
     public = state / "public"
     public.mkdir(exist_ok=False)
@@ -209,19 +244,26 @@ def verify(args):
               "source_commit": expected["source_commit"], "verification_tool_commit": git_commit(HERE.parent),
               "apk_sha256": expected["apk"]["sha256"], "result": "incomplete",
               "claim": "Verification of an existing locally signed release; not build provenance for that APK.",
-              "limitations": ["Only five public client resources are reused from the release APK.",
+              "limitations": [("This source build requires no APK client resource input."
+                               if expected_client_mode == "none_required" else
+                               "Only five public client resources are reused from the historical release APK."),
                               "These checks do not certify absence of malware or bugs, or remote server behavior.",
                               "The inventory covers resolved Android runtime dependencies only."]}
     try:
         apk = state / expected["apk"]["filename"]
         identity = verify_apk.inspect(apk, HERE / "releases" / ("v" + args.version + ".json"), sdk)
         write_json(public / "apk-identity.json", identity)
+        source_client_mode = ("legacy_apk_resources" if (source / "firebase-config.gradle").is_file()
+                              else "none_required")
+        if source_client_mode != expected_client_mode:
+            raise ValueError("Reviewed release client input mode differs from its source checkout")
         work = reproduce_apk.output_directory(state / "rebuild")
         rebuild_args = SimpleNamespace(apk=apk, source_root=source, sdk=sdk,
             expected_apk_sha256=expected["apk"]["sha256"], expected_source_commit=expected["source_commit"],
             java_home=os.environ.get("JAVA_HOME"), build_tools="35.0.0", gradle_user_home=None,
             offline=False, build_timeout=2400)
         comparison = reproduce_apk.rebuild(rebuild_args, work)
+        client_input_claim(comparison, expected_client_mode)
         write_json(public / "comparison.json", sanitized_comparison(comparison))
         dependencies = sanitized_inventory(inventory(source, state, sdk), args.version)
         write_json(public / "dependencies.cdx.json", dependencies)
@@ -277,13 +319,12 @@ def attestation(args):
             comparison.get("reference_vcs_matches_source_commit") is not True or
             comparison.get("rebuilt_vcs_matches_source_commit") is not True):
         raise ValueError("Reports do not establish the exact reviewed release verification")
+    client_inputs = client_input_claim(comparison, reviewed_client_mode(expected))
     if (entry_map(comparison.get("reference_entries")) != entry_map(comparison.get("rebuilt_entries")) or
             any(comparison.get(key) != [] for key in ("missing_entries", "added_entries", "changed_entries")) or
             not HEX.fullmatch(comparison.get("reference_without_signing_block_sha256", "")) or
             (comparison.get("reference_without_signing_block_sha256") == comparison.get("rebuilt_apk_sha256")) != exact or
             not HEX.fullmatch(comparison.get("rebuilt_apk_sha256", "")) or
-            not HEX.fullmatch(comparison.get("selected_client_inputs_sha256", "")) or
-            comparison.get("selected_apk_client_resource_names") != list(reproduce_apk.CLIENT_NAMES) or
             identity.get("source_commit") != expected["source_commit"] or
             identity.get("embedded_vcs_revision") != expected["source_commit"] or
             identity.get("version") != args.version or identity.get("bytes") != expected["apk"]["bytes"]):
@@ -299,9 +340,7 @@ def attestation(args):
                             "permissions": "matched-reviewed-main-manifest", "allPackagedEntryBytes": "identical",
                             "rawApkBytesExcludingSigningBlock": "identical" if exact else "different", "sourceRevision": "matched",
                             "ignoredZipEntries": []},
-                 "clientInputs": {"origin": "five-allowlisted-public-resource-values-from-reference-apk",
-                                  "names": list(reproduce_apk.CLIENT_NAMES),
-                                  "sha256": comparison["selected_client_inputs_sha256"]},
+                 "clientInputs": client_inputs,
                  "reports": [{"name": name, "sha256": file_hash(folder / name)} for name in REPORT_FILES],
                  "limitations": ["This workflow did not produce or sign the downloaded release APK.",
                                   "When isBitExactReproduction is false, only packaged entry content and source metadata are matched; container differences remain visible in the reports.",
