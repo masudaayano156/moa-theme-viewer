@@ -27,11 +27,24 @@ final class ImageContextMenu {
     }
 
     static boolean readDocument(String value) {
+        if (value == null || value.length() > 8192) return false;
         if (!UrlPolicy.isDcHttps(value) || UrlPolicy.isAuthenticationPage(value)) return false;
         try {
             URI uri = URI.create(value);
             String path = uri.getPath();
-            if (path == null || path.matches("(?i).*/(?:write|modify|writemini|writepr|modifymini|modifypr)(?:/.*)?")) return false;
+            if (path == null || hasDocumentControl(path) || hasDocumentControl(uri.getQuery())) return false;
+            // Visit each decoded segment once; repeated writer-like segments
+            // must not cause regex backtracking on the UI thread.
+            for (int start = 0; start <= path.length();) {
+                int end = path.indexOf('/', start);
+                if (end < 0) end = path.length();
+                switch (path.substring(start, end).toLowerCase(Locale.ROOT)) {
+                    case "write": case "modify": case "writemini": case "writepr":
+                    case "modifymini": case "modifypr": return false;
+                    default: break;
+                }
+                start = end + 1;
+            }
             String query = uri.getRawQuery();
             if (query != null) for (String pair : query.split("&")) {
                 String[] field = pair.split("=", 2);
@@ -40,6 +53,15 @@ final class ImageContextMenu {
             }
             return true;
         } catch (Exception invalid) { return false; }
+    }
+
+    private static boolean hasDocumentControl(String value) {
+        if (value == null) return false;
+        for (int i = 0; i < value.length(); i++) {
+            char character = value.charAt(i);
+            if (Character.isISOControl(character) || character == 0x2028 || character == 0x2029) return true;
+        }
+        return false;
     }
 
     static final class Metadata {

@@ -179,3 +179,4 @@
 !/verification/reports/v0.8.1-virustotal.json
 !/verification/reports/v0.8.1-review.json
 !/verification/reports/v0.8.1-secret-exclusion.json
+!/verification/codeql-review.md

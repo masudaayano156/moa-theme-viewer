@@ -45,10 +45,10 @@ final class MediaImageOps {
 
     static int sampleSize(int width, int height, int edge, long pixels) throws IOException {
         if (width < 1 || height < 1 || width > 100000 || height > 100000 || edge < 1 || pixels < 1) throw new IOException("Invalid image dimensions");
-        int sample = 1;
+        long sample = 1;
         while ((width + sample - 1L) / sample > edge || (height + sample - 1L) / sample > edge ||
                 ((width + sample - 1L) / sample) * ((height + sample - 1L) / sample) > pixels) sample *= 2;
-        return sample;
+        return (int) sample;
     }
 
     static Bitmap decode(ContentResolver resolver, Uri uri) throws IOException {
