@@ -1,160 +1,240 @@
-/* Correlate the user's successful comment action with its public ID.
- * Text/name comparisons are ephemeral and stay in this WebView; only a URL and ID leave it.
+/* Present DC's own foreground comment/reply popup in the selected theme.
+ * The service's own notification function and single 90-second interval are
+ * reused only while this pane is active. No custom HTTP, confirmation, comment
+ * capture, account credentials or native notification messages are introduced.
  */
 (function () {
   'use strict';
   if (window.top !== window || location.protocol !== 'https:' || location.hostname !== 'm.dcinside.com' ||
-      !/^\/(board|mini|person)\/[A-Za-z0-9_]{1,80}\/[1-9][0-9]{0,18}\/?$/.test(location.pathname)) return;
-  if (window.MoaCommentNotifications) return;
-  var pending = null, hooked = null, observer = null, restoreTimer = null, gone = false;
-  var enabled = window.__moaNotificationsOn === true;
-  var remembered = new Set();
-  var rows = '.all-comment-lst > li.comment,.all-comment-lst > li.comment-add';
-  function send(value) { try { if (window.MoaLocalActions) MoaLocalActions.postMessage(JSON.stringify(value)); } catch (_) {} }
-  function normalize(value) { return String(value || '').replace(/\s+/g, ' ').trim(); }
-  function number(row) { var value = row && row.getAttribute('no'); return /^[1-9][0-9]{0,18}$/.test(value || '') ? value : ''; }
-  function rootOf(row) {
-    for (var item = row; item; item = item.previousElementSibling) if (item.matches('li.comment')) return number(item);
-    return '';
+      location.port && location.port !== '443' || location.username || location.password) return;
+  if (window.MoaForegroundNotifications) { window.MoaForegroundNotifications.refresh(); return; }
+
+  var sourceSelector = '.alarm-popup.alarm-default';
+  var sourceMark = 'data-moa-foreground-source';
+  var owned = 'data-moa-foreground-owned';
+  var excluded = '.thum-txt,.thum-txtin,.all-comment-lst,.moa-entry,form,[contenteditable],#textbox';
+  var sources = new Set(), seen = new Set(), observer = null, style = null, panel = null, timer = null;
+  var sitePoll = null, pollWrapper = null, pollStarted = false, pollRunning = false, lastPoll = 0;
+  var scheduled = false, gone = false, lastActive = active(), lastAccount = null, lastPage = location.href;
+  var names = {mail:'메일함',post:'X',photogram:'인스타그램',sheet:'엑셀',cafe:'네이버 카페',ebook:'E-book',magazine:'매거진'};
+  var marks = {mail:'✉',post:'↗',photogram:'♡',sheet:'▦',cafe:'☕',ebook:'▱',magazine:'¶'};
+
+  function supported() {
+    return /^\/(?:board|mini|person)\/[A-Za-z0-9_]{1,80}(?:\/[1-9][0-9]{0,18})?\/?$/.test(location.pathname) ||
+      /^\/(?:write|modify)\/[A-Za-z0-9_]{1,80}(?:\/(?:modify\/)?[1-9][0-9]{0,18})?\/?$/.test(location.pathname) ||
+      /^\/search(?:\/(?:search_main|gall_name|gall_content|movie))?\/?$/.test(location.pathname);
   }
-  function targetOf(row) {
-    if (!row.matches('li.comment-add')) return '';
-    var mention = row.querySelector('p.txt a.mention');
-    if (!mention) return rootOf(row);
-    var match = /^\s*mntFocus\(\s*([1-9][0-9]{0,18})\s*,\s*false\s*\)\s*;?\s*$/.exec(mention.getAttribute('onclick') || '');
-    return match ? match[1] : '?';
+  function active() {
+    return window.__moaInAppAlertsEnabled === true && window.__moaForegroundActive === true &&
+      !gone && !document.hidden && document.visibilityState !== 'hidden';
   }
-  function text(row) {
-    var body = row.querySelector('p.txt'); if (!body) return '';
-    var walker = document.createTreeWalker(body, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT), node, value = '';
-    while ((node = walker.nextNode())) {
-      if (node.nodeType === 1 && node.tagName === 'BR') value += ' ';
-      else if (node.nodeType === 3 && !node.parentElement.closest('a.mention')) value += node.nodeValue;
-    }
-    return normalize(value);
+  function account() {
+    var field = document.getElementById('user_id');
+    return String(field && field.value || '').slice(0, 120);
   }
-  function author(row) {
-    var mark = row.querySelector('.ginfo-area .blockCommentId[data-info]');
-    return mark ? String(mark.getAttribute('data-info') || '').toLowerCase() : '';
-  }
-  function fresh(row, at) {
-    var label = normalize((row.querySelector('.date') || {}).textContent);
-    var match = /(?:^|\s)(?:[12][0-9]{3}[.-])?([0-9]{1,2})[.-]([0-9]{1,2})\s+([0-9]{1,2}):([0-9]{2})(?:\s|$)/.exec(label);
-    if (!match) return false;
+  function siteAlertsAllowed() {
     try {
-      var format = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Seoul', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
-      for (var offset = -60000; offset <= 120000; offset += 60000) {
-        var parts = {}; format.formatToParts(new Date(at + offset)).forEach(function (part) { parts[part.type] = part.value; });
-        if (+parts.month === +match[1] && +parts.day === +match[2] && +parts.hour === +match[3] && +parts.minute === +match[4]) return true;
-      }
-    } catch (_) {}
-    return false;
+      var settings = JSON.parse(localStorage.getItem('alarm_setting'));
+      // Match alarm_notification(): the service stores its master opt-out as
+      // an onoff entry. The original R/RR branch still applies its own filters.
+      return !Array.isArray(settings) || !settings.some(function (item) { return item && item.setting === 'onoff'; });
+    } catch (_) { return false; }
   }
-  function publicationTime(row) {
-    var label = normalize((row.querySelector('.date') || {}).textContent);
-    var match = /(?:^|\s)(?:([12][0-9]{3})[.-])?([0-9]{1,2})[.-]([0-9]{1,2})\s+([0-9]{1,2}):([0-9]{2})(?:\s|$)/.exec(label);
-    if (!match) return 0;
-    try {
-      var year = match[1] ? +match[1] : +new Intl.DateTimeFormat('en',{timeZone:'Asia/Seoul',year:'numeric'}).format(new Date());
-      var value = Date.UTC(year, +match[2]-1, +match[3], +match[4]-9, +match[5]);
-      if (!match[1] && value > Date.now() + 86400000) value = Date.UTC(year-1,+match[2]-1,+match[3],+match[4]-9,+match[5]);
-      return value > Date.now()-259200000 && value <= Date.now()+120000 ? Math.floor(value/1000) : 0;
-    } catch (_) { return 0; }
+  function stopSitePoll() {
+    if (!sitePoll) return;
+    if (window.interval_Noti !== null && window.interval_Noti !== undefined) clearInterval(window.interval_Noti);
+    window.interval_Noti = null; window.set_interval_noti = 0; pollRunning = false;
   }
-  function restoreOwned() {
-    restoreTimer = null;
-    if (!enabled || gone || pending || !window.MoaLocalActions) return;
-    var user = String((document.getElementById('user_id') || {}).value || '').toLowerCase();
-    if (!user) return; // A shared guest nickname cannot prove historical ownership.
-    document.querySelectorAll('#comment_box ' + rows.replace(',', ',#comment_box ')).forEach(function (row) {
-      var id = number(row); if (!id || remembered.has(id) || author(row) !== user) return;
-      var at = publicationTime(row); if (!at) return;
-      remembered.add(id); send({ action:'restore_comment', commentId:id, publishedAt:at });
-    });
-  }
-  function scheduleRestore() {
-    if (!gone && restoreTimer === null) restoreTimer = setTimeout(restoreOwned, 300);
-  }
-  function scan() {
-    var current = pending;
-    if (!current || !current.accepted || Date.now() - current.at >= 45000) return;
-    var found = Array.from(document.querySelectorAll('#comment_box ' + rows.replace(',', ',#comment_box '))).filter(function (row) {
-      var id = number(row);
-      if (!id || current.seen.has(id) || targetOf(row) !== current.parent) return false;
-      if (current.serverId && id === current.serverId) return true;
-      if (current.user ? author(row) !== current.user : normalize((row.querySelector('.ginfo-area .nick') || {}).textContent) !== current.nick) return false;
-      return current.memo && text(row) === current.memo || current.user && fresh(row, current.at);
-    });
-    if (found.length !== 1) return;
-    var id = number(found[0]); remembered.add(id); pending = null;
-    send({ action: 'comment_published', ticket: current.ticket, commentId: id });
-  }
-  function ajax() {
-    var jq = window.jQuery;
-    if (!jq || !jq.fn || hooked === jq) return;
-    hooked = jq;
-    jq(document).on('ajaxSuccess.moaCommentNotifications', function (event, xhr, settings, result) {
-      var current = pending; if (!current || Date.now() - current.at >= 45000) return;
-      var endpoint;
-      try { endpoint = new URL(settings.url, location.href); } catch (_) { return; }
-      if (endpoint.origin !== location.origin || endpoint.pathname !== '/ajax/comment-write' ||
-          String(settings.type || settings.method || 'GET').toUpperCase() !== 'POST') return;
-      if (!result || typeof result !== 'object' || !result.result || result.result === '0') { pending = null; return; }
-      current.accepted = true;
-      ['comment_no', 'commentNo'].some(function (key) {
-        var value = String(result[key] || ''); if (!/^[1-9][0-9]{0,18}$/.test(value)) return false;
-        current.serverId = value; return true;
-      });
-      scan();
-    });
-  }
-  function arm(event, form, visual) {
-    if (!enabled || !event.isTrusted || !form || !/^comment_write(?:_reple|_mention)?$/.test(form.id) || !window.MoaLocalActions) return;
-    if (pending && pending.form === form && Date.now() - pending.at < 1500) { pending.visual = pending.visual || visual; return; }
-    if (String(form.method).toLowerCase() !== 'post') return;
-    try { var action = new URL(form.getAttribute('action') || '', location.href); if (action.origin !== location.origin || action.pathname.replace(/\/$/, '') !== location.pathname.replace(/\/$/, '')) return; } catch (_) { return; }
-    var memo = form.querySelector('textarea'), user = document.getElementById('user_id');
-    var nick = form.querySelector('input[name=comment_nick],input[name=comment_nick_reple]');
-    var name = normalize(nick && nick.value), id = String(user && user.value || '').toLowerCase();
-    var content = normalize(memo && memo.value); if (!content && !visual || !id && !name) return;
-    var bytes = new Uint8Array(16); try { crypto.getRandomValues(bytes); } catch (_) { return; }
-    var ticket = Array.from(bytes, function (byte) { return byte.toString(16).padStart(2, '0'); }).join('');
-    var field = document.getElementById('comment_no');
-    pending = { form: form, at: Date.now(), ticket: ticket, memo: content, user: id, nick: name, visual: Boolean(visual),
-      parent: form.id === 'comment_write' ? '' : String(field && field.value || ''), accepted: false,
-      seen: new Set(Array.from(document.querySelectorAll('#comment_box ' + rows.replace(',', ',#comment_box ')), number)) };
-    ajax(); send({ action: 'submitting_comment', ticket: ticket });
-    setTimeout(function () {
-      if (!pending || pending.ticket !== ticket) return;
-      if (pending.accepted) send({ action: 'comment_tracking_failed', ticket: ticket });
-      pending = null; scheduleRestore();
-    }, 45000);
-  }
-  document.addEventListener('click', function (event) {
-    var picker = event.target && event.target.closest && event.target.closest('#dcconBoxComment,#dcconBoxReple,#txtconBoxComment,#txtconBoxReple');
-    if (picker && /^(commentWrite|commentReple|commentMention)$/.test(window.dcconMode || '')) {
-      var mode = window.dcconMode === 'commentWrite' ? 'comment_write' : window.dcconMode === 'commentReple' ? 'comment_write_reple' : 'comment_write_mention';
-      arm(event, document.getElementById(mode), true); return;
+  function armSitePoll() {
+    if (window.interval_Noti === null || window.interval_Noti === undefined) {
+      window.interval_Noti = setInterval(pollWrapper, 90000);
     }
-    var button = event.target && event.target.closest && event.target.closest('button,input,a');
-    if (!button || !button.matches('button[type=submit],input[type=submit],#commentWrite,#commentReple,#commentMention,#txtconWrite,#txtconReple,#txtconMention')) return;
-    arm(event, button.form || button.closest('form'));
-  }, true);
-  // A script-triggered button.click()/requestSubmit() can produce a trusted submit
-  // event. Only an actual pointer click or Enter key may authorize this capture.
-  document.addEventListener('keydown', function (event) {
-    if (!event.isTrusted || event.isComposing || event.key !== 'Enter' || !event.target ||
-        event.target.tagName === 'TEXTAREA' && !event.ctrlKey && !event.metaKey) return;
-    arm(event, event.target.form || event.target.closest && event.target.closest('form'));
-  }, true);
-  window.addEventListener('pagehide', function () { pending = null; gone = true; if (restoreTimer !== null) clearTimeout(restoreTimer); restoreTimer = null; observer.disconnect(); });
-  window.addEventListener('pageshow', function () { gone = false; observer.observe(document,{childList:true,subtree:true}); scheduleRestore(); });
-  observer = new MutationObserver(function () { ajax(); scan(); scheduleRestore(); });
-  observer.observe(document, { childList: true, subtree: true });
-  ajax(); scheduleRestore();
-  window.MoaCommentNotifications = Object.freeze({ version: '1.0.0', refresh: function (value) {
-    var next = value === true;
-    if (enabled !== next) { remembered.clear(); pending = null; enabled = next; }
-    if (enabled) scheduleRestore();
-  } });
+    pollRunning = true;
+  }
+  function syncSitePoll() {
+    var candidate = window.alarm_notification_pop;
+    if (typeof candidate === 'function' && candidate !== pollWrapper &&
+        typeof window.set_interval_noti === 'number' && 'interval_Noti' in window) {
+      var alreadyStarted = window.set_interval_noti > 0 || window.interval_Noti !== null && window.interval_Noti !== undefined;
+      sitePoll = candidate;
+      // A late injection can find an original request in flight. Wait a full
+      // source interval before another call instead of duplicating that request.
+      if (alreadyStarted) { pollStarted = true; lastPoll = Date.now(); }
+      stopSitePoll();
+      pollWrapper = function () {
+        pollStarted = true;
+        if (!active() || !supported() || !siteAlertsAllowed()) { stopSitePoll(); return false; }
+        armSitePoll();
+        if (Date.now() - lastPoll < 90000) return false;
+        lastPoll = Date.now();
+        // The original creates its interval when this increments to 1 and
+        // stops after 3. We own that same single slot and retain its cadence.
+        window.set_interval_noti = 1;
+        return sitePoll.apply(this, arguments);
+      };
+      window.alarm_notification_pop = pollWrapper;
+    }
+    if (!sitePoll) return;
+    if (!active() || !supported() || !siteAlertsAllowed()) { stopSitePoll(); return; }
+    if (pollStarted && !pollRunning) { armSitePoll(); pollWrapper(); }
+  }
+  function plain(value) {
+    return String(value || '').replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 240);
+  }
+  function safeUrl(value) {
+    try {
+      var url = new URL(value, location.href);
+      if (url.protocol !== 'https:' || url.hostname !== 'm.dcinside.com' || url.username || url.password ||
+          url.port && url.port !== '443' || url.hash ||
+          !/^\/(?:board|mini|person)\/[A-Za-z0-9_]{1,80}\/[1-9][0-9]{0,18}\/?$/.test(url.pathname)) return '';
+      var valid = true, comment = url.searchParams.getAll('comment');
+      url.searchParams.forEach(function (_, key) { if (key !== 'comment') valid = false; });
+      if (!valid || comment.length > 1 || comment.length && !/^[1-9][0-9]{0,18}$/.test(comment[0])) return '';
+      return url.origin + url.pathname.replace(/\/$/, '') + (comment.length ? '?comment=' + comment[0] : '');
+    } catch (_) { return ''; }
+  }
+  function notification(node) {
+    if (!node.isConnected || node.closest(excluded) || node.matches('.silbe-alarm')) return null;
+    var link = node.querySelector('.one-ntc-box .ntc-lnk');
+    var badge = link && link.querySelector('.ntc');
+    var label = plain(badge && badge.textContent);
+    // The official R and RR branches insert these exact badges. Promotions,
+    // guestbook, repost and video notifications use other badges or popups.
+    if (label !== '댓글' && label !== '답글') return null;
+    var url = safeUrl(link.getAttribute('href') || '');
+    if (!url) return null;
+    var walker = document.createTreeWalker(link, NodeFilter.SHOW_TEXT), part, text = '';
+    while ((part = walker.nextNode())) {
+      if (!part.parentElement || part.parentElement.closest('.ntc,script,style,.blind')) continue;
+      text += part.nodeValue || '';
+    }
+    text = plain(text); if (!text) return null;
+    return {kind:label, url:url, text:text, key:label + '|' + url + '|' + text};
+  }
+  function displayed(node) {
+    // Ignore visibility: our own marker hides the source without changing the
+    // display/opacity properties used by the site's fadeIn/fadeOut callbacks.
+    for (var item = node; item && item.nodeType === 1; item = item.parentElement) {
+      if (item.hidden || getComputedStyle(item).display === 'none') return false;
+    }
+    return true;
+  }
+  function remember(key) {
+    seen.add(key);
+    if (seen.size > 100) seen.delete(seen.values().next().value);
+  }
+  function dismiss() {
+    if (timer !== null) clearTimeout(timer); timer = null;
+    if (panel) panel.remove(); panel = null;
+  }
+  function theme() {
+    var name = document.documentElement.getAttribute('data-moa-theme');
+    return Object.prototype.hasOwnProperty.call(names, name) ? name : '';
+  }
+  function updateTheme() {
+    if (!panel) return;
+    var current = theme();
+    if (panel.getAttribute('data-theme') !== current) panel.setAttribute('data-theme', current);
+    var context = panel.querySelector('.moa-foreground-context'), icon = panel.querySelector('.moa-foreground-icon');
+    if (context.textContent !== (names[current] || '알림')) context.textContent = names[current] || '알림';
+    if (icon.textContent !== (marks[current] || '●')) icon.textContent = marks[current] || '●';
+  }
+  function show(item) {
+    dismiss();
+    if (!active() || !document.body) return;
+    var box = document.createElement('aside'), link = document.createElement('a'), icon = document.createElement('span');
+    var words = document.createElement('span'), context = document.createElement('span'), heading = document.createElement('span');
+    var text = document.createElement('span'), close = document.createElement('button');
+    box.id = 'moa-foreground-notification'; box.setAttribute(owned, 'popup'); box.setAttribute('aria-label', '새 ' + item.kind + ' 알림');
+    link.className = 'moa-foreground-link'; link.href = item.url;
+    icon.className = 'moa-foreground-icon'; icon.setAttribute('aria-hidden', 'true');
+    words.className = 'moa-foreground-words'; context.className = 'moa-foreground-context';
+    heading.className = 'moa-foreground-heading'; heading.textContent = '새 ' + item.kind;
+    text.className = 'moa-foreground-text'; text.textContent = item.text;
+    words.append(context, heading, text); link.append(icon, words);
+    close.type = 'button'; close.className = 'moa-foreground-close'; close.textContent = '×'; close.setAttribute('aria-label', '알림 닫기');
+    close.addEventListener('click', function (event) { event.preventDefault(); event.stopPropagation(); dismiss(); });
+    link.addEventListener('click', function (event) {
+      // A pause or account/history change can race the last rendered frame.
+      if (!active() || !supported() || location.href !== lastPage || account() !== lastAccount) event.preventDefault();
+      dismiss();
+    });
+    box.append(link, close); panel = box; updateTheme();
+    // Announce only the short heading and subject, without moving input focus.
+    words.setAttribute('role', 'status'); words.setAttribute('aria-live', 'polite'); words.setAttribute('aria-atomic', 'true');
+    document.body.append(box);
+    timer = setTimeout(dismiss, 7000);
+  }
+  function installStyle() {
+    if (style && style.isConnected || !document.documentElement) return;
+    style = document.createElement('style'); style.setAttribute(owned, 'style');
+    style.textContent = [
+      'html .alarm-popup.alarm-default[' + sourceMark + '="1"]{visibility:hidden!important;pointer-events:none!important;}',
+      '#moa-foreground-notification{position:fixed!important;inset:auto!important;top:max(12px,env(safe-area-inset-top))!important;left:12px!important;right:12px!important;z-index:2147483647!important;display:flex!important;align-items:stretch!important;box-sizing:border-box!important;width:auto!important;max-width:440px!important;margin:0 auto!important;padding:0!important;overflow:hidden!important;border:1px solid var(--moa-line,#d6dbe0)!important;border-radius:14px!important;background:var(--moa-paper,#fff)!important;color:var(--moa-ink,#17202a)!important;box-shadow:0 5px 24px #0003!important;font:14px/1.4 system-ui,sans-serif!important;text-indent:0!important;text-align:left!important;}',
+      '#moa-foreground-notification *{box-sizing:border-box!important;float:none!important;text-indent:0!important;}',
+      '#moa-foreground-notification .moa-foreground-link{display:flex!important;align-items:center!important;gap:12px!important;min-width:0!important;flex:1!important;padding:14px!important;text-decoration:none!important;color:inherit!important;background:transparent!important;}',
+      '#moa-foreground-notification .moa-foreground-icon{display:flex!important;align-items:center!important;justify-content:center!important;flex:0 0 40px!important;width:40px!important;height:40px!important;border-radius:12px!important;background:var(--moa-tint,#edf1f5)!important;color:var(--moa-accent,#0b57d0)!important;font:24px/1 system-ui,sans-serif!important;}',
+      '#moa-foreground-notification .moa-foreground-words{display:block!important;min-width:0!important;flex:1!important;}',
+      '#moa-foreground-notification .moa-foreground-context{display:block!important;margin:0 0 2px!important;color:var(--moa-muted,#536471)!important;font:11px/1.4 system-ui,sans-serif!important;}',
+      '#moa-foreground-notification .moa-foreground-heading{display:block!important;color:var(--moa-accent,#0b57d0)!important;font:700 14px/1.4 system-ui,sans-serif!important;}',
+      '#moa-foreground-notification .moa-foreground-text{display:-webkit-box!important;-webkit-line-clamp:2!important;-webkit-box-orient:vertical!important;overflow:hidden!important;overflow-wrap:anywhere!important;white-space:normal!important;margin-top:3px!important;color:var(--moa-ink,#17202a)!important;font:14px/1.45 system-ui,sans-serif!important;}',
+      '#moa-foreground-notification .moa-foreground-close{display:flex!important;align-items:center!important;justify-content:center!important;flex:0 0 44px!important;min-width:44px!important;min-height:44px!important;padding:0!important;margin:0!important;border:0!important;background:transparent!important;color:var(--moa-muted,#536471)!important;font:24px/1 system-ui,sans-serif!important;cursor:pointer!important;}',
+      '#moa-foreground-notification a:focus-visible,#moa-foreground-notification button:focus-visible{outline:2px solid var(--moa-accent,#0b57d0)!important;outline-offset:-3px!important;}',
+      '#moa-foreground-notification[data-theme="mail"]{border-radius:16px!important;}#moa-foreground-notification[data-theme="post"]{border-radius:18px!important;border-left:4px solid var(--moa-accent,#0b57d0)!important;}',
+      '#moa-foreground-notification[data-theme="photogram"] .moa-foreground-icon{border-radius:50%!important;font-size:30px!important;}#moa-foreground-notification[data-theme="sheet"]{border-radius:0!important;border-top:4px solid var(--moa-accent,#0b57d0)!important;}#moa-foreground-notification[data-theme="sheet"] .moa-foreground-icon{border-radius:0!important;}',
+      '#moa-foreground-notification[data-theme="cafe"]{border-radius:8px!important;}#moa-foreground-notification[data-theme="ebook"]{border-radius:3px!important;border-left:5px solid var(--moa-accent,#845536)!important;}#moa-foreground-notification[data-theme="ebook"] .moa-foreground-text{font-family:Georgia,serif!important;}',
+      '#moa-foreground-notification[data-theme="magazine"]{border-radius:0!important;border-top:3px double var(--moa-accent,#af3d2e)!important;}#moa-foreground-notification[data-theme="magazine"] .moa-foreground-heading{font-family:Georgia,serif!important;}',
+      '@media(max-width:320px){#moa-foreground-notification{left:8px!important;right:8px!important;}#moa-foreground-notification .moa-foreground-link{gap:8px!important;padding:10px!important;}#moa-foreground-notification .moa-foreground-icon{flex-basis:32px!important;width:32px!important;height:36px!important;}}'
+    ].join('');
+    (document.head || document.documentElement).append(style);
+  }
+  function scan(baseline) {
+    scheduled = false;
+    if (!document.documentElement) return;
+    installStyle();
+    var currentAccount = account(), currentPage = location.href, nowActive = active() && siteAlertsAllowed();
+    if (lastAccount !== null && currentAccount !== lastAccount || currentPage !== lastPage) {
+      dismiss(); seen.clear(); baseline = true;
+    }
+    if (nowActive && !lastActive) baseline = true;
+    lastAccount = currentAccount; lastPage = currentPage; lastActive = nowActive;
+    syncSitePoll();
+    if (!nowActive || !supported()) dismiss();
+    var wanted = new Set();
+    document.querySelectorAll(sourceSelector).forEach(function (node) {
+      var item = supported() && notification(node); if (!item) return;
+      wanted.add(node); sources.add(node);
+      if (node.getAttribute(sourceMark) !== '1') node.setAttribute(sourceMark, '1');
+      if (!displayed(node) || seen.has(item.key)) return;
+      remember(item.key);
+      if (!baseline && nowActive) show(item);
+    });
+    sources.forEach(function (node) {
+      if (!wanted.has(node)) { node.removeAttribute(sourceMark); sources.delete(node); }
+    });
+    updateTheme();
+  }
+  function schedule() {
+    if (gone || scheduled) return;
+    scheduled = true; Promise.resolve().then(function () { if (!gone) scan(false); else scheduled = false; });
+  }
+  function observe() {
+    if (!observer) observer = new MutationObserver(function (records) {
+      if (records.some(function (record) {
+        var node = record.target.nodeType === 1 ? record.target : record.target.parentElement;
+        return !node || !node.closest('[' + owned + ']');
+      })) schedule();
+    });
+    observer.observe(document, {subtree:true,childList:true,characterData:true,attributes:true,
+      attributeFilter:['class','style','href','hidden','value','data-moa-theme','data-moa-dark']});
+  }
+  function refresh() { scan(false); }
+  document.addEventListener('visibilitychange', refresh);
+  window.addEventListener('moa-in-app-alerts-state', refresh);
+  window.addEventListener('popstate', function () { scan(true); });
+  window.addEventListener('hashchange', function () { scan(true); });
+  window.addEventListener('pagehide', function () { gone = true; dismiss(); stopSitePoll(); observer.disconnect(); });
+  window.addEventListener('pageshow', function () { gone = false; observe(); scan(true); });
+  window.MoaForegroundNotifications = Object.freeze({version:'1.0.0',refresh:refresh});
+  observe(); scan(false);
 })();

@@ -52,10 +52,8 @@ public final class MainActivity extends Activity implements BrowserController.Li
     private boolean detailOpen, activityResumed, primaryResumed = true, detailResumed;
     private boolean primaryLoading, detailLoading;
     private CommunityToolsDialog communityDialog;
-    private CommentWatchDialog commentWatchDialog;
     private long accountSwitchGeneration;
     private AlertDialog userActionDialog;
-    private AlertDialog notificationConsentDialog;
     private LinearLayout root;
     private FrameLayout content;
     private View browserView;
@@ -81,13 +79,6 @@ public final class MainActivity extends Activity implements BrowserController.Li
     private boolean pendingLauncherValue;
     private long launcherChangeGeneration;
     private Runnable launcherTimeout;
-    private static final int PUSH_PERMISSION_REQUEST = 4201;
-    private AlertDialog pushDialog;
-    private boolean pushBusy;
-    private long pushUiGeneration;
-    private String pushStatus = "";
-    private Runnable pushTimeout;
-
     @Override public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         preferences = getSharedPreferences("moa_preferences", MODE_PRIVATE);
@@ -103,7 +94,6 @@ public final class MainActivity extends Activity implements BrowserController.Li
         colors = selectedPalette();
         loadFavorites();
         CommunityStore.migrateLegacySavedArticles(this);
-        NotificationConsent.migrateEnabledConnection(this);
         getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
         if (Build.VERSION.SDK_INT >= 30) {
             getWindow().setDecorFitsSystemWindows(false);
@@ -163,18 +153,11 @@ public final class MainActivity extends Activity implements BrowserController.Li
             setBrowserVisible(true);
             browser.open(LOGIN_URL);
         }
-        handlePushIntent(getIntent());
     }
 
     @Override protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
         setIntent(intent);
-        handlePushIntent(intent);
-    }
-
-    private void handlePushIntent(Intent intent) {
-        String target = PushNotifications.consumeTarget(intent);
-        if (target != null && browser != null) navigate(target);
     }
 
     private void buildChrome() {
@@ -257,6 +240,8 @@ public final class MainActivity extends Activity implements BrowserController.Li
                 right.width = rightWidth; right.height = -1; right.weight = rightWeight; detail.setLayoutParams(right);
             }
         }
+        browser.setForegroundAlertOwner(primaryVisible && !detailVisible && activityResumed);
+        if (detailBrowser != null) detailBrowser.setForegroundAlertOwner(detailVisible && activityResumed);
         boolean resumePrimary = primaryVisible && activityResumed;
         if (primaryResumed != resumePrimary) {
             primaryResumed = resumePrimary; if (resumePrimary) browser.onResume(); else browser.onPause();
@@ -279,15 +264,6 @@ public final class MainActivity extends Activity implements BrowserController.Li
             }
             @Override public void onUserActions(String nickname, String id, String ip) {
                 if (owner[0] == detailBrowser) MainActivity.this.onUserActions(nickname, id, ip);
-            }
-            @Override public void onOwnArticlePublished(String url) {
-                if (owner[0] == detailBrowser) MainActivity.this.onOwnArticlePublished(url);
-            }
-            @Override public void onOwnCommentPublished(String url) {
-                if (owner[0] == detailBrowser) MainActivity.this.onOwnCommentPublished(url);
-            }
-            @Override public void onOwnCommentRestored(String url, long publishedAtMillis) {
-                if (owner[0] == detailBrowser) MainActivity.this.onOwnCommentRestored(url, publishedAtMillis);
             }
             @Override public void onAuthenticationChanged() { forwardAuthentication(owner[0], true); }
             @Override public void onAuthenticationSettled() { forwardAuthentication(owner[0], false); }
@@ -1229,9 +1205,9 @@ public final class MainActivity extends Activity implements BrowserController.Li
         launcherHint.setPadding(0, 0, 0, dp(7));
         panel.addView(launcherHint);
         panel.addView(line(), new LinearLayout.LayoutParams(-1, dp(1)));
-        TextView pushChoice = settingsRow("푸시 알림", PushClient.isEnabled(this) ? "켜짐   ›" : "꺼짐   ›");
-        pushChoice.setOnClickListener(v -> { dialog.dismiss(); showPushSettings(); });
-        panel.addView(pushChoice);
+        TextView alertChoice = settingsRow("앱 안 알림", CommunityOptions.inAppAlertsEnabled(this) ? "켜짐   ›" : "꺼짐   ›");
+        alertChoice.setOnClickListener(v -> { dialog.dismiss(); showInAppAlertSettings(); });
+        panel.addView(alertChoice);
         panel.addView(line(), new LinearLayout.LayoutParams(-1, dp(1)));
         TextView communityChoice = settingsRow("커뮤니티 도구", "차단 · 메모 · 보관함 · 작성   ›");
         communityChoice.setTag("community-tools-setting");
@@ -1264,7 +1240,7 @@ public final class MainActivity extends Activity implements BrowserController.Li
             @Override public void onAction(String action) {
                 switch (action) {
                     case "accounts": showAccountProfiles(); break;
-                    case "push": showCommentWatches(); break;
+                    case "in_app_alerts": showInAppAlertSettings(); break;
                     case "split": applyPaneLayout(); break;
                     case "media_editor":
                         startActivity(MediaToolsActivity.createIntent(MainActivity.this, new ArrayList<>(), true)
@@ -1287,17 +1263,6 @@ public final class MainActivity extends Activity implements BrowserController.Li
         }
         setBrowserVisible(true);
         current.openCommunitySourceTool(kind);
-    }
-
-    private void showCommentWatches() {
-        if (commentWatchDialog != null) commentWatchDialog.dismiss();
-        commentWatchDialog = new CommentWatchDialog(this, new CommentWatchDialog.Host() {
-            @Override public ThemeSpec.Palette palette() { return colors; }
-            @Override public boolean isDark() { return dark; }
-            @Override public String currentUrl() { return currentBrowser().getUrl(); }
-            @Override public void openPushSettings() { showPushSettings(); }
-        });
-        commentWatchDialog.show();
     }
 
     @Override public void onUserActions(String nickname, String id, String ip) {
@@ -1354,22 +1319,6 @@ public final class MainActivity extends Activity implements BrowserController.Li
     private void refreshCommunityOptions() {
         browser.refreshCommunityOptions();
         if (detailBrowser != null) detailBrowser.refreshCommunityOptions();
-    }
-
-    @Override public void onOwnArticlePublished(String url) {
-        OwnPostWatchQueue.EnqueueResult result = OwnPostWatchQueue.enqueue(this, url);
-        if (result == OwnPostWatchQueue.EnqueueResult.STORAGE_ERROR)
-            toast("글은 등록됐지만 댓글 알림 준비를 저장하지 못했어요. 휴대폰 저장 공간을 확인해주세요.");
-    }
-
-    @Override public void onOwnCommentPublished(String url) {
-        OwnPostWatchQueue.EnqueueResult result = OwnPostWatchQueue.enqueue(this, url);
-        if (result == OwnPostWatchQueue.EnqueueResult.STORAGE_ERROR)
-            toast("댓글은 등록됐지만 답글 알림 준비를 저장하지 못했어요. 휴대폰 저장 공간을 확인해주세요.");
-    }
-
-    @Override public void onOwnCommentRestored(String url, long publishedAtMillis) {
-        OwnPostWatchQueue.restoreComment(this, url, publishedAtMillis);
     }
 
     private void showAccountProfiles() {
@@ -1441,186 +1390,24 @@ public final class MainActivity extends Activity implements BrowserController.Li
         });
     }
 
-    private void showPushSettings() {
+    private void showInAppAlertSettings() {
         if (isFinishing() || isDestroyed()) return;
-        ScrollView scroll = new ScrollView(this);
         LinearLayout panel = vertical();
+        panel.setTag("in-app-alert-settings");
         panel.setPadding(dp(23), dp(8), dp(23), dp(16));
-        scroll.addView(panel);
-        boolean enabled = PushClient.isEnabled(this);
-        boolean paired = PushRelayClient.isPaired(this);
-        String state = pushBusy ? "알림 연결을 확인하고 있어요" : !enabled || !CommunityOptions.autoWatchOwnPosts(this) ? "댓글 알림 꺼짐"
-                : !PushNotifications.canNotify(this) ? "휴대폰에서 알림이 차단되어 있어요"
-                : PushRelayClient.connectionStatus(this);
-        panel.addView(text(state, 17, colors.text, true));
-        TextView description = text("알림을 켜면 이 앱에서 작성한 글의 댓글과 내 댓글에 달린 답글을 자동으로 알려드려요. 글마다 등록하거나 별도 스위치를 켤 필요가 없어요. 서버가 주기적으로 확인하므로 알림은 늦어질 수 있습니다.", 13, colors.mutedText, false);
+        Switch enabled = settingSwitch("앱 안 알림", CommunityOptions.inAppAlertsEnabled(this));
+        enabled.setTag("in-app-alerts-enabled");
+        enabled.setOnCheckedChangeListener((view, checked) -> {
+            CommunityOptions.setInAppAlertsEnabled(this, checked);
+            refreshCommunityOptions();
+        });
+        panel.addView(enabled);
+        TextView description = text("앱을 열어 사용하는 동안 디시 웹사이트에서 받은 댓글·답글 알림을 현재 테마의 팝업으로 보여줘요. 디시 웹사이트에서 로그인이 필요하며, 앱을 닫거나 다른 앱으로 이동하면 알림을 확인하지 않아요.", 13, colors.mutedText, false);
         description.setPadding(0, dp(12), 0, dp(12));
         description.setLineSpacing(dp(3), 1f);
         panel.addView(description);
-        panel.addView(text(CommunityOptions.autoWatchOwnPosts(this) && enabled
-                ? "내 글·댓글 알림 · 자동으로 받기" : "내 글·댓글 알림 · 꺼짐", 14, colors.text, true));
-        long pendingPosts = OwnPostWatchQueue.pendingCount(this);
-        if (pendingPosts > 0) panel.addView(text("연결을 기다리는 글·댓글 " + pendingPosts + "개 · 연결되면 자동으로 이어서 처리해요.", 12, colors.mutedText, false));
-        if (!browser.supportsAutomaticPostTracking()) panel.addView(text("글·댓글 작성 감지를 위해 Android System WebView를 업데이트해 주세요.", 12, colors.accent, false));
-        if (!pushStatus.isEmpty()) {
-            TextView status = text(pushStatus, 13, colors.text, false);
-            status.setPadding(0, 0, 0, dp(12));
-            panel.addView(status);
-        }
-        if (!PushClient.isConfigured(this)) {
-            panel.addView(text("이 빌드에는 푸시 연결 설정이 준비되지 않았어요.", 13, colors.mutedText, false));
-        } else {
-            TextView dataNotice = text("알림을 켜면 기기별 푸시 식별자가 Google과 발송 서버에 등록됩니다. 이 앱이 확인 메시지를 받아 자동으로 기기를 연결하며, 별도 코드나 계정 가입은 필요 없어요. 디시 비밀번호·로그인 쿠키는 보내지 않아요.", 12, colors.mutedText, false);
-            dataNotice.setPadding(0, dp(8), 0, dp(12));
-            panel.addView(dataNotice);
-            panel.addView(pushAction(enabled && CommunityOptions.autoWatchOwnPosts(this) ? "알림 연결 다시 확인" : "댓글 알림 켜기", !pushBusy, this::beginPushEnable));
-            if (enabled) {
-                if (PushRelayClient.isConfigured(this)) {
-                    if (!paired || PushRelayClient.isConnecting(this)) panel.addView(text(
-                            "확인 메시지는 화면에 표시하지 않아요. 앱을 다시 열면 진행 중인 연결을 이어서 확인합니다.", 12, colors.mutedText, false));
-                    panel.addView(pushAction("테스트 알림 받기", !pushBusy && paired && PushRelayClient.isConnectionReady(this)
-                            && PushNotifications.canNotify(this), this::testPush));
-                    if (paired) panel.addView(pushAction("최근 알림 글 보기", !pushBusy, () -> {
-                        if (pushDialog != null) pushDialog.dismiss(); showCommentWatches();
-                    }));
-                } else panel.addView(text("발송 서버 연결이 아직 준비되지 않았어요.", 13, colors.mutedText, false));
-            }
-        }
-        PushNotifications.TestStatus testStatus = PushNotifications.lastTestStatus(this);
-        if (testStatus.receivedAtMillis > 0) panel.addView(text(
-                "posted".equals(testStatus.resultCode) ? "테스트 알림 · 휴대폰 수신을 확인했어요."
-                        : "테스트 알림은 수신됐어요. 휴대폰 알림 허용 상태를 확인해주세요.", 12, colors.mutedText, false));
-        if (enabled) panel.addView(pushAction("알림 끄고 연결 해제", true, this::disablePush));
-        panel.addView(pushAction("휴대폰 알림 설정", true, () -> {
-            try {
-                startActivity(new Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS)
-                        .putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, getPackageName()));
-            } catch (android.content.ActivityNotFoundException unavailable) { toast("휴대폰 설정에서 앱 알림을 확인해 주세요."); }
-        }));
-        AlertDialog dialog = dialogBuilder().setTitle("댓글 알림").setView(scroll).setPositiveButton("닫기", null).create();
-        pushDialog = dialog;
-        showAdaptiveDialog(dialog, () -> { dialog.dismiss(); showPushSettings(); }, () -> {
-            if (pushDialog == dialog) pushDialog = null;
-        });
-    }
-
-    private TextView pushAction(String label, boolean enabled, Runnable action) {
-        TextView item = plainAction(label, label, v -> action.run());
-        item.setMinHeight(dp(48));
-        item.setEnabled(enabled);
-        item.setAlpha(enabled ? 1f : .45f);
-        return item;
-    }
-
-    private long startPushAction() {
-        pushBusy = true;
-        long request = ++pushUiGeneration;
-        if (pushTimeout != null) root.removeCallbacks(pushTimeout);
-        pushTimeout = () -> finishPushAction(request, PushRelayClient.isConnecting(this)
-                ? PushRelayClient.connectionStatus(this) : "확인에 시간이 걸리고 있어요. 네트워크를 확인한 뒤 다시 시도해 주세요.");
-        root.postDelayed(pushTimeout, 90_000);
-        if (pushDialog != null && pushDialog.isShowing()) { pushDialog.dismiss(); showPushSettings(); }
-        return request;
-    }
-
-    private void finishPushAction(long request, String message) {
-        if (request != pushUiGeneration || isFinishing() || isDestroyed()) return;
-        if (pushTimeout != null) { root.removeCallbacks(pushTimeout); pushTimeout = null; }
-        pushBusy = false;
-        pushStatus = message;
-        if (pushDialog != null && pushDialog.isShowing()) { pushDialog.dismiss(); showPushSettings(); }
-    }
-
-    private void beginPushEnable() {
-        if (pushBusy) return;
-        if (!CommunityOptions.autoWatchOwnPosts(this)) { showNotificationConsent(); return; }
-        if (Build.VERSION.SDK_INT >= 33 && !PushNotifications.hasPermission(this)) {
-            requestPermissions(new String[]{android.Manifest.permission.POST_NOTIFICATIONS}, PUSH_PERMISSION_REQUEST);
-            return;
-        }
-        long request = startPushAction();
-        PushRelayClient.requestConnection(this);
-        PushClient.enable(this, new PushClient.TokenCallback() {
-            @Override public void onToken(String token) {
-                PushRelayClient.connect(getApplicationContext(), token,
-                        request == pushUiGeneration && !isFinishing() && !isDestroyed() ? pushRelayResult(request) : null);
-            }
-            @Override public void onError(String message) { finishPushAction(request, message); }
-        });
-    }
-
-    private PushRelayClient.Callback pushRelayResult(long request) {
-        return new PushRelayClient.Callback() {
-            @Override public void onSuccess(String message) { finishPushAction(request, message); if (!isFinishing() && !isDestroyed()) refreshCommunityOptions(); }
-            @Override public void onError(String message) { finishPushAction(request, message); }
-        };
-    }
-
-    private void testPush() {
-        if (pushBusy) return;
-        long request = startPushAction();
-        PushClient.getToken(this, new PushClient.TokenCallback() {
-            @Override public void onToken(String token) {
-                if (request != pushUiGeneration || isFinishing() || isDestroyed()) return;
-                PushRelayClient.connect(MainActivity.this, token, new PushRelayClient.Callback() {
-                    @Override public void onSuccess(String message) {
-                        if (request == pushUiGeneration && !isFinishing() && !isDestroyed())
-                            PushRelayClient.test(MainActivity.this, pushRelayResult(request));
-                    }
-                    @Override public void onError(String message) { finishPushAction(request, message); }
-                });
-            }
-            @Override public void onError(String message) { finishPushAction(request, message); }
-        });
-    }
-
-    private void disablePush() {
-        long request = startPushAction();
-        CommunityOptions.setAutoWatchOwnPosts(this, false);
-        PushClient.disable(this);
-        PushRelayClient.disconnect(this, pushRelayResult(request));
-    }
-
-    private void maybeShowNotificationConsent() {
-        if (!activityResumed || isFinishing() || isDestroyed() || notificationConsentDialog != null
-                || adaptiveDialog != null && adaptiveDialog.isShowing()
-                || !PushClient.isConfigured(this) || !PushRelayClient.isConfigured(this)
-                || !NotificationConsent.needsPrompt(this)) return;
-        showNotificationConsent();
-    }
-
-    private void showNotificationConsent() {
-        if (isFinishing() || isDestroyed() || notificationConsentDialog != null) return;
-        if (pushDialog != null) pushDialog.dismiss();
-        AlertDialog dialog = dialogBuilder().setTitle("글과 댓글의 새 답글 알림을 받을까요?")
-                .setMessage("한 번 켜면 이 앱에서 작성한 글의 새 댓글과 내가 쓴 댓글의 답글 알림을 각각 작성 후 3일간 자동으로 받아요. 글마다 등록할 필요는 없어요.\n\n"
-                        + "기기 연결 정보는 Google과 알림 서버에, 작성한 공개 글·댓글의 주소와 댓글 번호·새 답글 확인 정보는 알림 서버에 저장됩니다. 본문·닉네임·로그인 정보는 보내지 않아요.\n\n"
-                        + "댓글을 주기적으로 확인하므로 알림이 늦어질 수 있고, 설정에서 언제든 끌 수 있어요.")
-                .setNegativeButton("나중에", (d, w) -> NotificationConsent.postpone(this))
-                .setPositiveButton("알림 받기", (d, w) -> {
-                    if (!NotificationConsent.accept(this)) { toast("알림 설정을 저장하지 못했어요."); return; }
-                    notificationConsentDialog = null;
-                    root.post(this::beginPushEnable);
-                }).create();
-        notificationConsentDialog = dialog;
-        dialog.setOnCancelListener(ignored -> NotificationConsent.postpone(this));
-        showAdaptiveDialog(dialog, () -> { notificationConsentDialog = null; dialog.dismiss(); showNotificationConsent(); }, () -> {
-            if (notificationConsentDialog == dialog) notificationConsentDialog = null;
-        });
-    }
-
-    private void resumePushConnection() {
-        if (!PushClient.isEnabled(this) || !PushClient.isConfigured(this) || !PushNotifications.hasPermission(this)) return;
-        PushRelayClient.resumeRegistration(this);
-        PushClient.getToken(this, new PushClient.TokenCallback() {
-            @Override public void onToken(String token) { PushRelayClient.refreshToken(getApplicationContext(), token); }
-            @Override public void onError(String ignored) { /* The explicit settings action can display a retry message. */ }
-        });
-        if (pushDialog != null && pushDialog.isShowing()) {
-            if (PushRelayClient.isConnecting(this)) {
-                long request = startPushAction(); PushRelayClient.observeConnection(this, pushRelayResult(request));
-            } else { pushDialog.dismiss(); showPushSettings(); }
-        }
+        AlertDialog dialog = dialogBuilder().setTitle("앱 안 알림").setView(panel).setPositiveButton("닫기", null).create();
+        showAdaptiveDialog(dialog, () -> { dialog.dismiss(); showInAppAlertSettings(); });
     }
 
     private TextView settingsRow(String title, String value) {
@@ -1678,7 +1465,7 @@ public final class MainActivity extends Activity implements BrowserController.Li
         menu.getMenu().add(0, 10, 9, "글쓰기");
         menu.getMenu().add(0, 11, 10, "커뮤니티 도구");
         menu.getMenu().add(0, 12, 11, "간편 계정");
-        menu.getMenu().add(0, 13, 12, "댓글 알림 관리");
+        menu.getMenu().add(0, 13, 12, "앱 안 알림");
         menu.setOnMenuItemClickListener(item -> {
             switch (item.getItemId()) {
                 case 1: navigateBack(); break;
@@ -1699,7 +1486,7 @@ public final class MainActivity extends Activity implements BrowserController.Li
                 case 10: compose(); break;
                 case 11: showCommunityTools(); break;
                 case 12: showAccountProfiles(); break;
-                case 13: showCommentWatches(); break;
+                case 13: showInAppAlertSettings(); break;
                 default: return false;
             }
             return true;
@@ -1746,7 +1533,7 @@ public final class MainActivity extends Activity implements BrowserController.Li
         addDrawerAction(panel, dialog, "settings", "환경 설정", this::showSettings);
         addDrawerAction(panel, dialog, "settings", "커뮤니티 도구", this::showCommunityTools);
         addDrawerAction(panel, dialog, "account", "간편 계정", this::showAccountProfiles);
-        addDrawerAction(panel, dialog, "inbox", "댓글 알림 관리", this::showCommentWatches);
+        addDrawerAction(panel, dialog, "inbox", "앱 안 알림", this::showInAppAlertSettings);
         addDrawerAction(panel, dialog, "account", "로그인", this::openLogin);
         addDrawerAction(panel, dialog, "page", "앱 정보 · 개인정보", this::showAbout);
         showAdaptiveDialog(dialog, () -> { dialog.dismiss(); showMailDrawer(); });
@@ -1839,8 +1626,8 @@ public final class MainActivity extends Activity implements BrowserController.Li
                 + "개인정보와 기기 저장\n"
                 + "선택한 테마, 글자 크기, 직접 저장한 페이지, 차단 규칙, 이용자 메모, 글 보관함, 최근 본 글과 작성 문구는 이 기기에 저장됩니다. 최근 기록은 도구에서 끄거나 삭제할 수 있습니다. 작성 중인 텍스트 초안도 복원을 위해 기기에 임시 저장될 수 있습니다. 비밀번호와 첨부파일은 초안에 저장하지 않습니다. 간편 계정은 지원되는 WebView의 별도 로그인 공간을 사용하며 앱에는 공간 이름만 저장합니다. 로그인 쿠키와 웹 저장소는 Android WebView에 저장되고 로그인 정보·작성 내용은 해당 서비스로 전달됩니다. 앱은 별도의 계정 서버나 자체 분석 도구를 사용하지 않습니다.\n\n"
                 + "계정 즐겨찾기는 로그인한 서비스에서 불러옵니다. 이 목록을 별도 파일로 저장하지 않으며, 로그아웃 상태가 확인되거나 새로 불러오기에 실패하면 홈의 계정 목록을 비웁니다. 직접 저장한 페이지는 계정 즐겨찾기와 분리하여 이 기기에 보관합니다.\n\n"
-                + "푸시 알림은 선택 기능입니다. 켜면 Google FCM에 기기별 식별자가 등록되고, 기기 수신 확인을 거친 자동 연결 시 Cloudflare 발송 서버에 푸시 토큰과 임의의 기기 연결 정보가 저장됩니다. 알림에 동의한 뒤 이 앱에서 작성한 글·댓글은 각각 작성 후 3일간 자동으로 등록되며, 공개 글·댓글 주소, 댓글 번호와 최신 답글 번호 등 확인 정보가 서버에 저장됩니다. 이전 글이나 댓글도 직접 추가할 수 있습니다. 글 단위로 묶어 2분 30초를 기준으로 확인합니다. 분 단위 예약으로 실제 확인 간격은 보통 약 3분이며, 알림 배분·발송이나 혼잡으로 더 늦어질 수 있습니다. 디시 로그인 비밀번호·쿠키와 비공개 글은 서버에 전달하지 않습니다. 공개 글을 서버가 조회하므로 해당 사이트에 서버의 접근 기록이 남을 수 있습니다. 즉시 알림은 아니며 네트워크·사이트 제한에 따라 지연되거나 중단될 수 있습니다. 알림을 끄면 기기에서 표시를 중단하고 토큰 폐기·서버 연결 삭제를 요청합니다. 통신 실패 시 서버 삭제는 다음 연결 때 재시도합니다.\n\n"
-                + "사진을 첨부할 때 Android 파일 선택창에서 직접 고릅니다. 카메라·마이크 권한은 요구하지 않으며 직접 촬영·녹음은 지원하지 않습니다. Android 13 이상에서는 선택한 알림 표시에, Android 8~9에서는 새 이미지 저장에 권한을 요청합니다. Android 10 이상 이미지 저장에는 전체 사진 접근 권한을 요구하지 않습니다. 원본 페이지가 외부 서비스를 포함하면 해당 서비스의 개인정보 처리방침이 적용됩니다.\n\n"
+                + "앱 안 알림은 앱을 열어 사용하는 동안 디시 웹사이트가 전달한 댓글·답글 알림을 테마 팝업으로 보여줍니다. 웹사이트 로그인이 필요하며 앱을 닫거나 다른 앱으로 이동한 동안에는 알림을 확인하지 않습니다. 알림 설정은 이 기기에만 저장됩니다.\n\n"
+                + "사진을 첨부할 때 Android 파일 선택창에서 직접 고릅니다. 카메라·마이크 권한은 요구하지 않으며 직접 촬영·녹음은 지원하지 않습니다. Android 8~9에서는 새 이미지 저장에 권한을 요청합니다. Android 10 이상 이미지 저장에는 전체 사진 접근 권한을 요구하지 않습니다. 원본 페이지가 외부 서비스를 포함하면 해당 서비스의 개인정보 처리방침이 적용됩니다.\n\n"
                 + "테마를 바꿔도 열린 페이지는 다시 불러오지 않습니다. 앱 강제 종료·기기 재시작 뒤 작성 중 내용 복구는 보장되지 않으니 긴 글은 등록 전 별도로 보관해 주세요.\n\n"
                 + "콘텐츠 출처: dcinside.com\n화면 스타일 참고: Gmail · X · Instagram · Excel · 네이버 카페\n각 서비스의 공식 앱이 아닌 모아 테마 뷰어입니다.";
         ScrollView scroll = new ScrollView(this);
@@ -2004,15 +1791,6 @@ public final class MainActivity extends Activity implements BrowserController.Li
     }
 
     @Override public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
-        if (requestCode == PUSH_PERMISSION_REQUEST) {
-            if (PushNotifications.hasPermission(this)) beginPushEnable();
-            else {
-                CommunityOptions.setAutoWatchOwnPosts(this, false);
-                pushStatus = "알림 권한이 허용되지 않았어요. 필요할 때 휴대폰 알림 설정에서 변경할 수 있어요.";
-                if (pushDialog != null && pushDialog.isShowing()) { pushDialog.dismiss(); showPushSettings(); }
-            }
-            return;
-        }
         if (detailBrowser != null && detailBrowser.ownsPermissionRequest(requestCode)
                 && detailBrowser.onRequestPermissionsResult(requestCode, permissions, grantResults)) return;
         if (browser.ownsPermissionRequest(requestCode)
@@ -2035,26 +1813,20 @@ public final class MainActivity extends Activity implements BrowserController.Li
     }
 
     @Override protected void onPause() {
-        PushRelayClient.cancelConnectionObservers(); pushUiGeneration++; pushBusy = false;
-        if (pushTimeout != null && root != null) { root.removeCallbacks(pushTimeout); pushTimeout = null; }
         activityResumed = false;
         if (browser != null) browser.onPause(); primaryResumed = false;
         if (detailBrowser != null) detailBrowser.onPause(); detailResumed = false;
+        if (browser != null) browser.pauseTimers();
         super.onPause();
     }
     @Override protected void onResume() {
-        super.onResume(); activityResumed = true; applyPaneLayout(); resumePushConnection();
-        root.post(this::maybeShowNotificationConsent);
+        super.onResume();
+        if (browser != null) browser.resumeTimers();
+        activityResumed = true; applyPaneLayout();
     }
     @Override protected void onDestroy() {
-        pushUiGeneration++;
-        PushRelayClient.cancelConnectionObservers();
-        if (pushTimeout != null && root != null) { root.removeCallbacks(pushTimeout); pushTimeout = null; }
-        if (pushDialog != null) { pushDialog.dismiss(); pushDialog = null; }
-        if (notificationConsentDialog != null) { notificationConsentDialog.dismiss(); notificationConsentDialog = null; }
         accountSwitchGeneration++;
         if (communityDialog != null) { communityDialog.dismiss(); communityDialog = null; }
-        if (commentWatchDialog != null) { commentWatchDialog.dismiss(); commentWatchDialog = null; }
         if (userActionDialog != null) { userActionDialog.dismiss(); userActionDialog = null; }
         launcherChangeGeneration++;
         launcherChangePending = false;
@@ -2082,7 +1854,6 @@ public final class MainActivity extends Activity implements BrowserController.Li
         buildChrome();
         applyPaneLayout();
         if (communityDialog != null) communityDialog.resize();
-        if (commentWatchDialog != null) commentWatchDialog.resize();
         root.requestApplyInsets();
         if (homeView != null) homeView.post(() -> homeView.scrollTo(0, scrollY));
         if (restoreDialog != null) restoreDialog.run();

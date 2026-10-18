@@ -16,17 +16,14 @@ The full Gradle distribution is downloaded by the Wrapper; it is not bundled in 
 
 ## Build-resolved dependencies
 
-The following direct application dependencies are resolved by Gradle and are not vendored as binaries or source in this repository. Gradle also resolves their AndroidX, Kotlin, Google Play services, and supporting runtime dependencies. Their respective published licenses and notices apply; the Firebase dependency graph must not be treated as entirely Apache-licensed merely because Firebase itself is Apache-licensed.
+The following direct application dependencies are resolved by Gradle and are not vendored as binaries or source in this repository. Gradle also resolves their AndroidX, Kotlin, and supporting runtime dependencies. Their respective published licenses and notices apply. Firebase Messaging and Google Play services were removed in 0.9.0.
 
 | Dependency | Version |
 |---|---|
 | androidx.webkit:webkit | 1.12.1 |
 | androidx.swiperefreshlayout:swiperefreshlayout | 1.2.0 |
-| com.google.firebase:firebase-bom | 35.0.1 (version alignment) |
-| com.google.firebase:firebase-messaging | 26.0.0 (selected by the BoM) |
 
-- AndroidX and the open-source Firebase Android SDK use Apache License, Version 2.0. See [AndroidX](https://developer.android.com/jetpack/androidx) and the [Firebase Android SDK license](https://github.com/firebase/firebase-android-sdk/blob/main/LICENSE).
-- Google Play services components are distributed under their applicable Google/Android SDK terms. See [Google Play services](https://developers.google.com/android/guides/overview) and [Android SDK terms](https://developer.android.com/studio/terms).
+- AndroidX uses Apache License, Version 2.0. See [AndroidX](https://developer.android.com/jetpack/androidx).
 - Preserve dependency-provided license/notice resources when distributing the built application. The Apache-2.0 text is included in [licenses/Apache-2.0.txt](licenses/Apache-2.0.txt).
 
 Android Gradle Plugin 8.7.3 is a build tool, separate from the application's runtime dependencies, and is also published under Apache License, Version 2.0. The Android SDK is obtained separately under its own terms and is not included here.

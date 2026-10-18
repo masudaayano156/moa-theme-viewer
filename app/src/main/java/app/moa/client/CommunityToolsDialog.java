@@ -127,7 +127,7 @@ public final class CommunityToolsDialog {
         action("간편 계정 전환", "accounts");
         action("사진 편집 · 움짤 만들기", "media_editor");
         action("게시판별 자동 짤방", "autopicture");
-        action("푸시 알림", "push");
+        action("앱 안 알림", "in_app_alerts");
         heading("텍스트 초안 자동 보관");
         paragraph("페이지 이동이나 앱이 백그라운드로 갈 때 작성 중인 텍스트를 임시 보관하고, 같은 계정·작성 화면에서 복원을 안내해요. 첨부파일과 글자 서식은 보관하지 않으며 강제 종료 직전의 내용까지 저장되는 것은 아니에요.");
     }

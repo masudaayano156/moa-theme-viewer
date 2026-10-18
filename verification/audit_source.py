@@ -17,7 +17,11 @@ FORBIDDEN_PERMISSIONS = {
     'android.permission.READ_CALL_LOG', 'android.permission.READ_PHONE_STATE',
     'android.permission.ACCESS_FINE_LOCATION', 'android.permission.ACCESS_COARSE_LOCATION',
     'android.permission.MANAGE_EXTERNAL_STORAGE', 'android.permission.READ_MEDIA_IMAGES',
-    'android.permission.READ_MEDIA_VIDEO', 'com.google.android.gms.permission.AD_ID'
+    'android.permission.READ_MEDIA_VIDEO', 'com.google.android.gms.permission.AD_ID',
+    'android.permission.POST_NOTIFICATIONS', 'android.permission.RECEIVE_BOOT_COMPLETED',
+    'android.permission.WAKE_LOCK', 'android.permission.SCHEDULE_EXACT_ALARM',
+    'android.permission.USE_EXACT_ALARM', 'android.permission.FOREGROUND_SERVICE',
+    'com.google.android.c2dm.permission.RECEIVE', 'com.google.android.c2dm.permission.SEND'
 }
 PATTERNS = {
     'private_key': re.compile(r'-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----\s+[A-Za-z0-9+/=\r\n]{24,}'),
@@ -26,6 +30,37 @@ PATTERNS = {
     'private_windows_profile': re.compile(r'(?i)\b[A-Z]:[\\/]+Users[\\/]+[A-Za-z0-9_. -]+[\\/]'),
     'private_test_hook': re.compile(r'moa\.offlineTest|setOfflineTestMode|ExpiredTokenTransport|interface DownloadConnections|org\.robolectric|synthetic_')
 }
+
+
+def retired_worker_findings(config):
+    """A retired relay must not regain variables, D1 bindings, or scheduled work.
+
+    Check environment overrides as well as the top-level configuration. A
+    placeholder database identifier still declares a binding and is rejected.
+    """
+    findings = []
+    def check(value, location):
+        if not isinstance(value, dict):
+            findings.append({'rule': 'invalid_worker_configuration', 'location': location})
+            return
+        for field, empty, rule in (
+                ('vars', {}, 'retired_worker_has_vars'),
+                ('d1_databases', [], 'retired_worker_has_database_binding')):
+            if field in value and value[field] != empty:
+                findings.append({'rule': rule, 'location': location})
+        triggers = value.get('triggers', {})
+        if not isinstance(triggers, dict):
+            findings.append({'rule': 'invalid_worker_configuration', 'location': location+'.triggers'})
+        elif 'crons' in triggers and triggers['crons'] != []:
+            findings.append({'rule': 'retired_worker_has_cron_trigger', 'location': location})
+        environments = value.get('env', {})
+        if not isinstance(environments, dict):
+            findings.append({'rule': 'invalid_worker_configuration', 'location': location+'.env'})
+        else:
+            for name, environment in environments.items():
+                check(environment, location+'.env.'+name)
+    check(config, 'push-worker/wrangler.jsonc')
+    return findings
 
 
 def audit(root):
@@ -62,15 +97,17 @@ def audit(root):
     for node in list(manifest.findall('uses-permission')) + list(manifest.findall('uses-permission-sdk-23')):
         name = node.get(android+'name'); maximum = node.get(android+'maxSdkVersion')
         permissions.append({'name': name, 'max_sdk': maximum})
-        if name in FORBIDDEN_PERMISSIONS:
+        if name in FORBIDDEN_PERMISSIONS or (name and name.endswith('.permission.C2D_MESSAGE')):
             findings.append({'rule': 'unexpected_sensitive_permission', 'permission': name})
         if name in {'android.permission.WRITE_EXTERNAL_STORAGE', 'android.permission.READ_EXTERNAL_STORAGE'} and maximum != '28':
             findings.append({'rule': 'legacy_storage_must_end_at_api28', 'permission': name})
+    for node in manifest.iter():
+        name = node.get(android+'name', '')
+        if (re.search(r'firebase|com\.google\.android\.c2dm', name, re.I)
+                or name.endswith(('.MoaMessagingService', '.PushRegistrationJobService', '.permission.C2D_MESSAGE'))):
+            findings.append({'rule': 'retired_push_manifest_component', 'component': name})
     config = json.loads((root / 'push-worker/wrangler.jsonc').read_text(encoding='utf-8'))
-    if config.get('vars') != {'FIREBASE_PROJECT_ID': 'replace-with-project-id', 'RELAY_ORIGIN': ''}:
-        findings.append({'rule': 'private_worker_configuration'})
-    if any(db.get('database_id') != '00000000-0000-0000-0000-000000000000' for db in config.get('d1_databases', [])):
-        findings.append({'rule': 'private_database_identifier'})
+    findings.extend(retired_worker_findings(config))
     return {'schema': 1, 'result': 'pass' if not findings else 'fail', 'tracked_files': len(names),
             'source_manifest_permissions': permissions, 'findings': findings,
             'scope': 'Limited known leak markers, reviewed permissions and wrapper/config invariants. No absence-of-backdoor guarantee.'}

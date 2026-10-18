@@ -3,17 +3,11 @@
   "name": "moa-push-relay",
   "main": "src/worker.mjs",
   "compatibility_date": "2026-10-17",
-  "compatibility_flags": ["global_fetch_strictly_public"],
   "workers_dev": true,
-  "observability": { "enabled": false },
-  "vars": { "FIREBASE_PROJECT_ID": "replace-with-project-id", "RELAY_ORIGIN": "" },
-  "d1_databases": [
-    {
-      "binding": "DB",
-      "database_name": "moa-push-relay",
-      "database_id": "00000000-0000-0000-0000-000000000000",
-      "migrations_dir": "migrations"
-    }
-  ],
-  "triggers": { "crons": ["* * * * *"] }
+  "observability": {
+    "enabled": false
+  },
+  "triggers": {
+    "crons": []
+  }
 }

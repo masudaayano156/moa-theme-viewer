@@ -1,15 +1,18 @@
 #!/usr/bin/env python3
 """Compare a release APK with a build of its public Android source.
 
-Only five client-side string resources are copied from the reference APK into
-temporary build input. The APK is never installed or executed. No signing key,
-service account, server credential, or original google-services.json is needed.
+Current source builds without Firebase resources, client configuration, or relay
+project variables. For historical source containing firebase-config.gradle, only
+five client-side string resources are copied from the reference APK into temporary
+build input. The APK is never installed or executed. No signing key, service
+account, server credential, or original google-services.json is needed.
 Python 3.10+, Git, JDK 17, Android SDK command-line tools and the checked-in Gradle
 Wrapper are required for `build`. The `compare` command only requires Python.
 """
 from __future__ import annotations
 
 import argparse
+from contextlib import nullcontext
 import hashlib
 import json
 import os
@@ -269,13 +272,17 @@ def rebuild(args: argparse.Namespace, out: Path) -> dict:
         raise ValueError("Java version check failed")
     jdk = normalized_jdk(java_version)
     signature = verify_signature(apk, sdk, java, args.build_tools)
-    client, package = public_client_inputs(apk, sdk, java)
-    config = {
-        "project_info": {"project_number": client["gcm_defaultSenderId"], "project_id": client["project_id"]},
-        "client": [{"client_info": {"mobilesdk_app_id": client["google_app_id"],
-                                     "android_client_info": {"package_name": package}},
-                    "api_key": [{"current_key": client["google_api_key"]}]}]
-    }
+    legacy_client_inputs = (source / "firebase-config.gradle").is_file()
+    client = {}
+    config = None
+    if legacy_client_inputs:
+        client, package = public_client_inputs(apk, sdk, java)
+        config = {
+            "project_info": {"project_number": client["gcm_defaultSenderId"], "project_id": client["project_id"]},
+            "client": [{"client_info": {"mobilesdk_app_id": client["google_app_id"],
+                                         "android_client_info": {"package_name": package}},
+                        "api_key": [{"current_key": client["google_api_key"]}]}]
+        }
     environment = os.environ.copy()
     for name in list(environment):
         if name in {"JAVA_TOOL_OPTIONS", "_JAVA_OPTIONS", "JDK_JAVA_OPTIONS", "GRADLE_OPTS"} or name.startswith("ORG_GRADLE_PROJECT_"):
@@ -288,12 +295,15 @@ def rebuild(args: argparse.Namespace, out: Path) -> dict:
             (gradle_home / "init.d").is_dir() and any((gradle_home / "init.d").rglob("*"))):
         raise ValueError("Gradle user home contains extra configuration; use a cache without init scripts or properties")
     environment["GRADLE_USER_HOME"] = str(gradle_home)
-    with tempfile.TemporaryDirectory(prefix="apk-client-inputs-", dir=out) as temporary:
-        temporary_path = Path(temporary)
-        configuration = temporary_path / "google-services.json"
-        configuration.write_text(json.dumps(config), encoding="utf-8")
-        environment["ORG_GRADLE_PROJECT_moaFirebaseConfig"] = str(configuration)
-        environment["ORG_GRADLE_PROJECT_moaPushEndpoint"] = client["moa_push_endpoint"]
+    temporary_inputs = (tempfile.TemporaryDirectory(prefix="apk-client-inputs-", dir=out)
+                        if legacy_client_inputs else nullcontext(None))
+    with temporary_inputs as temporary:
+        configuration = None
+        if legacy_client_inputs:
+            configuration = Path(temporary) / "google-services.json"
+            configuration.write_text(json.dumps(config), encoding="utf-8")
+            environment["ORG_GRADLE_PROJECT_moaFirebaseConfig"] = str(configuration)
+            environment["ORG_GRADLE_PROJECT_moaPushEndpoint"] = client["moa_push_endpoint"]
         command = [str(java), "-Dorg.gradle.appname=gradlew", "-classpath", str(wrapper),
                    "org.gradle.wrapper.GradleWrapperMain", "--no-daemon", "--no-build-cache",
                    "--no-configuration-cache", "--project-cache-dir", str(out / "project-cache"),
@@ -302,7 +312,10 @@ def rebuild(args: argparse.Namespace, out: Path) -> dict:
             command.insert(-1, "--offline")
         process = run(command, cwd=source, env=environment, timeout=args.build_timeout)
         log = process.stdout + process.stderr
-        for value in sorted([*client.values(), str(configuration)], key=len, reverse=True):
+        redacted_values = [*client.values()]
+        if configuration is not None:
+            redacted_values.append(str(configuration))
+        for value in sorted(redacted_values, key=len, reverse=True):
             log = log.replace(value, "[APK-derived client value]")
         (out / "build.log").write_text(log, encoding="utf-8")
         if process.returncode:
@@ -316,8 +329,10 @@ def rebuild(args: argparse.Namespace, out: Path) -> dict:
         "reference_vcs_matches_source_commit": report["reference_vcs"]["revision"] == commit,
         "rebuilt_vcs_matches_source_commit": report["rebuilt_vcs"]["revision"] == commit,
         "signature_verification": signature,
-        "selected_apk_client_resource_names": list(CLIENT_NAMES),
-        "selected_client_inputs_sha256": sha256(json.dumps(client, sort_keys=True).encode()),
+        "client_input_mode": "legacy_apk_resources" if legacy_client_inputs else "none_required",
+        "selected_apk_client_resource_names": list(CLIENT_NAMES) if legacy_client_inputs else [],
+        "selected_client_inputs_sha256": (sha256(json.dumps(client, sort_keys=True).encode())
+                                          if legacy_client_inputs else None),
         "wrapper_jar_sha256": sha256(wrapper.read_bytes()),
         "wrapper_properties_sha256": sha256(properties.read_bytes()),
         "jdk": jdk, "gradle_build_cache_used": False,
@@ -325,12 +340,15 @@ def rebuild(args: argparse.Namespace, out: Path) -> dict:
         "extra_gradle_user_configuration_allowed": False,
         "inherited_jvm_and_gradle_project_options_removed": True,
         "configuration_cache_used": False, "all_tasks_rerun": True,
-        "offline_dependencies": args.offline, "temporary_client_inputs_deleted": True,
+        "offline_dependencies": args.offline,
+        "temporary_client_inputs_created": legacy_client_inputs,
+        "temporary_client_inputs_deleted": legacy_client_inputs,
         "signing_key_required": False, "server_credentials_required": False,
         "limitations": ["Dependency downloads/cache must be independently trusted or verified.",
                         "JDK/SDK/dependency versions can affect reproducibility.",
-                        "APK client settings are intentionally taken from the reference APK.",
                         "Packaged-byte equality does not prove remote server behavior or absence of all bugs."]
+                       + (["Historical APK client settings are intentionally taken from the reference APK."]
+                          if legacy_client_inputs else [])
     })
     return report
 
@@ -338,7 +356,7 @@ def rebuild(args: argparse.Namespace, out: Path) -> dict:
 def arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
-    build = commands.add_parser("build", help="Extract client inputs, build public source, and compare")
+    build = commands.add_parser("build", help="Build public source and compare; extract client inputs only for historical Firebase source")
     comparison = commands.add_parser("compare", help="Compare two already-built APK files")
     for command in (build, comparison):
         command.add_argument("--apk", type=Path, required=True, help="Reference release APK")

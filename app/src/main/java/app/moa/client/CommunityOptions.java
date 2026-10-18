@@ -51,14 +51,13 @@ public final class CommunityOptions {
         preferences(context).edit().putBoolean("split_enabled", enabled).apply();
     }
 
-    public static boolean autoWatchOwnPosts(Context context) {
-        try { return preferences(context).getBoolean("auto_watch_own_posts", false); }
-        catch (ClassCastException malformed) { return false; }
+    public static boolean inAppAlertsEnabled(Context context) {
+        try { return preferences(context).getBoolean("in_app_alerts_enabled", true); }
+        catch (ClassCastException malformed) { return true; }
     }
 
-    public static void setAutoWatchOwnPosts(Context context, boolean enabled) {
-        preferences(context).edit().putBoolean("auto_watch_own_posts", enabled).commit();
-        if (!enabled) OwnPostWatchQueue.clear(context);
+    public static void setInAppAlertsEnabled(Context context, boolean enabled) {
+        preferences(context).edit().putBoolean("in_app_alerts_enabled", enabled).apply();
     }
 
     public static int accentIndex(Context context) {

@@ -68,9 +68,6 @@ public final class BrowserController {
         default void onAccountFavorites(String state, List<FavoriteEntry> items) { }
         default boolean onOpenArticle(String url) { return false; }
         default void onUserActions(String nickname, String id, String ip) { }
-        default void onOwnArticlePublished(String url) { }
-        default void onOwnCommentPublished(String url) { }
-        default void onOwnCommentRestored(String url, long publishedAtMillis) { }
         default void onAuthenticationChanged() { }
         default void onAuthenticationSettled() { }
     }
@@ -115,21 +112,17 @@ public final class BrowserController {
     private NavigationCheck navigationCheck;
     private PageContext approvedNavigationContext;
     private ScriptHandler documentScript;
-    private boolean localActionsInstalled;
     private PresentationGate presentation;
     private LinearLayout presentationCover;
     private TextView presentationMessage;
     private Button presentationRetry, presentationOriginal;
-    private boolean browserPaused;
+    private boolean browserPaused, foregroundAlertOwner;
     private long presentationWork;
     private ValueCallback<Uri[]> fileCallback;
     private WebView fileOwner;
     private boolean filePickerOutstanding, fileMultiple;
     private boolean mediaPickerOutstanding;
     private AlertDialog fileActionDialog;
-    private final PostSubmissionTracker postSubmissions = new PostSubmissionTracker();
-    private final CommentSubmissionTracker commentSubmissions = new CommentSubmissionTracker();
-    private String publishedCandidate = "";
     private boolean peerIdentityWaiting, peerPageStale;
     private DownloadRequest pendingDownload;
     private boolean savePickerOutstanding;
@@ -211,7 +204,6 @@ public final class BrowserController {
     }
     public String profileName() { return profileName; }
     /** True only after the origin-scoped, main-frame message listener was actually installed. */
-    public boolean supportsAutomaticPostTracking() { return !destroyed && localActionsInstalled; }
     private WebView createWebView() {
         WebView created = new WebView(activity);
         try { AccountProfiles.attach(created, profileName); }
@@ -327,7 +319,6 @@ public final class BrowserController {
     }
     private void openInternal(String url) {
         if (destroyed) return;
-        postSubmissions.cancel(); commentSubmissions.cancel();
         if (peerIdentityWaiting) { listener.onError("다른 화면의 로그인 처리가 끝난 뒤 다시 열어 주세요."); return; }
         String mobile = UrlPolicy.mobileReadingUrl(url), target = mobile == null ? url : mobile;
         if (UrlPolicy.isDcHttps(target)) {
@@ -338,14 +329,12 @@ public final class BrowserController {
     }
     public boolean canGoBack() { return !destroyed && (fullscreenView != null || web.canGoBack()); }
     public void goBack() {
-        postSubmissions.cancel(); commentSubmissions.cancel();
         if (fullscreenView != null) hideFullscreen();
         else if (!destroyed && web.canGoBack()) { cancelFavoritesNavigation(); snapshotDraft(() -> { prepareHistoryNavigation(-1); web.goBack(); }); }
     }
     public boolean canGoForward() { return !destroyed && web.canGoForward(); }
-    public void goForward() { if (canGoForward()) { postSubmissions.cancel(); commentSubmissions.cancel(); publishedCandidate=""; cancelFavoritesNavigation(); snapshotDraft(() -> { prepareHistoryNavigation(1); web.goForward(); }); } }
+    public void goForward() { if (canGoForward()) { cancelFavoritesNavigation(); snapshotDraft(() -> { prepareHistoryNavigation(1); web.goForward(); }); } }
     public void reload() {
-        postSubmissions.cancel(); commentSubmissions.cancel();
         if (peerIdentityWaiting) { listener.onError("다른 화면의 로그인 처리가 끝난 뒤 새로고침해 주세요."); return; }
         cancelFavoritesNavigation(); if (!recoveryUrl.isEmpty()) openInternal(recoveryUrl); else snapshotDraft(() -> { beginPresentation(getUrl(), false); web.reload(); });
     }
@@ -516,7 +505,6 @@ public final class BrowserController {
     }
 
     private void installLocalActions(WebView target) {
-        localActionsInstalled = false;
         try {
             if (!WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) return;
             WebViewCompat.addWebMessageListener(target,"MoaLocalActions",Collections.singleton("https://m.dcinside.com"),
@@ -529,37 +517,12 @@ public final class BrowserController {
                     if (raw == null || raw.length() > 2048) return;
                     try {
                         JSONObject value = new JSONObject(raw);
-                        if ("submitting_post".equals(value.optString("action"))) {
-                            if (PostSubmissionTracker.isNewWriteDocument(getUrl())) {
-                                postSubmissions.begin(getUrl(),android.os.SystemClock.elapsedRealtime());
-                            }
-                        } else if ("submitting_comment".equals(value.optString("action"))) {
-                            if (PushClient.isEnabled(activity) && CommunityOptions.autoWatchOwnPosts(activity))
-                                commentSubmissions.begin(getUrl(), value.optString("ticket"), android.os.SystemClock.elapsedRealtime());
-                        } else if ("comment_published".equals(value.optString("action"))) {
-                            String targetUrl = commentSubmissions.complete(getUrl(), value.optString("ticket"),
-                                    value.optString("commentId"), android.os.SystemClock.elapsedRealtime());
-                            if (targetUrl != null && PushClient.isEnabled(activity) && CommunityOptions.autoWatchOwnPosts(activity))
-                                listener.onOwnCommentPublished(targetUrl);
-                        } else if ("restore_comment".equals(value.optString("action"))) {
-                            String comment = value.optString("commentId"), base = CommunityStore.canonicalArticleUrl(getUrl());
-                            Object time = value.opt("publishedAt"); long now = System.currentTimeMillis() / 1000;
-                            if (base != null && comment.matches("[1-9][0-9]{0,18}") && time instanceof Number
-                                    && ((Number) time).doubleValue() == ((Number) time).longValue()
-                                    && ((Number) time).longValue() > now - 3 * 86400 && ((Number) time).longValue() <= now + 120
-                                    && PushClient.isEnabled(activity) && CommunityOptions.autoWatchOwnPosts(activity))
-                                listener.onOwnCommentRestored(base + "?comment=" + comment, ((Number) time).longValue() * 1000);
-                        } else if ("comment_tracking_failed".equals(value.optString("action"))) {
-                            if (commentSubmissions.fail(getUrl(), value.optString("ticket"), android.os.SystemClock.elapsedRealtime())
-                                    && PushClient.isEnabled(activity) && CommunityOptions.autoWatchOwnPosts(activity))
-                                listener.onError("댓글은 등록됐어요. 알림 연결은 이 화면을 다시 확인할 때 자동으로 재시도해요.");
-                        } else if ("user".equals(value.optString("action"))) {
+                        if ("user".equals(value.optString("action"))) {
                             String name = safeIdentity(value.optString("nickname")), id = safeIdentity(value.optString("id")), ip = safeIdentity(value.optString("ip"));
                             if (!name.isEmpty() || !id.isEmpty() || !ip.isEmpty()) listener.onUserActions(name,id,ip);
                         }
                     } catch (Exception invalid) { }
                 });
-            localActionsInstalled = true;
         } catch (RuntimeException | LinkageError unavailable) { /* Native tools remain available in settings. */ }
     }
 
@@ -588,7 +551,7 @@ public final class BrowserController {
                 if (request.hasGesture() && !request.isRedirect() && CommunityStore.canonicalArticleUrl(mobile) != null && listener.onOpenArticle(mobile)) return true;
                 prepareNavigation(mobile); web.loadUrl(mobile); return true;
             }
-            if (view == web && request.hasGesture() && !request.isRedirect()) { cancelFavoritesNavigation(); postSubmissions.cancel(); commentSubmissions.cancel(); }
+            if (view == web && request.hasGesture() && !request.isRedirect()) { cancelFavoritesNavigation(); }
             if (UrlPolicy.isDcHttps(url)) {
                 if (view == web && request.hasGesture() && !request.isRedirect()
                         && CommunityStore.canonicalArticleUrl(url) != null && listener.onOpenArticle(url)) return true;
@@ -605,7 +568,7 @@ public final class BrowserController {
         @Override public void onPageStarted(WebView view, String url, Bitmap favicon) {
             if (!isLive(view)) return;
             cancelPageRequests(view);
-            if (view == web) { peerPageStale = false; commentSubmissions.cancel(); }
+            if (view == web) { peerPageStale = false; }
             if (UrlPolicy.isAuthenticationPage(url)) {
                 cancelImageSelection();
                 if (!authNavigationPending) listener.onAuthenticationChanged();
@@ -630,8 +593,6 @@ public final class BrowserController {
             if (view != web) return;
             imagePolicy.update(CommunityOptions.imageMode(activity),url);
             adPolicy.update(url);
-            String article = postSubmissions.onNavigation(url,android.os.SystemClock.elapsedRealtime());
-            publishedCandidate = article == null ? "" : article;
             if (!isFavoritesPage(url) && !UrlPolicy.isAuthenticationPage(url)) openFavoritesPending = false;
             documentGeneration++;
             beginPresentation(url, false);
@@ -662,11 +623,8 @@ public final class BrowserController {
             swipeRefresh.finish();
             if (UrlPolicy.canTheme(url)) {
                 view.evaluateJavascript(draftScript, null);
-                if (CommunityStore.canonicalArticleUrl(url) != null && !commentNotificationScript.isEmpty())
+                if (!commentNotificationScript.isEmpty())
                     view.evaluateJavascript(commentSource(), null);
-                // DOCUMENT_START_SCRIPT can be unavailable even when the secure message listener works.
-                // This idempotent listener is separate from theme readiness and original-view mode.
-                if (PostSubmissionTracker.isNewWriteDocument(url)) view.evaluateJavascript(submissionHook(), null);
             }
             applyTheme();
             if (presentation == null) recordRecentArticle();
@@ -1007,7 +965,7 @@ public final class BrowserController {
         try {
             if (!WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) return;
             if (documentScript != null) { documentScript.remove(); documentScript = null; }
-            String source = cleanupScript + "\n" + draftScript + "\n" + communitySource("") + "\n" + commentSource() + "\n" + submissionHook() + ((!original && !script.isEmpty()) ? "\n" + skinSource() : "");
+            String source = cleanupScript + "\n" + draftScript + "\n" + communitySource("") + "\n" + commentSource() + ((!original && !script.isEmpty()) ? "\n" + skinSource() : "");
             documentScript = WebViewCompat.addDocumentStartJavaScript(web, source, Collections.singleton("https://m.dcinside.com"));
         } catch (RuntimeException | LinkageError unavailableProvider) {
             // Older or unavailable providers still receive the onPageFinished skin.
@@ -1019,7 +977,7 @@ public final class BrowserController {
         if (peerPageStale) { showPeerAccountCover(); return; }
         if (UrlPolicy.canTheme(getUrl()) && !cleanupScript.isEmpty()) web.evaluateJavascript(cleanupScript, null);
         if (UrlPolicy.canTheme(getUrl()) && !communityScript.isEmpty()) web.evaluateJavascript(communitySource(getUrl()), null);
-        if (CommunityStore.canonicalArticleUrl(getUrl()) != null && !commentNotificationScript.isEmpty())
+        if (UrlPolicy.canTheme(getUrl()) && !commentNotificationScript.isEmpty())
             web.evaluateJavascript(commentSource(), null);
         if (original || !UrlPolicy.canTheme(getUrl())) {
             if (original && presentation != null) revealOriginalPresentation();
@@ -1031,10 +989,33 @@ public final class BrowserController {
         else if (!script.isEmpty()) web.evaluateJavascript(skinSource(), null);
     }
 
-    private String commentSource() {
-        return "window.__moaNotificationsOn=" + (PushClient.isEnabled(activity) && CommunityOptions.autoWatchOwnPosts(activity))
-                + ";\n" + commentNotificationScript + ";window.MoaCommentNotifications&&window.MoaCommentNotifications.refresh(window.__moaNotificationsOn);";
+    private String foregroundAlertState() {
+        boolean enabled = CommunityOptions.inAppAlertsEnabled(activity);
+        boolean active = foregroundAlertOwner && !browserPaused && !peerPageStale && !peerIdentityWaiting;
+        return "window.__moaInAppAlertsEnabled=" + enabled + ";window.__moaForegroundActive=" + active + ";"
+                + "window.dispatchEvent(new CustomEvent('moa-in-app-alerts-state',{detail:{enabled:window.__moaInAppAlertsEnabled,active:window.__moaForegroundActive}}));";
     }
+
+    private String commentSource() {
+        return "if(window.top===window){" + foregroundAlertState() + "\n" + commentNotificationScript
+                + ";window.MoaForegroundNotifications&&window.MoaForegroundNotifications.refresh();}";
+    }
+
+    /** A split layout may resume both panes, but exactly one owns account popups. */
+    public void setForegroundAlertOwner(boolean owner) {
+        if (destroyed || foregroundAlertOwner == owner) return;
+        foregroundAlertOwner = owner;
+        refreshDocumentScript();
+        updateForegroundAlertState();
+    }
+
+    private void updateForegroundAlertState() {
+        if (!destroyed && UrlPolicy.canTheme(getUrl())) web.evaluateJavascript(foregroundAlertState(), null);
+    }
+
+    // Android pauses JavaScript timers globally, so only the Activity calls these.
+    public void pauseTimers() { if (!destroyed) web.pauseTimers(); }
+    public void resumeTimers() { if (!destroyed) web.resumeTimers(); }
 
     private String communitySource(String url) {
         if (communityScript.isEmpty()) return "";
@@ -1043,21 +1024,10 @@ public final class BrowserController {
                 + communityScript + "\nwindow.MoaCommunityTools&&window.MoaCommunityTools.apply(" + config + ");}";
     }
 
-    private String submissionHook() {
-        return "/*moa-submission-hook*/if(window.top===window&&!window.__moaSubmitHook){window.__moaSubmitHook=true;document.addEventListener('click',function(e){"
-                + "if(!e.isTrusted||!window.MoaLocalActions||location.protocol!=='https:'||location.hostname!=='m.dcinside.com'||!/^\\/write\\/[A-Za-z0-9_]{1,80}\\/?$/.test(location.pathname))return;"
-                + "var editing=false;new URLSearchParams(location.search).forEach(function(v,k){if(/^(mode|action)$/i.test(k)&&/^(modify|edit)$/i.test(v))editing=true;});if(editing)return;"
-                + "var n=e.target&&e.target.closest&&e.target.closest('.wrt-tit-box button[onclick],#writeForm button[onclick]');"
-                + "if(!n||!/^\\s*write_submit\\(\\);?\\s*$/.test(n.getAttribute('onclick')||''))return;"
-                + "var form=document.querySelector('#writeForm');if(!form||String(form.method).toLowerCase()!=='post')return;"
-                + "try{var action=new URL(form.getAttribute('action')||'',location.href);if(action.protocol!=='https:'||action.hostname!=='mupload.dcinside.com'||action.username||action.password||action.port||action.pathname!=='/write_new.php'||action.search||action.hash)return;}catch(_){return;}"
-                + "MoaLocalActions.postMessage(JSON.stringify({action:'submitting_post'}));},true);}";
-    }
-
     public void beginPeerAuthentication() {
         if (destroyed) return;
         peerIdentityWaiting = true; peerPageStale = UrlPolicy.canTheme(getUrl());
-        postSubmissions.cancel(); commentSubmissions.cancel(); publishedCandidate = "";
+        refreshDocumentScript(); updateForegroundAlertState();
         cancelPageRequests(web);
         authenticationGeneration++; favoritesGeneration++;
         if (favoritesWeb != null) { container.removeView(favoritesWeb); favoritesWeb.destroy(); favoritesWeb = null; }
@@ -1068,6 +1038,7 @@ public final class BrowserController {
     public void finishPeerAuthentication() {
         if (destroyed) return;
         peerIdentityWaiting = false;
+        refreshDocumentScript(); updateForegroundAlertState();
         refreshAccountFavorites();
         if (peerPageStale && isListPage(getUrl())) guardNavigation(this::reload);
     }
@@ -1126,7 +1097,7 @@ public final class BrowserController {
 
     private void recordRecentArticle() {
         String url = CommunityStore.canonicalArticleUrl(getUrl());
-        if (url == null || !CommunityStore.isHistoryEnabled(activity) && publishedCandidate.isEmpty()) return;
+        if (url == null || !CommunityStore.isHistoryEnabled(activity)) return;
         PageContext page = new PageContext();
         web.evaluateJavascript("/*moa-article-metadata*/(()=>{const n=document.querySelector('.gallview-tit-box>.tit');return n?JSON.stringify({url:location.href,title:n.textContent.slice(0,200)}):null})()", result -> {
             if (!page.isCurrent()) return;
@@ -1136,7 +1107,6 @@ public final class BrowserController {
                 JSONObject value = new JSONObject((String)decoded);
                 if (url.equals(CommunityStore.canonicalArticleUrl(value.optString("url")))) {
                     CommunityStore.recordRecent(activity, url, value.optString("title"));
-                    if (url.equals(publishedCandidate)) { publishedCandidate=""; listener.onOwnArticlePublished(url); }
                 }
             } catch (Exception invalid) { }
         });
@@ -1707,7 +1677,7 @@ public final class BrowserController {
 
     private void updateDraftOwner(String owner) {
         if (draftOwner.equals(owner)) return;
-        commentSubmissions.cancel();
+
         cancelNavigationGuard();
         invalidatePendingDownload("계정 정보가 변경되어 저장을 취소했습니다. 파일을 다시 선택해 주세요.");
         draftOwner = owner;
@@ -1896,6 +1866,8 @@ public final class BrowserController {
         if (!destroyed) {
             if (permissionImageSelection == null && grantedImageSelection == null) cancelImageSelection();
             browserPaused = true;
+            refreshDocumentScript();
+            updateForegroundAlertState();
             swipeRefresh.finish();
             if (presentation != null) presentation.suspend();
             cancelNavigationGuard();
@@ -1906,6 +1878,8 @@ public final class BrowserController {
     public void onResume() {
         if (!destroyed) {
             browserPaused = false;
+            refreshDocumentScript();
+            updateForegroundAlertState();
             resumeImagePermission();
             web.onResume();
             if (presentation != null) presentation.resume();
@@ -1917,6 +1891,8 @@ public final class BrowserController {
         cancelImageSelection();
         cancelNavigationGuard();
         clearPresentation();
+        foregroundAlertOwner = false;
+        updateForegroundAlertState();
         destroyed = true; handler.removeCallbacksAndMessages(null);
         for (SiteDialog request : new ArrayList<>(siteDialogs.values())) request.finish(false);
         pendingDownload = null;
