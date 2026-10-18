@@ -12,7 +12,7 @@
 
 ## 최신 0.9.0 검사 결과
 
-백그라운드 푸시·Firebase SDK·기기 등록·글별 추적과 알림 권한을 제거했습니다. 앱 이름·테마 이름·색상·아이콘은 그대로입니다. 운영자 요청으로 구버전 릴리스와 APK를 삭제하며, 아래 과거 보고서는 기록으로만 남깁니다. 구버전 APK 다운로드는 제공하지 않습니다.
+백그라운드 푸시·Firebase SDK·기기 등록·글별 추적과 알림 권한을 제거했습니다. 앱 이름·테마 이름·색상·아이콘은 그대로입니다. 운영자 요청으로 구버전 릴리스 13개와 첨부 파일 26개를 삭제했으며, 아래 과거 보고서는 기록으로만 남깁니다. 구버전 APK 다운로드는 제공하지 않습니다.
 
 | 검사 | 실제 결과와 범위 |
 |---|---|
@@ -24,7 +24,7 @@
 | 개발 검사 | Android JVM 513개·웹 224개 통과, 실패 0·lint 오류 0. 테스트 코드와 개인 자료는 공개하지 않음 |
 | 팝업 | 7개 테마·밝음/어두움·강조색, 한 화면의 90초 주기, 비활성화·중복 방지 검사. 실제 휴대폰 계정의 새 알림 수신은 미검증 |
 | 외부 다중 백신 | 새 APK 미제출. 0.8.1·0.8.2 VirusTotal 결과를 이 버전에 적용하지 않음 |
-| GitHub 자동 검사 | [워크플로 실제 실행 상태](https://github.com/masudaayano156/moa-theme-viewer/actions) 확인. 완료 기록은 별도로 갱신 |
+| GitHub 자동 검사 | [소스·lint·CodeQL·OSV 완료](https://github.com/masudaayano156/moa-theme-viewer/actions/runs/39101041090) · [APK 재빌드·서명·검증 증명 확인 완료](https://github.com/masudaayano156/moa-theme-viewer/actions/runs/39101135395) · [실제 완료 기록](reports/v0.9.0-ci.json) |
 
 - [0.9.0 APK 다운로드](https://github.com/masudaayano156/moa-theme-viewer/releases/download/v0.9.0/moa-0.9.0.apk) · [릴리스와 SHA-256](https://github.com/masudaayano156/moa-theme-viewer/releases/tag/v0.9.0)
 - [버전·해시·권한](releases/v0.9.0.json) · [APK 검사](reports/v0.9.0-apk.json) · [재빌드 비교](reports/v0.9.0-rebuild.json)

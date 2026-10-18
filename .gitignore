@@ -171,3 +171,4 @@
 !/verification/reports/v0.9.0-review.json
 !/verification/reports/v0.9.0-dependencies.cdx.json
 !/verification/reports/v0.9.0-dependencies-osv.json
+!/verification/reports/v0.9.0-ci.json
