@@ -1,0 +1,17 @@
+{
+  "schema": 1,
+  "checked_at_utc": "2026-10-18T04:20:23.627184+00:00",
+  "database": "OSV",
+  "endpoint": "https://api.osv.dev/v1/querybatch",
+  "inventory_sha256": "3dcb384294596ec3d284fece02cfbe9a9ebf4d20f2dba8f290cfeedb66b3a003",
+  "packages_queried": 66,
+  "query_complete": true,
+  "result": "no_known_match",
+  "findings": [],
+  "transmitted_fields": [
+    "public Maven package name",
+    "public package version",
+    "OSV page token when needed"
+  ],
+  "scope": "Known OSV Maven advisories for resolved release-runtime inputs at this time. Database coverage varies; excludes JDK/SDK, OS, WebView, remote services and unknown vulnerabilities."
+}

@@ -1,6 +1,6 @@
 # 모아 — 커뮤니티 테마 뷰어
 
-**[Android APK 다운로드 · 0.8.1 미리보기](https://github.com/masudaayano156/moa-theme-viewer/releases/download/v0.8.1/moa-0.8.1.apk)** · [릴리스와 체크섬](https://github.com/masudaayano156/moa-theme-viewer/releases/tag/v0.8.1)
+**[Android APK 다운로드 · 0.8.2 미리보기](https://github.com/masudaayano156/moa-theme-viewer/releases/download/v0.8.2/moa-0.8.2.apk)** · [릴리스와 체크섬](https://github.com/masudaayano156/moa-theme-viewer/releases/tag/v0.8.2)
 
 Android 8.0 이상. 기존 0.3.2 이상은 삭제하지 않고 업데이트 설치할 수 있습니다. 미리보기 릴리스는 GitHub의 `Latest` 목록에 나타나지 않을 수 있으므로 위 다운로드 링크를 사용하세요.
 
@@ -10,7 +10,7 @@ Android 8.0 이상. 기존 0.3.2 이상은 삭제하지 않고 업데이트 설�
 
 배포 APK의 SHA-256·서명 인증서, 공개 소스 재빌드 비교와 자동 분석 결과를 구분해 제공합니다. 키·사용자 자료는 공개하지 않습니다. 검사 결과는 확인 근거이며 ‘100% 안전’ 인증을 뜻하지 않습니다.
 
-0.8.1: [VirusTotal 실제 검사](https://www.virustotal.com/gui/file/4923612ab3bdf0106816befcf27350731ceb16039aa6ae3675247e2476e4e9ed)에서 68개 엔진 미탐지, 7개 형식 미지원입니다. 카메라·마이크 권한을 제거했으며, 목록과 게시글 모두 맨 위에서 아래로 당겨 새로고침할 수 있습니다. [검사 범위와 재빌드 차이](verification/README.md)를 함께 확인하세요.
+0.8.2: [VirusTotal 실제 검사](https://www.virustotal.com/gui/file/862c0b7f81ab9a75d5d96d74e1b0bec771a0ae22aac6c24b29fb7ed29db5e9e9)에서 68개 엔진 미탐지, 7개 형식 미지원입니다. 카메라·마이크 권한을 제거했으며, 목록과 게시글 모두 맨 위에서 아래로 당겨 새로고침할 수 있습니다. [검사 범위와 재빌드 차이](verification/README.md)를 함께 확인하세요.
 
 ## 기능
 

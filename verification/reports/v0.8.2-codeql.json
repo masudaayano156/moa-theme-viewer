@@ -1,0 +1,110 @@
+{
+  "schema": 1,
+  "version": "0.8.2",
+  "source_commit": "c4161725a690310665c9a2505e746ccf39874c43",
+  "observed_at_utc": "2026-10-18T04:21:47.867524+00:00",
+  "workflow_run": "https://github.com/masudaayano156/moa-theme-viewer/actions/runs/39096346205",
+  "workflow_result": "success",
+  "analysis_completed": true,
+  "zero_warnings": false,
+  "open_warning_count": 11,
+  "fixed_findings": [
+    {
+      "number": 6,
+      "rule": "java/polynomial-redos"
+    }
+  ],
+  "open_warnings": [
+    {
+      "number": 12,
+      "rule": "java/user-controlled-bypass",
+      "severity": "high",
+      "file": "app/src/main/java/app/moa/client/ImageContextMenu.java",
+      "line": 31,
+      "url": "https://github.com/masudaayano156/moa-theme-viewer/security/code-scanning/12"
+    },
+    {
+      "number": 11,
+      "rule": "java/comparison-with-wider-type",
+      "severity": "high",
+      "file": "app/src/main/java/app/moa/client/MediaImageOps.java",
+      "line": 49,
+      "url": "https://github.com/masudaayano156/moa-theme-viewer/security/code-scanning/11"
+    },
+    {
+      "number": 10,
+      "rule": "java/comparison-with-wider-type",
+      "severity": "high",
+      "file": "app/src/main/java/app/moa/client/MediaImageOps.java",
+      "line": 49,
+      "url": "https://github.com/masudaayano156/moa-theme-viewer/security/code-scanning/10"
+    },
+    {
+      "number": 9,
+      "rule": "java/android/missing-certificate-pinning",
+      "severity": "medium",
+      "file": "app/src/main/java/app/moa/client/PushRelayClient.java",
+      "line": 1024,
+      "url": "https://github.com/masudaayano156/moa-theme-viewer/security/code-scanning/9"
+    },
+    {
+      "number": 8,
+      "rule": "java/android/websettings-javascript-enabled",
+      "severity": "high",
+      "file": "app/src/main/java/app/moa/client/BrowserController.java",
+      "line": 408,
+      "url": "https://github.com/masudaayano156/moa-theme-viewer/security/code-scanning/8"
+    },
+    {
+      "number": 7,
+      "rule": "java/android/intent-redirection",
+      "severity": "high",
+      "file": "app/src/main/java/app/moa/client/BrowserController.java",
+      "line": 1390,
+      "url": "https://github.com/masudaayano156/moa-theme-viewer/security/code-scanning/7"
+    },
+    {
+      "number": 5,
+      "rule": "java/xss",
+      "severity": "high",
+      "file": "app/src/main/java/app/moa/client/BrowserController.java",
+      "line": 1858,
+      "url": "https://github.com/masudaayano156/moa-theme-viewer/security/code-scanning/5"
+    },
+    {
+      "number": 4,
+      "rule": "java/xss",
+      "severity": "high",
+      "file": "app/src/main/java/app/moa/client/BrowserController.java",
+      "line": 1850,
+      "url": "https://github.com/masudaayano156/moa-theme-viewer/security/code-scanning/4"
+    },
+    {
+      "number": 3,
+      "rule": "java/xss",
+      "severity": "high",
+      "file": "app/src/main/java/app/moa/client/BrowserController.java",
+      "line": 1826,
+      "url": "https://github.com/masudaayano156/moa-theme-viewer/security/code-scanning/3"
+    },
+    {
+      "number": 2,
+      "rule": "java/xss",
+      "severity": "high",
+      "file": "app/src/main/java/app/moa/client/BrowserController.java",
+      "line": 1738,
+      "url": "https://github.com/masudaayano156/moa-theme-viewer/security/code-scanning/2"
+    },
+    {
+      "number": 1,
+      "rule": "java/xss",
+      "severity": "high",
+      "file": "app/src/main/java/app/moa/client/BrowserController.java",
+      "line": 1101,
+      "url": "https://github.com/masudaayano156/moa-theme-viewer/security/code-scanning/1"
+    }
+  ],
+  "triage": "verification/codeql-review.md",
+  "warnings_automatically_dismissed": false,
+  "scope": "CodeQL Java/Kotlin and JavaScript security-extended analysis. Successful execution is not zero findings or a malware-free certificate."
+}

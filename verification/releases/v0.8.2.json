@@ -1,0 +1,66 @@
+{
+  "schema": 1,
+  "repository": "masudaayano156/moa-theme-viewer",
+  "version": "0.8.2",
+  "version_code": 20,
+  "package": "app.moa.client",
+  "source_commit": "c4161725a690310665c9a2505e746ccf39874c43",
+  "embedded_vcs_revision": "c4161725a690310665c9a2505e746ccf39874c43",
+  "certificate_sha256": "d425e1a47b90276aefb8d8ae1617fd44b0528113be25712faea20079b1211993",
+  "apk": {
+    "filename": "moa-0.8.2.apk",
+    "bytes": 3166675,
+    "sha256": "862c0b7f81ab9a75d5d96d74e1b0bec771a0ae22aac6c24b29fb7ed29db5e9e9",
+    "url": "https://github.com/masudaayano156/moa-theme-viewer/releases/download/v0.8.2/moa-0.8.2.apk"
+  },
+  "permissions": [
+    {
+      "name": "android.permission.ACCESS_NETWORK_STATE",
+      "max_sdk": null
+    },
+    {
+      "name": "android.permission.INTERNET",
+      "max_sdk": null
+    },
+    {
+      "name": "android.permission.POST_NOTIFICATIONS",
+      "max_sdk": null
+    },
+    {
+      "name": "android.permission.READ_EXTERNAL_STORAGE",
+      "max_sdk": 28
+    },
+    {
+      "name": "android.permission.RECEIVE_BOOT_COMPLETED",
+      "max_sdk": null
+    },
+    {
+      "name": "android.permission.WAKE_LOCK",
+      "max_sdk": null
+    },
+    {
+      "name": "android.permission.WRITE_EXTERNAL_STORAGE",
+      "max_sdk": 28
+    },
+    {
+      "name": "app.moa.client.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION",
+      "max_sdk": null
+    },
+    {
+      "name": "com.google.android.c2dm.permission.RECEIVE",
+      "max_sdk": null
+    }
+  ],
+  "allowed_rebuild_differences": [],
+  "provenance_note": "Locally built and signed after source commit. All 189 packaged entries match a clean source rebuild, including embedded VCS. Raw ZIP container differs after removing only the signing block; not bit-exact APK reproduction.",
+  "external_antivirus": {
+    "status": "completed",
+    "url": "https://www.virustotal.com/gui/file/862c0b7f81ab9a75d5d96d74e1b0bec771a0ae22aac6c24b29fb7ed29db5e9e9",
+    "analysis_date_utc": "2026-10-18T04:19:21Z",
+    "malicious_detections": 0,
+    "undetected_engines": 68,
+    "unsupported_engines": 7
+  },
+  "source_content_rebuild_verified": true,
+  "bit_exact_reproduction": false
+}

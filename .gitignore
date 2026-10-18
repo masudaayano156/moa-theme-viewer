@@ -180,3 +180,12 @@
 !/verification/reports/v0.8.1-review.json
 !/verification/reports/v0.8.1-secret-exclusion.json
 !/verification/codeql-review.md
+!/verification/releases/v0.8.2.json
+!/verification/reports/v0.8.2-apk.json
+!/verification/reports/v0.8.2-rebuild.json
+!/verification/reports/v0.8.2-review.json
+!/verification/reports/v0.8.2-secret-exclusion.json
+!/verification/reports/v0.8.2-virustotal.json
+!/verification/reports/v0.8.2-dependencies.cdx.json
+!/verification/reports/v0.8.2-dependencies-osv.json
+!/verification/reports/v0.8.2-codeql.json

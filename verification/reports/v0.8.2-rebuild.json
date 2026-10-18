@@ -1,0 +1,1582 @@
+{
+  "reference_apk_sha256": "862c0b7f81ab9a75d5d96d74e1b0bec771a0ae22aac6c24b29fb7ed29db5e9e9",
+  "rebuilt_apk_sha256": "5b644decf90c20fc7b3f2c74224933928b09539d59a38c753811238745e2fc41",
+  "reference_without_signing_block_sha256": "36eb4d241d7c86b2b9cd8b1e58e9938136e4ad93113641507f3141c27b174649",
+  "reference_signing_block_bytes": 4096,
+  "rebuilt_signing_block_bytes": 0,
+  "reference_entry_count": 189,
+  "rebuilt_entry_count": 189,
+  "identical_entry_count": 189,
+  "missing_entries": [],
+  "added_entries": [],
+  "changed_entries": [],
+  "all_zip_entry_bytes_equal": true,
+  "exact_bytes_equal_after_removing_only_signing_block": false,
+  "ignored_entries": [],
+  "reference_vcs": {
+    "revision": "c4161725a690310665c9a2505e746ccf39874c43",
+    "generation_error": null
+  },
+  "rebuilt_vcs": {
+    "revision": "c4161725a690310665c9a2505e746ccf39874c43",
+    "generation_error": null
+  },
+  "reference_entries": {
+    "META-INF/com/android/build/gradle/app-metadata.properties": {
+      "sha256": "7dcf130d4874270e450dec50649304c0f56f8c866e2bd002530aa66413d88c2d",
+      "bytes": 56
+    },
+    "META-INF/version-control-info.textproto": {
+      "sha256": "68df405268c85cc6944ff3d6bad3128fa4966f0ccf1c32de7df59e8ea9413112",
+      "bytes": 120
+    },
+    "classes.dex": {
+      "sha256": "61861ee2fafe77f20eed899155cbbea51f27be504882039c564e7ab6f01a026b",
+      "bytes": 7650476
+    },
+    "lib/arm64-v8a/libdatastore_shared_counter.so": {
+      "sha256": "d3e48717c9aa147e0ab21063ba0e8e0211cabf8bf40b222640829519edbf58e1",
+      "bytes": 7112
+    },
+    "lib/armeabi-v7a/libdatastore_shared_counter.so": {
+      "sha256": "716c5d8d2cac8ca0edf65da8f139c7886b726ac79d542a14edeb94994ba6d3dc",
+      "bytes": 4416
+    },
+    "lib/x86/libdatastore_shared_counter.so": {
+      "sha256": "cd4a1649e2c8350703146f94a6ee2bf4c3c8c9f172159f805b61a4a2abdf0659",
+      "bytes": 5148
+    },
+    "lib/x86_64/libdatastore_shared_counter.so": {
+      "sha256": "fb6c9208988c49ae94943bc3236fa763ba584722e044fa4ea9a12d2941027105",
+      "bytes": 6224
+    },
+    "assets/web/account-favorites.js": {
+      "sha256": "70659136dbc0a029fd6a11989bfc0824da01a3069c555e15c41b0a293489c62c",
+      "bytes": 3558
+    },
+    "assets/web/comment-notifications.js": {
+      "sha256": "589cf3ca3b25630af1a9bbfd50c0db744a1cc33001cf8301434b1ce98e1ca18c",
+      "bytes": 10480
+    },
+    "assets/web/community-tools.css": {
+      "sha256": "b5f2ebedf47f8203e2538ff2b7068d126c52aae6ab3b5e9dd733b2d9229e6a75",
+      "bytes": 2501
+    },
+    "assets/web/community-tools.js": {
+      "sha256": "826af5447b95d83fcb10a85c88eb85e0264fe1fae812a1776bab23debb2c2a4c",
+      "bytes": 21757
+    },
+    "assets/web/detail-layout.css": {
+      "sha256": "a0421173586a9f9042b242d630efbd84416e6cf92bad685bf86c004f3fbae76a",
+      "bytes": 37121
+    },
+    "assets/web/detail-layout.js": {
+      "sha256": "a0000d0b39c2b49a138836f8fdebdbcece293da18d8367446ee42826f9155608",
+      "bytes": 11751
+    },
+    "assets/web/drafts.js": {
+      "sha256": "a2b99d2c13ec4b700387392c6c48c69dd28a7c27232cbf0814f81251658d6d4e",
+      "bytes": 7060
+    },
+    "assets/web/list-layout.css": {
+      "sha256": "a7c5f4c3dbf9ba89ffbce4205c49f576ee86cffba658b4fee88901a6916e3d63",
+      "bytes": 31929
+    },
+    "assets/web/page-cleanup.js": {
+      "sha256": "4be9f929275b5da558e6fcfe8e99b2a50641c1b38a28aacae6563ef614f0d6e3",
+      "bytes": 14039
+    },
+    "assets/web/skin.css": {
+      "sha256": "ad085ab51d64659baf59589d0c7d5d1bea715dc871907a0ba658cda1490a004e",
+      "bytes": 80132
+    },
+    "assets/web/skin.js": {
+      "sha256": "f6ee0879ed72d6d6902a5fab36613820ae3153f7a23fe4d19e09c566fc15abf5",
+      "bytes": 38892
+    },
+    "DebugProbesKt.bin": {
+      "sha256": "cd3da36122413f84be484c77cde4a77729f9e8f81a285408d073300c8385ca3a",
+      "bytes": 1733
+    },
+    "META-INF/androidx.activity_activity.version": {
+      "sha256": "59854984853104df5c353e2f681a15fc7924742f9a2e468c29af248dce45ce03",
+      "bytes": 6
+    },
+    "META-INF/androidx.annotation_annotation-experimental.version": {
+      "sha256": "7d072b48526b023950e4c48db01e8c273554a6401119f5691e7589ba9bc65d9d",
+      "bytes": 6
+    },
+    "META-INF/androidx.arch.core_core-runtime.version": {
+      "sha256": "c89b87c262e9d5ffd20e73aac74a1772adcc9f5a21682cc33adcf5086e5fef5c",
+      "bytes": 6
+    },
+    "META-INF/androidx.core_core.version": {
+      "sha256": "30f4611383aa30a15753789f40effde81332f2f8714e6d3b2940bf0fc4592377",
+      "bytes": 6
+    },
+    "META-INF/androidx.customview_customview.version": {
+      "sha256": "59854984853104df5c353e2f681a15fc7924742f9a2e468c29af248dce45ce03",
+      "bytes": 6
+    },
+    "META-INF/androidx.datastore_datastore-core.version": {
+      "sha256": "f2fb797db5b32c15ac4c67b2180b593bf46c768ba1d69971fecbef1d9afb1975",
+      "bytes": 6
+    },
+    "META-INF/androidx.datastore_datastore-preferences-core.version": {
+      "sha256": "f2fb797db5b32c15ac4c67b2180b593bf46c768ba1d69971fecbef1d9afb1975",
+      "bytes": 6
+    },
+    "META-INF/androidx.datastore_datastore-preferences.version": {
+      "sha256": "f2fb797db5b32c15ac4c67b2180b593bf46c768ba1d69971fecbef1d9afb1975",
+      "bytes": 6
+    },
+    "META-INF/androidx.datastore_datastore.version": {
+      "sha256": "f2fb797db5b32c15ac4c67b2180b593bf46c768ba1d69971fecbef1d9afb1975",
+      "bytes": 6
+    },
+    "META-INF/androidx.documentfile_documentfile.version": {
+      "sha256": "59854984853104df5c353e2f681a15fc7924742f9a2e468c29af248dce45ce03",
+      "bytes": 6
+    },
+    "META-INF/androidx.fragment_fragment.version": {
+      "sha256": "1575e1af4a95f12f70b4ee6a6adce8160953d93ea17dc2611b90883ccc3ad3b8",
+      "bytes": 6
+    },
+    "META-INF/androidx.interpolator_interpolator.version": {
+      "sha256": "59854984853104df5c353e2f681a15fc7924742f9a2e468c29af248dce45ce03",
+      "bytes": 6
+    },
+    "META-INF/androidx.legacy_legacy-support-core-utils.version": {
+      "sha256": "59854984853104df5c353e2f681a15fc7924742f9a2e468c29af248dce45ce03",
+      "bytes": 6
+    },
+    "META-INF/androidx.lifecycle_lifecycle-livedata-core.version": {
+      "sha256": "c28fcca53637bc88e124af1725df13cb98c69dedefd62fb3cdbe1cdb6b760624",
+      "bytes": 6
+    },
+    "META-INF/androidx.lifecycle_lifecycle-livedata.version": {
+      "sha256": "c28fcca53637bc88e124af1725df13cb98c69dedefd62fb3cdbe1cdb6b760624",
+      "bytes": 6
+    },
+    "META-INF/androidx.lifecycle_lifecycle-runtime.version": {
+      "sha256": "ad8650bc9057d9dfd809961b69dbad640c288d809fa44437d44d83d3b118c821",
+      "bytes": 6
+    },
+    "META-INF/androidx.lifecycle_lifecycle-viewmodel.version": {
+      "sha256": "c89b87c262e9d5ffd20e73aac74a1772adcc9f5a21682cc33adcf5086e5fef5c",
+      "bytes": 6
+    },
+    "META-INF/androidx.loader_loader.version": {
+      "sha256": "59854984853104df5c353e2f681a15fc7924742f9a2e468c29af248dce45ce03",
+      "bytes": 6
+    },
+    "META-INF/androidx.localbroadcastmanager_localbroadcastmanager.version": {
+      "sha256": "59854984853104df5c353e2f681a15fc7924742f9a2e468c29af248dce45ce03",
+      "bytes": 6
+    },
+    "META-INF/androidx.print_print.version": {
+      "sha256": "59854984853104df5c353e2f681a15fc7924742f9a2e468c29af248dce45ce03",
+      "bytes": 6
+    },
+    "META-INF/androidx.savedstate_savedstate.version": {
+      "sha256": "59854984853104df5c353e2f681a15fc7924742f9a2e468c29af248dce45ce03",
+      "bytes": 6
+    },
+    "META-INF/androidx.swiperefreshlayout_swiperefreshlayout.version": {
+      "sha256": "1e5b51cde515396a9fa762909cf8ca6584ccc564b325d2eebeea76175fe95c4d",
+      "bytes": 6
+    },
+    "META-INF/androidx.versionedparcelable_versionedparcelable.version": {
+      "sha256": "cc52f678848b814373757b460383bf61960e4943c203735adde0a350b3e50989",
+      "bytes": 6
+    },
+    "META-INF/androidx.viewpager_viewpager.version": {
+      "sha256": "59854984853104df5c353e2f681a15fc7924742f9a2e468c29af248dce45ce03",
+      "bytes": 6
+    },
+    "META-INF/androidx.webkit_webkit.version": {
+      "sha256": "d723798f2436b46872ee9a012632d6f5602ab9297be05780a79ba29733f8a532",
+      "bytes": 7
+    },
+    "META-INF/kotlinx_coroutines_core.version": {
+      "sha256": "34d597db43ca53b2fd72ccbdd1af7a0fe238c2c0b8321dad8f43a1613143fc62",
+      "bytes": 6
+    },
+    "META-INF/kotlinx_coroutines_play_services.version": {
+      "sha256": "34d597db43ca53b2fd72ccbdd1af7a0fe238c2c0b8321dad8f43a1613143fc62",
+      "bytes": 6
+    },
+    "META-INF/versions/9/OSGI-INF/MANIFEST.MF": {
+      "sha256": "a844d62b02a9eefd9d112e74fd660843d91cd8b81dce6ce60a9eaba605fa939c",
+      "bytes": 145
+    },
+    "client_analytics.proto": {
+      "sha256": "0c76732776772b260528558f9b675a49529cad785c421ca11b487179b8162610",
+      "bytes": 2982
+    },
+    "firebase-iid-interop.properties": {
+      "sha256": "a2862ae5811a268630807c645d5dadc1f15e85b922a2ab0408e984ea5548e102",
+      "bytes": 78
+    },
+    "firebase-measurement-connector.properties": {
+      "sha256": "ca7d9dd559c3cf48a087b9d4fc5b7c6eded0c99892297b59758093459d98463a",
+      "bytes": 98
+    },
+    "kotlin/annotation/annotation.kotlin_builtins": {
+      "sha256": "f6bf68d4798ece5071900772a4a87150314aed3788e042d9e30ab60a0857b211",
+      "bytes": 865
+    },
+    "kotlin/collections/collections.kotlin_builtins": {
+      "sha256": "91d6cd4138e850c100a2dec88a965453b0042bf7f6f51202fe4b1efba38e96c0",
+      "bytes": 3635
+    },
+    "kotlin/concurrent/atomics/atomics.kotlin_builtins": {
+      "sha256": "ef8b50112968a5e1be21c9c03d68ce6a7a939a057b9bc5d3fab72c95470561bf",
+      "bytes": 2471
+    },
+    "kotlin/coroutines/coroutines.kotlin_builtins": {
+      "sha256": "98ab3a3c18fcb237528dd63fa489815c583e1d6c13debd2a27ac6d74ccf8717b",
+      "bytes": 137
+    },
+    "kotlin/internal/internal.kotlin_builtins": {
+      "sha256": "7489c6bcec13d048a4ce9d9f3bafa1a11bfa08021bfa0e07166978d0bc5e450a",
+      "bytes": 583
+    },
+    "kotlin/kotlin.kotlin_builtins": {
+      "sha256": "d03111a486daaa503eb6c17aa6770daf744a9b668f54a75b419d1de3deb868a0",
+      "bytes": 18653
+    },
+    "kotlin/ranges/ranges.kotlin_builtins": {
+      "sha256": "ecf5a840ebf529fd9d1fa8216febc191b8559412a1068554266f64bc3b6f8428",
+      "bytes": 3349
+    },
+    "kotlin/reflect/reflect.kotlin_builtins": {
+      "sha256": "b549fbaa2455d8bd417f44e3df1af2ff6802693a5aa0bb6a740848467b53b69a",
+      "bytes": 2370
+    },
+    "messaging_event.proto": {
+      "sha256": "0b134a9ffe21416fe225f374f44f6eca58b47519feae4c90b82e25677e8d56ce",
+      "bytes": 2381
+    },
+    "messaging_event_extension.proto": {
+      "sha256": "1b9c7669ea81fa9233cce0ca5e4b5f0478071c34fb40deea40d703c4565c42c6",
+      "bytes": 883
+    },
+    "play-services-base.properties": {
+      "sha256": "a0a16f489886f204dbbf176cbab27e64ef404d309bbec8eb30c1f0b42bde538a",
+      "bytes": 74
+    },
+    "play-services-basement.properties": {
+      "sha256": "f104c265304c046ad9ba4807df8a0537204caf35dae11cc090cd8a34be6ee1da",
+      "bytes": 82
+    },
+    "play-services-cloud-messaging.properties": {
+      "sha256": "275a02cfd89f4e71c1e4e856de512ea50ec1b68b289ef3f8755fb6cb44334f9f",
+      "bytes": 96
+    },
+    "play-services-stats.properties": {
+      "sha256": "6b751c654deb3ac65a878025d2ff2b89fabfa0ebe00ac4152ad3f7a361aed107",
+      "bytes": 76
+    },
+    "play-services-tasks.properties": {
+      "sha256": "36e99a9887117e2e3f085bc2b5be1b517dcdb522712dbca8ad3baa407e554919",
+      "bytes": 76
+    },
+    "AndroidManifest.xml": {
+      "sha256": "a232f92d5f7f34d203005b334aefd8477b098595a7584e7d0e5696d05d0c2033",
+      "bytes": 15436
+    },
+    "res/-8.xml": {
+      "sha256": "77c77271a0aecb83415127b804319c17b0d69da94214356b74728c04a32c6e85",
+      "bytes": 1152
+    },
+    "res/-p.png": {
+      "sha256": "90c44675525e290332f7dba6adb97c7af3b8299e56cf5211e893d0e1dec41547",
+      "bytes": 982
+    },
+    "res/0W.xml": {
+      "sha256": "e4091e11e7572e2e4aedd583ad95363d6445c779380822f8a930a499e3a74b55",
+      "bytes": 448
+    },
+    "res/1C.9.png": {
+      "sha256": "9635dab0f3c0b0557f3535d9655784f68130db57ce3920ae68c2d4cab4edd35e",
+      "bytes": 615
+    },
+    "res/1P.xml": {
+      "sha256": "8d4c74bdfa00b1a5710bf9833d154b6027adfcd5bc0b71cabc54f95450f69ceb",
+      "bytes": 448
+    },
+    "res/1n.xml": {
+      "sha256": "b807ee7d1ad86e952e867abfd3146dfe99e378339ec9374ea4e4b9ff42b415ce",
+      "bytes": 548
+    },
+    "res/2K.9.png": {
+      "sha256": "42aee0b03883e94df5e543348a397d1302c1b8221895871a83b81899f5a9647b",
+      "bytes": 225
+    },
+    "res/3P.xml": {
+      "sha256": "f6ceec591c32e851ce14ecd9bdda424e305956baff826a5308ff5f25784d06ba",
+      "bytes": 988
+    },
+    "res/3d.xml": {
+      "sha256": "56f45a3604e460aa7b5f5ca67944bfa2651389623a406096190c8de5cf6b2f05",
+      "bytes": 1196
+    },
+    "res/47.xml": {
+      "sha256": "54111927e7296689b562eddc3e5c0e5f174442c9bf49a425d5eb15fcf140993e",
+      "bytes": 892
+    },
+    "res/4j.xml": {
+      "sha256": "757f2049fb0d70af338a3e505fca6fa81f3f5bf62bf313ca34d75a64b7a3cd1e",
+      "bytes": 2292
+    },
+    "res/55.xml": {
+      "sha256": "cccb126c0cfb46801299df99401fdf98951ab20ad636ec8b0c0e69b79311e8b4",
+      "bytes": 448
+    },
+    "res/5J.9.png": {
+      "sha256": "9d62d3eabefaf89e6018d3902cc8c4bb888a8891d9639deda8fb58ba60fe1822",
+      "bytes": 1032
+    },
+    "res/5c.png": {
+      "sha256": "b44eeda34d7a529c2fe55719eb098fa29707caa91d18de06a7a775d6e6bcf973",
+      "bytes": 138
+    },
+    "res/66.xml": {
+      "sha256": "c45f7360c29478089acf168b366cd6a8b62340d91e2eb1bc42f5d1f0fba53231",
+      "bytes": 1348
+    },
+    "res/79.9.png": {
+      "sha256": "dc9a0ae125491ccdac95b57b5eee4060efd191294e171c8e369d7d0ec3ab2268",
+      "bytes": 694
+    },
+    "res/7R.png": {
+      "sha256": "6083523032ab5df9e6cb82e4ff3d48af7738900a2e9b23d991beaa2eba7862e9",
+      "bytes": 516
+    },
+    "res/8S.xml": {
+      "sha256": "a28845d2d5fdaabe0cc59c06f850a89318872cefc6114936e149c61d90b740f7",
+      "bytes": 764
+    },
+    "res/9J.xml": {
+      "sha256": "d53c9c34a9520c3b4cde068b6ff721dfd8cef29663f2ea770ccaa43c26299cc8",
+      "bytes": 1416
+    },
+    "res/9m.xml": {
+      "sha256": "ec2beba320bf15c54367de1290d6a551a7138429fae2bc4a18a8e0d35b2767c5",
+      "bytes": 304
+    },
+    "res/Af.9.png": {
+      "sha256": "94a0b6363a09d466a3dc3722379ab367d9ff73a21ba0ff2c5bab6c30aa5f8b38",
+      "bytes": 683
+    },
+    "res/BG.xml": {
+      "sha256": "3e4e178d5135e37500d555dd29bcc777cd0a23d94f71d527165fae2d4831aff6",
+      "bytes": 984
+    },
+    "res/BQ.9.png": {
+      "sha256": "9865619196624a3cba32a36b0111357afea3148f123221ba8c7265bc681ab8a9",
+      "bytes": 897
+    },
+    "res/Bl.xml": {
+      "sha256": "078204f4db9a93a8b1f458d52600b80a0b1ced5b44382dfcf4b9cacbc994bcb7",
+      "bytes": 588
+    },
+    "res/Bz.xml": {
+      "sha256": "a27ed8d26c92419df5f3fb8b8a92863544442082a43c2a5597aa463c61a1d8f2",
+      "bytes": 892
+    },
+    "res/C_.9.png": {
+      "sha256": "a8676a1793ac8310ffb12986232df66df092d29c242aeedc2b73556c010d38dc",
+      "bytes": 215
+    },
+    "res/Dd.png": {
+      "sha256": "7c1e1629c95fb2603fbdeab93a8fbf30b9c80be11ef483d497f8a88e8f67bd6b",
+      "bytes": 281
+    },
+    "res/EQ.xml": {
+      "sha256": "a1409e666cfc39f405b706bb2b029a868a17051d503bdffd2fc4fba3d1ca6155",
+      "bytes": 588
+    },
+    "res/Eg.xml": {
+      "sha256": "5af8763c09674263c314fa8e6f0269e2252fa18bb7b9ea86c3a41d9a2ffb1cd9",
+      "bytes": 976
+    },
+    "res/Eh.png": {
+      "sha256": "f73508090d3e6bbc3e39ba768e71855aad52ecaaaccda676d43a1860010cc557",
+      "bytes": 410
+    },
+    "res/Em.xml": {
+      "sha256": "d10d0c15273723f254216732164a792d59917114a1cd0ee35d41e0e2f55841b5",
+      "bytes": 720
+    },
+    "res/Fm.xml": {
+      "sha256": "a15ba9c8874274797413fa14e2a6d52cea7aee95041eef2f1f362bcab89b1a7b",
+      "bytes": 448
+    },
+    "res/H3.xml": {
+      "sha256": "d1320c88c55c710a2c4c3e1c4de94649d1a4115619cefdd6265a08e9e1a35f99",
+      "bytes": 548
+    },
+    "res/I3.9.png": {
+      "sha256": "5624a284adf8a5e8e7c2560524eb05d7ee97d09a9c2dbe3a76a840766015ae30",
+      "bytes": 1255
+    },
+    "res/ID.xml": {
+      "sha256": "24e195bb5f4964bc4525390a1f4212a2c9fb415f15cf18460c812d7bb2f4dfd8",
+      "bytes": 448
+    },
+    "res/K-.xml": {
+      "sha256": "88742ac9bfe56bff61985e8a0d85109343b088e19ef88134d9ce364ff51400ee",
+      "bytes": 588
+    },
+    "res/L_.xml": {
+      "sha256": "e12bbab8c3f9a96ee9e093e3ab73302c98af70c4e7c5512c481142b96c194411",
+      "bytes": 1276
+    },
+    "res/Lr.xml": {
+      "sha256": "adda040c6aa08bc74c7fd3620addf53fb8f452f0e05adb5db40cfe3dffca9999",
+      "bytes": 584
+    },
+    "res/Ma.9.png": {
+      "sha256": "d27af435101ca4cbec0c840bd30687918cd39eb83aab1487420855623a45998b",
+      "bytes": 247
+    },
+    "res/Pb.xml": {
+      "sha256": "5c9024be544f3862211e62c50d784cdfca87a7cf165322084e4babb7a6dd757b",
+      "bytes": 584
+    },
+    "res/Pq.xml": {
+      "sha256": "6eec3ce56d72031cf123268a220b5df8ccb05b0082be281e716ef3fd70d2ffba",
+      "bytes": 548
+    },
+    "res/Q7.xml": {
+      "sha256": "c6230a691fbcec991b397608dd16729cfef5f3186616862c70e71054e955b98c",
+      "bytes": 1204
+    },
+    "res/Qd.9.png": {
+      "sha256": "f62bf21d152a276ae8d9a0d62997f12c60d64ec812fd973ff60e3295deee34b4",
+      "bytes": 776
+    },
+    "res/Rt.xml": {
+      "sha256": "4fcea6a8cb89dbb111832b4241e85bea8af855cd1f3bea217bf0e837d83043ce",
+      "bytes": 892
+    },
+    "res/S8.xml": {
+      "sha256": "ad1f544bea1e8018e8de54f5fef8e247a0e802b5ba2339ed1ffae325bc190655",
+      "bytes": 1052
+    },
+    "res/SJ.xml": {
+      "sha256": "e4630f8be7d9a512d264cb5057112cc4fdaf026da94351c9b4a396f0c69dc6a5",
+      "bytes": 1468
+    },
+    "res/T5.xml": {
+      "sha256": "d3c36bdade48199d0025788278f8c0fb8757c5e56715e1ea40ae903661f11b52",
+      "bytes": 1132
+    },
+    "res/TK.xml": {
+      "sha256": "1982f336a906b7439db7e8438872381a3d53690fd14aa7f38cd8c4f2d3495d6d",
+      "bytes": 892
+    },
+    "res/U-.9.png": {
+      "sha256": "e17761ed280edd93d7141bd504b70f9e9e15a8652288d9e6333bf4ce964ef844",
+      "bytes": 223
+    },
+    "res/Vm.xml": {
+      "sha256": "bafd5db7cb7f8b12d6f4d1b40a71a8abb1991aa178f1a8a5f741d49da84fea5e",
+      "bytes": 548
+    },
+    "res/Ws.xml": {
+      "sha256": "2f768c089cefa18cf7f1fde7f602410bf38998de5f9073a15ea83106c25e3c30",
+      "bytes": 1180
+    },
+    "res/XA.xml": {
+      "sha256": "51274b3bed5cd9808719ed45010b77c67637c1351425de90c925b0116bd5b77e",
+      "bytes": 1272
+    },
+    "res/Yv.xml": {
+      "sha256": "d818ac012c9ed235fc7ddd809b7cda0479e282f51865611d0505e03c877040be",
+      "bytes": 1248
+    },
+    "res/ZI.png": {
+      "sha256": "e8e2fecfbf111cc5ef65dbb6c7395a5ae16a68f7e0922738d0c802b26e866e49",
+      "bytes": 681
+    },
+    "res/ZL.9.png": {
+      "sha256": "fcb4416a4f5f5b4d72854d91722289789b30bb562c6f0f57975818ab555cc809",
+      "bytes": 1086
+    },
+    "res/_p.png": {
+      "sha256": "549a81cda776769840f37f184d34eb673ff9e5c0671c67172818e91273753e1a",
+      "bytes": 1441
+    },
+    "res/_y.xml": {
+      "sha256": "b3e55695824dcf3400ca39134af29e2e1c02114a541d571e8216535d2421cae2",
+      "bytes": 612
+    },
+    "res/a0.xml": {
+      "sha256": "88e46046333b956b60d854489b3fb627dba614c9ceff4b7ce352b6c6b8f32ac2",
+      "bytes": 1228
+    },
+    "res/aQ.xml": {
+      "sha256": "711aeae0147a0984d322e997149404845bc20a492ef2d525fb93086d299bbc9c",
+      "bytes": 548
+    },
+    "res/bI.xml": {
+      "sha256": "98bc422edfc21dfceeb01193fa5211cb019dff6ae890bd07dc6c9f6af01d5391",
+      "bytes": 1780
+    },
+    "res/c6.xml": {
+      "sha256": "70bab5875759413b8dbf45e003c940c4c192bb90368a60c93b52b51eca05b03f",
+      "bytes": 372
+    },
+    "res/cV.xml": {
+      "sha256": "26eb0baf907422c7ffac3b86830e8de5039a5eb8eee0aa5afeba5740857be3eb",
+      "bytes": 440
+    },
+    "res/color/common_google_signin_btn_text_dark.xml": {
+      "sha256": "837eeaa26972a2ea430400188c7b0fe8cc79a50524a20e32c04fe2f146246349",
+      "bytes": 712
+    },
+    "res/color/common_google_signin_btn_text_light.xml": {
+      "sha256": "36e6448a494ef86ef273ac36254bbc5c02ea85c4922dc4954f297830135d1cd4",
+      "bytes": 712
+    },
+    "res/color/common_google_signin_btn_tint.xml": {
+      "sha256": "c230db3d543d322c35c60b744c12b0aa7526f1ccfffbb570caee6f47c99f9626",
+      "bytes": 464
+    },
+    "res/dB.9.png": {
+      "sha256": "77d8cc5447360efba3b3f1659bea9680eccbe47e2aaa07424d562f0e5c8af829",
+      "bytes": 500
+    },
+    "res/df.xml": {
+      "sha256": "a0153ae342182d8655fb5d275ef6bdcdaa06034c02e954a0d48a8216c86f319b",
+      "bytes": 532
+    },
+    "res/eO.xml": {
+      "sha256": "8063a7a63920fee5267c6e529bad32110444d1d5e7c813e6de25457041b22014",
+      "bytes": 1436
+    },
+    "res/f9.png": {
+      "sha256": "788a3b9472e9a46e1b6b68d918cd1571914b732e93aab014d77f20be5374e9de",
+      "bytes": 562
+    },
+    "res/gK.9.png": {
+      "sha256": "2f7fbda0ba6e53e9a47e2fc0e24e32c447c613a5808c2d6285dc651e83a07ad7",
+      "bytes": 215
+    },
+    "res/gX.xml": {
+      "sha256": "a57f8b0ee5dfa0b232eee86cb3314ec2d69dde02820ca386f62d5d2c56f575b6",
+      "bytes": 448
+    },
+    "res/hO.xml": {
+      "sha256": "0b3ecb223c56bba0cc5775d23951f3975dbb22bd10ed17574ae555632cff3a35",
+      "bytes": 1472
+    },
+    "res/hP.9.png": {
+      "sha256": "092bf333080e2b3ece63147ea15e6ac04915968c010e5c3f85f8cb650d61ecb7",
+      "bytes": 808
+    },
+    "res/iQ.png": {
+      "sha256": "e816dc0998f4ee90d7b630f17e16fcc2e72d91078c5315adaac4bc2da4c226d7",
+      "bytes": 489
+    },
+    "res/iQ.xml": {
+      "sha256": "00150e604011b40972c1975987f19f11fe6f2c286f04a47f5092bf5548c921e8",
+      "bytes": 988
+    },
+    "res/iW.png": {
+      "sha256": "f221f962a62c954a11b1734e9631fc8531e34bee557665fea864aa4386e25e39",
+      "bytes": 808
+    },
+    "res/iz.xml": {
+      "sha256": "7d9849710d3370f225b2fd8267a75bd207bdc88cc66f7c7bddf71a7401ec64e3",
+      "bytes": 1472
+    },
+    "res/je.9.png": {
+      "sha256": "21f0b55280be10b187ceff8edef4a5a7047683e6e9fcf47de410aa3839f41094",
+      "bytes": 212
+    },
+    "res/k9.xml": {
+      "sha256": "2b2ceec94c5716ff434b89e55a346fd50034e2ac7fb2d3530b89b714b69c8284",
+      "bytes": 548
+    },
+    "res/lB.xml": {
+      "sha256": "019cb9d5de3305f0c88f93832162c8b8a1f0fa31e0fce7d9f6fbaf135d1687c3",
+      "bytes": 1068
+    },
+    "res/lQ.xml": {
+      "sha256": "2f0107edea0d0dc38424073c27031c9367baa867676acd1f4522f623005bc825",
+      "bytes": 448
+    },
+    "res/lR.xml": {
+      "sha256": "bc4303cb66962f4556729deadaa3886f6b1a4d1dc882641a3abae35802096053",
+      "bytes": 440
+    },
+    "res/mK.xml": {
+      "sha256": "1fce87a60e161c6cad232c76d97fcec82a60e9676676e1a64f9f695ef041c3a3",
+      "bytes": 496
+    },
+    "res/mQ.xml": {
+      "sha256": "2d3833f30bc7743c6bc16486ef79829fcade9b9b1278a0ab28286adf9e46aa15",
+      "bytes": 1272
+    },
+    "res/nC.9.png": {
+      "sha256": "08a416adad6c0e9bece3238674a76b24bbac2ce95c1cffca817b3c675ac69f6b",
+      "bytes": 465
+    },
+    "res/nz.xml": {
+      "sha256": "1bd768e0311fac8462f9f6eb19663dde43bda8b735f59aa77f7931e2cb5eaa87",
+      "bytes": 532
+    },
+    "res/oO.9.png": {
+      "sha256": "71bfd776b21b1102f26e31a0f6dc65d40de2cbae650c7528241d5cdc17eac991",
+      "bytes": 610
+    },
+    "res/o_.9.png": {
+      "sha256": "20343222f9f79dd565c3a2248494d452e70820ac1c437173c38badd45f962afd",
+      "bytes": 252
+    },
+    "res/p7.xml": {
+      "sha256": "ae0b0e70aa4f53a0c8ea970068e1a5569fce696dbdaf377286d702711e91611f",
+      "bytes": 548
+    },
+    "res/pI.xml": {
+      "sha256": "666bb9ba1b93f25748bdcc9df8601fdcb3078cf857c44bfe17e4051b48faf238",
+      "bytes": 548
+    },
+    "res/pR.xml": {
+      "sha256": "12986f39a70e0a779699d7f9b3ccd1f1b67b522427e7dde705f6fa65831b72f0",
+      "bytes": 792
+    },
+    "res/pY.png": {
+      "sha256": "8430ec003e003f3f2ba2f78d48fd150e25407667e530e82e87a7d4841c0fd676",
+      "bytes": 107
+    },
+    "res/qF.xml": {
+      "sha256": "5ef20e971497f76063ae165ee4aebc767cb12bcdd9fad3a0ca2c73d2c32f8163",
+      "bytes": 290
+    },
+    "res/qu.xml": {
+      "sha256": "758fc2559852620e9d27aa1cfc392f7be92860ec4ac88c8b0de1f540ffb5f715",
+      "bytes": 1272
+    },
+    "res/s4.png": {
+      "sha256": "0d773e62c756422313262846c787e58f67e0ee87e45e1ae9942002e816c4cb9e",
+      "bytes": 98
+    },
+    "res/sA.9.png": {
+      "sha256": "0c6328c7b2420570a7ec38b3beb3bac9a29d895ac1ab7239315aba7266418593",
+      "bytes": 212
+    },
+    "res/sW.xml": {
+      "sha256": "474df31dab48d570c73138aea411005b5c7c93f7bcd7f65cd2665a6aa711ee88",
+      "bytes": 1520
+    },
+    "res/sq.xml": {
+      "sha256": "4c58ac5c81618b46cc122dca15a0f2c60f6b2151737c66b2df593bf34da286c2",
+      "bytes": 988
+    },
+    "res/tU.xml": {
+      "sha256": "e168d6905ebbd125f92f42129160d0bf525bbcdc0ce23db31ea568e48c1e9ef4",
+      "bytes": 1440
+    },
+    "res/tW.xml": {
+      "sha256": "1efe4fb39d6c6a7ffd60e6abd9f5466689858ce2562d075aa8955d710d227e18",
+      "bytes": 1524
+    },
+    "res/tr.9.png": {
+      "sha256": "d66f7061c274b1b6f8524993367af902737ddf9187db0cc8d91a8c64ad9b944a",
+      "bytes": 960
+    },
+    "res/un.xml": {
+      "sha256": "531515e9cd63358039329105875712eeaa4ef29d638f7767d22c415e8f0658e8",
+      "bytes": 448
+    },
+    "res/us.9.png": {
+      "sha256": "42a1b93ba380eeba9d499582df981a535f872af234ad6600675fff37459306e5",
+      "bytes": 1638
+    },
+    "res/vL.9.png": {
+      "sha256": "99c14d6855b8be296d58017d3751b8dc849c47b6d1d80ab614ff9075080e461b",
+      "bytes": 223
+    },
+    "res/vi.xml": {
+      "sha256": "2e336d481c0b94c0e73584758ed659884cbd2ad4cf570008122bb7bd0883de5c",
+      "bytes": 548
+    },
+    "res/vo.png": {
+      "sha256": "5db3ab4d30063b5e8fa63ae2993f83efd0af71d6526b3a1468f9e3bf891af587",
+      "bytes": 727
+    },
+    "res/vy.xml": {
+      "sha256": "174884d87709e6c1c0a2b385c9bae6cea5eb742b64df66ca2d9a090edd3e309c",
+      "bytes": 1952
+    },
+    "res/w-.xml": {
+      "sha256": "da600b2caa696f646618821dfd2f201ef50b75859f2a4153f9ee30460bc6a14b",
+      "bytes": 952
+    },
+    "res/w2.9.png": {
+      "sha256": "71f14a18275f8678fd9f0c1c0affc400a975a0b815b82eca7345b6aaecf978ee",
+      "bytes": 1138
+    },
+    "res/w6.xml": {
+      "sha256": "83fa479ca54aa20f714b9bcd86da6a9bedb040ca687e4ae64b58e9dfb18ebc5b",
+      "bytes": 408
+    },
+    "res/wN.9.png": {
+      "sha256": "18b328d8017e677d5aad3dbd66bae356b5cac978c6f0670938ea648e51d0eb66",
+      "bytes": 225
+    },
+    "res/wo.xml": {
+      "sha256": "357e428186c8c96fa16f2d87ceffe81ad083e2368f8c74a2387faf9cc180fc76",
+      "bytes": 796
+    },
+    "res/xN.xml": {
+      "sha256": "fd3ac93fe66aa91284b856d1f361281a1fd95f37b3a85403d4b0a3f0a1b26164",
+      "bytes": 2456
+    },
+    "res/xX.xml": {
+      "sha256": "35506081c0c4047032f8161acee128a5a053a7734adae1ae2808782c7a9659df",
+      "bytes": 1084
+    },
+    "res/xa.9.png": {
+      "sha256": "3e09afa21c45372c035598c017c8fb405a6d678e6cb84dc857581cb3b40e482d",
+      "bytes": 221
+    },
+    "res/xv.xml": {
+      "sha256": "561bce828f61d35e412366a2e585c80fb14d0a29a3c8e645c756d59d35bf42b4",
+      "bytes": 1088
+    },
+    "res/y6.xml": {
+      "sha256": "651bd08dd5ef579a153daf93df0cfae3b87db7c8054ab420482569a1cb49104f",
+      "bytes": 588
+    },
+    "res/yW.xml": {
+      "sha256": "6c5301170f698fd0ac85aeccf1efd4b89b011d0a4a85a5fe3d12d74c118d3668",
+      "bytes": 1480
+    },
+    "res/yq.xml": {
+      "sha256": "ca7d2c0b3e4c2f13758873815e04fb17aaf77ae9f8a3729a6783d9a035d82fd0",
+      "bytes": 548
+    },
+    "res/z-.9.png": {
+      "sha256": "559bf783d765c02338e97952bdc9c6689c7ff99090b8c9813369118da8b080f0",
+      "bytes": 221
+    },
+    "res/zw.9.png": {
+      "sha256": "be03693c47d3c4d4466f14a695eaccd210b61e91d808c0c4a46d6f021b598278",
+      "bytes": 1510
+    },
+    "res/zz.xml": {
+      "sha256": "32ae0eacb770a9f27f927287a1dea4348be39bd14d6c3908a0abe5c078e2b07f",
+      "bytes": 1640
+    },
+    "resources.arsc": {
+      "sha256": "a6d7abf1f21d82cbb5ab0ea08003f89ef91a015df035a42abd2cd6c9e4bb0ce0",
+      "bytes": 164536
+    }
+  },
+  "rebuilt_entries": {
+    "META-INF/com/android/build/gradle/app-metadata.properties": {
+      "sha256": "7dcf130d4874270e450dec50649304c0f56f8c866e2bd002530aa66413d88c2d",
+      "bytes": 56
+    },
+    "META-INF/version-control-info.textproto": {
+      "sha256": "68df405268c85cc6944ff3d6bad3128fa4966f0ccf1c32de7df59e8ea9413112",
+      "bytes": 120
+    },
+    "classes.dex": {
+      "sha256": "61861ee2fafe77f20eed899155cbbea51f27be504882039c564e7ab6f01a026b",
+      "bytes": 7650476
+    },
+    "lib/arm64-v8a/libdatastore_shared_counter.so": {
+      "sha256": "d3e48717c9aa147e0ab21063ba0e8e0211cabf8bf40b222640829519edbf58e1",
+      "bytes": 7112
+    },
+    "lib/armeabi-v7a/libdatastore_shared_counter.so": {
+      "sha256": "716c5d8d2cac8ca0edf65da8f139c7886b726ac79d542a14edeb94994ba6d3dc",
+      "bytes": 4416
+    },
+    "lib/x86/libdatastore_shared_counter.so": {
+      "sha256": "cd4a1649e2c8350703146f94a6ee2bf4c3c8c9f172159f805b61a4a2abdf0659",
+      "bytes": 5148
+    },
+    "lib/x86_64/libdatastore_shared_counter.so": {
+      "sha256": "fb6c9208988c49ae94943bc3236fa763ba584722e044fa4ea9a12d2941027105",
+      "bytes": 6224
+    },
+    "assets/web/account-favorites.js": {
+      "sha256": "70659136dbc0a029fd6a11989bfc0824da01a3069c555e15c41b0a293489c62c",
+      "bytes": 3558
+    },
+    "assets/web/comment-notifications.js": {
+      "sha256": "589cf3ca3b25630af1a9bbfd50c0db744a1cc33001cf8301434b1ce98e1ca18c",
+      "bytes": 10480
+    },
+    "assets/web/community-tools.css": {
+      "sha256": "b5f2ebedf47f8203e2538ff2b7068d126c52aae6ab3b5e9dd733b2d9229e6a75",
+      "bytes": 2501
+    },
+    "assets/web/community-tools.js": {
+      "sha256": "826af5447b95d83fcb10a85c88eb85e0264fe1fae812a1776bab23debb2c2a4c",
+      "bytes": 21757
+    },
+    "assets/web/detail-layout.css": {
+      "sha256": "a0421173586a9f9042b242d630efbd84416e6cf92bad685bf86c004f3fbae76a",
+      "bytes": 37121
+    },
+    "assets/web/detail-layout.js": {
+      "sha256": "a0000d0b39c2b49a138836f8fdebdbcece293da18d8367446ee42826f9155608",
+      "bytes": 11751
+    },
+    "assets/web/drafts.js": {
+      "sha256": "a2b99d2c13ec4b700387392c6c48c69dd28a7c27232cbf0814f81251658d6d4e",
+      "bytes": 7060
+    },
+    "assets/web/list-layout.css": {
+      "sha256": "a7c5f4c3dbf9ba89ffbce4205c49f576ee86cffba658b4fee88901a6916e3d63",
+      "bytes": 31929
+    },
+    "assets/web/page-cleanup.js": {
+      "sha256": "4be9f929275b5da558e6fcfe8e99b2a50641c1b38a28aacae6563ef614f0d6e3",
+      "bytes": 14039
+    },
+    "assets/web/skin.css": {
+      "sha256": "ad085ab51d64659baf59589d0c7d5d1bea715dc871907a0ba658cda1490a004e",
+      "bytes": 80132
+    },
+    "assets/web/skin.js": {
+      "sha256": "f6ee0879ed72d6d6902a5fab36613820ae3153f7a23fe4d19e09c566fc15abf5",
+      "bytes": 38892
+    },
+    "DebugProbesKt.bin": {
+      "sha256": "cd3da36122413f84be484c77cde4a77729f9e8f81a285408d073300c8385ca3a",
+      "bytes": 1733
+    },
+    "META-INF/androidx.activity_activity.version": {
+      "sha256": "59854984853104df5c353e2f681a15fc7924742f9a2e468c29af248dce45ce03",
+      "bytes": 6
+    },
+    "META-INF/androidx.annotation_annotation-experimental.version": {
+      "sha256": "7d072b48526b023950e4c48db01e8c273554a6401119f5691e7589ba9bc65d9d",
+      "bytes": 6
+    },
+    "META-INF/androidx.arch.core_core-runtime.version": {
+      "sha256": "c89b87c262e9d5ffd20e73aac74a1772adcc9f5a21682cc33adcf5086e5fef5c",
+      "bytes": 6
+    },
+    "META-INF/androidx.core_core.version": {
+      "sha256": "30f4611383aa30a15753789f40effde81332f2f8714e6d3b2940bf0fc4592377",
+      "bytes": 6
+    },
+    "META-INF/androidx.customview_customview.version": {
+      "sha256": "59854984853104df5c353e2f681a15fc7924742f9a2e468c29af248dce45ce03",
+      "bytes": 6
+    },
+    "META-INF/androidx.datastore_datastore-core.version": {
+      "sha256": "f2fb797db5b32c15ac4c67b2180b593bf46c768ba1d69971fecbef1d9afb1975",
+      "bytes": 6
+    },
+    "META-INF/androidx.datastore_datastore-preferences-core.version": {
+      "sha256": "f2fb797db5b32c15ac4c67b2180b593bf46c768ba1d69971fecbef1d9afb1975",
+      "bytes": 6
+    },
+    "META-INF/androidx.datastore_datastore-preferences.version": {
+      "sha256": "f2fb797db5b32c15ac4c67b2180b593bf46c768ba1d69971fecbef1d9afb1975",
+      "bytes": 6
+    },
+    "META-INF/androidx.datastore_datastore.version": {
+      "sha256": "f2fb797db5b32c15ac4c67b2180b593bf46c768ba1d69971fecbef1d9afb1975",
+      "bytes": 6
+    },
+    "META-INF/androidx.documentfile_documentfile.version": {
+      "sha256": "59854984853104df5c353e2f681a15fc7924742f9a2e468c29af248dce45ce03",
+      "bytes": 6
+    },
+    "META-INF/androidx.fragment_fragment.version": {
+      "sha256": "1575e1af4a95f12f70b4ee6a6adce8160953d93ea17dc2611b90883ccc3ad3b8",
+      "bytes": 6
+    },
+    "META-INF/androidx.interpolator_interpolator.version": {
+      "sha256": "59854984853104df5c353e2f681a15fc7924742f9a2e468c29af248dce45ce03",
+      "bytes": 6
+    },
+    "META-INF/androidx.legacy_legacy-support-core-utils.version": {
+      "sha256": "59854984853104df5c353e2f681a15fc7924742f9a2e468c29af248dce45ce03",
+      "bytes": 6
+    },
+    "META-INF/androidx.lifecycle_lifecycle-livedata-core.version": {
+      "sha256": "c28fcca53637bc88e124af1725df13cb98c69dedefd62fb3cdbe1cdb6b760624",
+      "bytes": 6
+    },
+    "META-INF/androidx.lifecycle_lifecycle-livedata.version": {
+      "sha256": "c28fcca53637bc88e124af1725df13cb98c69dedefd62fb3cdbe1cdb6b760624",
+      "bytes": 6
+    },
+    "META-INF/androidx.lifecycle_lifecycle-runtime.version": {
+      "sha256": "ad8650bc9057d9dfd809961b69dbad640c288d809fa44437d44d83d3b118c821",
+      "bytes": 6
+    },
+    "META-INF/androidx.lifecycle_lifecycle-viewmodel.version": {
+      "sha256": "c89b87c262e9d5ffd20e73aac74a1772adcc9f5a21682cc33adcf5086e5fef5c",
+      "bytes": 6
+    },
+    "META-INF/androidx.loader_loader.version": {
+      "sha256": "59854984853104df5c353e2f681a15fc7924742f9a2e468c29af248dce45ce03",
+      "bytes": 6
+    },
+    "META-INF/androidx.localbroadcastmanager_localbroadcastmanager.version": {
+      "sha256": "59854984853104df5c353e2f681a15fc7924742f9a2e468c29af248dce45ce03",
+      "bytes": 6
+    },
+    "META-INF/androidx.print_print.version": {
+      "sha256": "59854984853104df5c353e2f681a15fc7924742f9a2e468c29af248dce45ce03",
+      "bytes": 6
+    },
+    "META-INF/androidx.savedstate_savedstate.version": {
+      "sha256": "59854984853104df5c353e2f681a15fc7924742f9a2e468c29af248dce45ce03",
+      "bytes": 6
+    },
+    "META-INF/androidx.swiperefreshlayout_swiperefreshlayout.version": {
+      "sha256": "1e5b51cde515396a9fa762909cf8ca6584ccc564b325d2eebeea76175fe95c4d",
+      "bytes": 6
+    },
+    "META-INF/androidx.versionedparcelable_versionedparcelable.version": {
+      "sha256": "cc52f678848b814373757b460383bf61960e4943c203735adde0a350b3e50989",
+      "bytes": 6
+    },
+    "META-INF/androidx.viewpager_viewpager.version": {
+      "sha256": "59854984853104df5c353e2f681a15fc7924742f9a2e468c29af248dce45ce03",
+      "bytes": 6
+    },
+    "META-INF/androidx.webkit_webkit.version": {
+      "sha256": "d723798f2436b46872ee9a012632d6f5602ab9297be05780a79ba29733f8a532",
+      "bytes": 7
+    },
+    "META-INF/kotlinx_coroutines_core.version": {
+      "sha256": "34d597db43ca53b2fd72ccbdd1af7a0fe238c2c0b8321dad8f43a1613143fc62",
+      "bytes": 6
+    },
+    "META-INF/kotlinx_coroutines_play_services.version": {
+      "sha256": "34d597db43ca53b2fd72ccbdd1af7a0fe238c2c0b8321dad8f43a1613143fc62",
+      "bytes": 6
+    },
+    "META-INF/versions/9/OSGI-INF/MANIFEST.MF": {
+      "sha256": "a844d62b02a9eefd9d112e74fd660843d91cd8b81dce6ce60a9eaba605fa939c",
+      "bytes": 145
+    },
+    "client_analytics.proto": {
+      "sha256": "0c76732776772b260528558f9b675a49529cad785c421ca11b487179b8162610",
+      "bytes": 2982
+    },
+    "firebase-iid-interop.properties": {
+      "sha256": "a2862ae5811a268630807c645d5dadc1f15e85b922a2ab0408e984ea5548e102",
+      "bytes": 78
+    },
+    "firebase-measurement-connector.properties": {
+      "sha256": "ca7d9dd559c3cf48a087b9d4fc5b7c6eded0c99892297b59758093459d98463a",
+      "bytes": 98
+    },
+    "kotlin/annotation/annotation.kotlin_builtins": {
+      "sha256": "f6bf68d4798ece5071900772a4a87150314aed3788e042d9e30ab60a0857b211",
+      "bytes": 865
+    },
+    "kotlin/collections/collections.kotlin_builtins": {
+      "sha256": "91d6cd4138e850c100a2dec88a965453b0042bf7f6f51202fe4b1efba38e96c0",
+      "bytes": 3635
+    },
+    "kotlin/concurrent/atomics/atomics.kotlin_builtins": {
+      "sha256": "ef8b50112968a5e1be21c9c03d68ce6a7a939a057b9bc5d3fab72c95470561bf",
+      "bytes": 2471
+    },
+    "kotlin/coroutines/coroutines.kotlin_builtins": {
+      "sha256": "98ab3a3c18fcb237528dd63fa489815c583e1d6c13debd2a27ac6d74ccf8717b",
+      "bytes": 137
+    },
+    "kotlin/internal/internal.kotlin_builtins": {
+      "sha256": "7489c6bcec13d048a4ce9d9f3bafa1a11bfa08021bfa0e07166978d0bc5e450a",
+      "bytes": 583
+    },
+    "kotlin/kotlin.kotlin_builtins": {
+      "sha256": "d03111a486daaa503eb6c17aa6770daf744a9b668f54a75b419d1de3deb868a0",
+      "bytes": 18653
+    },
+    "kotlin/ranges/ranges.kotlin_builtins": {
+      "sha256": "ecf5a840ebf529fd9d1fa8216febc191b8559412a1068554266f64bc3b6f8428",
+      "bytes": 3349
+    },
+    "kotlin/reflect/reflect.kotlin_builtins": {
+      "sha256": "b549fbaa2455d8bd417f44e3df1af2ff6802693a5aa0bb6a740848467b53b69a",
+      "bytes": 2370
+    },
+    "messaging_event.proto": {
+      "sha256": "0b134a9ffe21416fe225f374f44f6eca58b47519feae4c90b82e25677e8d56ce",
+      "bytes": 2381
+    },
+    "messaging_event_extension.proto": {
+      "sha256": "1b9c7669ea81fa9233cce0ca5e4b5f0478071c34fb40deea40d703c4565c42c6",
+      "bytes": 883
+    },
+    "play-services-base.properties": {
+      "sha256": "a0a16f489886f204dbbf176cbab27e64ef404d309bbec8eb30c1f0b42bde538a",
+      "bytes": 74
+    },
+    "play-services-basement.properties": {
+      "sha256": "f104c265304c046ad9ba4807df8a0537204caf35dae11cc090cd8a34be6ee1da",
+      "bytes": 82
+    },
+    "play-services-cloud-messaging.properties": {
+      "sha256": "275a02cfd89f4e71c1e4e856de512ea50ec1b68b289ef3f8755fb6cb44334f9f",
+      "bytes": 96
+    },
+    "play-services-stats.properties": {
+      "sha256": "6b751c654deb3ac65a878025d2ff2b89fabfa0ebe00ac4152ad3f7a361aed107",
+      "bytes": 76
+    },
+    "play-services-tasks.properties": {
+      "sha256": "36e99a9887117e2e3f085bc2b5be1b517dcdb522712dbca8ad3baa407e554919",
+      "bytes": 76
+    },
+    "AndroidManifest.xml": {
+      "sha256": "a232f92d5f7f34d203005b334aefd8477b098595a7584e7d0e5696d05d0c2033",
+      "bytes": 15436
+    },
+    "res/-8.xml": {
+      "sha256": "77c77271a0aecb83415127b804319c17b0d69da94214356b74728c04a32c6e85",
+      "bytes": 1152
+    },
+    "res/-p.png": {
+      "sha256": "90c44675525e290332f7dba6adb97c7af3b8299e56cf5211e893d0e1dec41547",
+      "bytes": 982
+    },
+    "res/0W.xml": {
+      "sha256": "e4091e11e7572e2e4aedd583ad95363d6445c779380822f8a930a499e3a74b55",
+      "bytes": 448
+    },
+    "res/1C.9.png": {
+      "sha256": "9635dab0f3c0b0557f3535d9655784f68130db57ce3920ae68c2d4cab4edd35e",
+      "bytes": 615
+    },
+    "res/1P.xml": {
+      "sha256": "8d4c74bdfa00b1a5710bf9833d154b6027adfcd5bc0b71cabc54f95450f69ceb",
+      "bytes": 448
+    },
+    "res/1n.xml": {
+      "sha256": "b807ee7d1ad86e952e867abfd3146dfe99e378339ec9374ea4e4b9ff42b415ce",
+      "bytes": 548
+    },
+    "res/2K.9.png": {
+      "sha256": "42aee0b03883e94df5e543348a397d1302c1b8221895871a83b81899f5a9647b",
+      "bytes": 225
+    },
+    "res/3P.xml": {
+      "sha256": "f6ceec591c32e851ce14ecd9bdda424e305956baff826a5308ff5f25784d06ba",
+      "bytes": 988
+    },
+    "res/3d.xml": {
+      "sha256": "56f45a3604e460aa7b5f5ca67944bfa2651389623a406096190c8de5cf6b2f05",
+      "bytes": 1196
+    },
+    "res/47.xml": {
+      "sha256": "54111927e7296689b562eddc3e5c0e5f174442c9bf49a425d5eb15fcf140993e",
+      "bytes": 892
+    },
+    "res/4j.xml": {
+      "sha256": "757f2049fb0d70af338a3e505fca6fa81f3f5bf62bf313ca34d75a64b7a3cd1e",
+      "bytes": 2292
+    },
+    "res/55.xml": {
+      "sha256": "cccb126c0cfb46801299df99401fdf98951ab20ad636ec8b0c0e69b79311e8b4",
+      "bytes": 448
+    },
+    "res/5J.9.png": {
+      "sha256": "9d62d3eabefaf89e6018d3902cc8c4bb888a8891d9639deda8fb58ba60fe1822",
+      "bytes": 1032
+    },
+    "res/5c.png": {
+      "sha256": "b44eeda34d7a529c2fe55719eb098fa29707caa91d18de06a7a775d6e6bcf973",
+      "bytes": 138
+    },
+    "res/66.xml": {
+      "sha256": "c45f7360c29478089acf168b366cd6a8b62340d91e2eb1bc42f5d1f0fba53231",
+      "bytes": 1348
+    },
+    "res/79.9.png": {
+      "sha256": "dc9a0ae125491ccdac95b57b5eee4060efd191294e171c8e369d7d0ec3ab2268",
+      "bytes": 694
+    },
+    "res/7R.png": {
+      "sha256": "6083523032ab5df9e6cb82e4ff3d48af7738900a2e9b23d991beaa2eba7862e9",
+      "bytes": 516
+    },
+    "res/8S.xml": {
+      "sha256": "a28845d2d5fdaabe0cc59c06f850a89318872cefc6114936e149c61d90b740f7",
+      "bytes": 764
+    },
+    "res/9J.xml": {
+      "sha256": "d53c9c34a9520c3b4cde068b6ff721dfd8cef29663f2ea770ccaa43c26299cc8",
+      "bytes": 1416
+    },
+    "res/9m.xml": {
+      "sha256": "ec2beba320bf15c54367de1290d6a551a7138429fae2bc4a18a8e0d35b2767c5",
+      "bytes": 304
+    },
+    "res/Af.9.png": {
+      "sha256": "94a0b6363a09d466a3dc3722379ab367d9ff73a21ba0ff2c5bab6c30aa5f8b38",
+      "bytes": 683
+    },
+    "res/BG.xml": {
+      "sha256": "3e4e178d5135e37500d555dd29bcc777cd0a23d94f71d527165fae2d4831aff6",
+      "bytes": 984
+    },
+    "res/BQ.9.png": {
+      "sha256": "9865619196624a3cba32a36b0111357afea3148f123221ba8c7265bc681ab8a9",
+      "bytes": 897
+    },
+    "res/Bl.xml": {
+      "sha256": "078204f4db9a93a8b1f458d52600b80a0b1ced5b44382dfcf4b9cacbc994bcb7",
+      "bytes": 588
+    },
+    "res/Bz.xml": {
+      "sha256": "a27ed8d26c92419df5f3fb8b8a92863544442082a43c2a5597aa463c61a1d8f2",
+      "bytes": 892
+    },
+    "res/C_.9.png": {
+      "sha256": "a8676a1793ac8310ffb12986232df66df092d29c242aeedc2b73556c010d38dc",
+      "bytes": 215
+    },
+    "res/Dd.png": {
+      "sha256": "7c1e1629c95fb2603fbdeab93a8fbf30b9c80be11ef483d497f8a88e8f67bd6b",
+      "bytes": 281
+    },
+    "res/EQ.xml": {
+      "sha256": "a1409e666cfc39f405b706bb2b029a868a17051d503bdffd2fc4fba3d1ca6155",
+      "bytes": 588
+    },
+    "res/Eg.xml": {
+      "sha256": "5af8763c09674263c314fa8e6f0269e2252fa18bb7b9ea86c3a41d9a2ffb1cd9",
+      "bytes": 976
+    },
+    "res/Eh.png": {
+      "sha256": "f73508090d3e6bbc3e39ba768e71855aad52ecaaaccda676d43a1860010cc557",
+      "bytes": 410
+    },
+    "res/Em.xml": {
+      "sha256": "d10d0c15273723f254216732164a792d59917114a1cd0ee35d41e0e2f55841b5",
+      "bytes": 720
+    },
+    "res/Fm.xml": {
+      "sha256": "a15ba9c8874274797413fa14e2a6d52cea7aee95041eef2f1f362bcab89b1a7b",
+      "bytes": 448
+    },
+    "res/H3.xml": {
+      "sha256": "d1320c88c55c710a2c4c3e1c4de94649d1a4115619cefdd6265a08e9e1a35f99",
+      "bytes": 548
+    },
+    "res/I3.9.png": {
+      "sha256": "5624a284adf8a5e8e7c2560524eb05d7ee97d09a9c2dbe3a76a840766015ae30",
+      "bytes": 1255
+    },
+    "res/ID.xml": {
+      "sha256": "24e195bb5f4964bc4525390a1f4212a2c9fb415f15cf18460c812d7bb2f4dfd8",
+      "bytes": 448
+    },
+    "res/K-.xml": {
+      "sha256": "88742ac9bfe56bff61985e8a0d85109343b088e19ef88134d9ce364ff51400ee",
+      "bytes": 588
+    },
+    "res/L_.xml": {
+      "sha256": "e12bbab8c3f9a96ee9e093e3ab73302c98af70c4e7c5512c481142b96c194411",
+      "bytes": 1276
+    },
+    "res/Lr.xml": {
+      "sha256": "adda040c6aa08bc74c7fd3620addf53fb8f452f0e05adb5db40cfe3dffca9999",
+      "bytes": 584
+    },
+    "res/Ma.9.png": {
+      "sha256": "d27af435101ca4cbec0c840bd30687918cd39eb83aab1487420855623a45998b",
+      "bytes": 247
+    },
+    "res/Pb.xml": {
+      "sha256": "5c9024be544f3862211e62c50d784cdfca87a7cf165322084e4babb7a6dd757b",
+      "bytes": 584
+    },
+    "res/Pq.xml": {
+      "sha256": "6eec3ce56d72031cf123268a220b5df8ccb05b0082be281e716ef3fd70d2ffba",
+      "bytes": 548
+    },
+    "res/Q7.xml": {
+      "sha256": "c6230a691fbcec991b397608dd16729cfef5f3186616862c70e71054e955b98c",
+      "bytes": 1204
+    },
+    "res/Qd.9.png": {
+      "sha256": "f62bf21d152a276ae8d9a0d62997f12c60d64ec812fd973ff60e3295deee34b4",
+      "bytes": 776
+    },
+    "res/Rt.xml": {
+      "sha256": "4fcea6a8cb89dbb111832b4241e85bea8af855cd1f3bea217bf0e837d83043ce",
+      "bytes": 892
+    },
+    "res/S8.xml": {
+      "sha256": "ad1f544bea1e8018e8de54f5fef8e247a0e802b5ba2339ed1ffae325bc190655",
+      "bytes": 1052
+    },
+    "res/SJ.xml": {
+      "sha256": "e4630f8be7d9a512d264cb5057112cc4fdaf026da94351c9b4a396f0c69dc6a5",
+      "bytes": 1468
+    },
+    "res/T5.xml": {
+      "sha256": "d3c36bdade48199d0025788278f8c0fb8757c5e56715e1ea40ae903661f11b52",
+      "bytes": 1132
+    },
+    "res/TK.xml": {
+      "sha256": "1982f336a906b7439db7e8438872381a3d53690fd14aa7f38cd8c4f2d3495d6d",
+      "bytes": 892
+    },
+    "res/U-.9.png": {
+      "sha256": "e17761ed280edd93d7141bd504b70f9e9e15a8652288d9e6333bf4ce964ef844",
+      "bytes": 223
+    },
+    "res/Vm.xml": {
+      "sha256": "bafd5db7cb7f8b12d6f4d1b40a71a8abb1991aa178f1a8a5f741d49da84fea5e",
+      "bytes": 548
+    },
+    "res/Ws.xml": {
+      "sha256": "2f768c089cefa18cf7f1fde7f602410bf38998de5f9073a15ea83106c25e3c30",
+      "bytes": 1180
+    },
+    "res/XA.xml": {
+      "sha256": "51274b3bed5cd9808719ed45010b77c67637c1351425de90c925b0116bd5b77e",
+      "bytes": 1272
+    },
+    "res/Yv.xml": {
+      "sha256": "d818ac012c9ed235fc7ddd809b7cda0479e282f51865611d0505e03c877040be",
+      "bytes": 1248
+    },
+    "res/ZI.png": {
+      "sha256": "e8e2fecfbf111cc5ef65dbb6c7395a5ae16a68f7e0922738d0c802b26e866e49",
+      "bytes": 681
+    },
+    "res/ZL.9.png": {
+      "sha256": "fcb4416a4f5f5b4d72854d91722289789b30bb562c6f0f57975818ab555cc809",
+      "bytes": 1086
+    },
+    "res/_p.png": {
+      "sha256": "549a81cda776769840f37f184d34eb673ff9e5c0671c67172818e91273753e1a",
+      "bytes": 1441
+    },
+    "res/_y.xml": {
+      "sha256": "b3e55695824dcf3400ca39134af29e2e1c02114a541d571e8216535d2421cae2",
+      "bytes": 612
+    },
+    "res/a0.xml": {
+      "sha256": "88e46046333b956b60d854489b3fb627dba614c9ceff4b7ce352b6c6b8f32ac2",
+      "bytes": 1228
+    },
+    "res/aQ.xml": {
+      "sha256": "711aeae0147a0984d322e997149404845bc20a492ef2d525fb93086d299bbc9c",
+      "bytes": 548
+    },
+    "res/bI.xml": {
+      "sha256": "98bc422edfc21dfceeb01193fa5211cb019dff6ae890bd07dc6c9f6af01d5391",
+      "bytes": 1780
+    },
+    "res/c6.xml": {
+      "sha256": "70bab5875759413b8dbf45e003c940c4c192bb90368a60c93b52b51eca05b03f",
+      "bytes": 372
+    },
+    "res/cV.xml": {
+      "sha256": "26eb0baf907422c7ffac3b86830e8de5039a5eb8eee0aa5afeba5740857be3eb",
+      "bytes": 440
+    },
+    "res/color/common_google_signin_btn_text_dark.xml": {
+      "sha256": "837eeaa26972a2ea430400188c7b0fe8cc79a50524a20e32c04fe2f146246349",
+      "bytes": 712
+    },
+    "res/color/common_google_signin_btn_text_light.xml": {
+      "sha256": "36e6448a494ef86ef273ac36254bbc5c02ea85c4922dc4954f297830135d1cd4",
+      "bytes": 712
+    },
+    "res/color/common_google_signin_btn_tint.xml": {
+      "sha256": "c230db3d543d322c35c60b744c12b0aa7526f1ccfffbb570caee6f47c99f9626",
+      "bytes": 464
+    },
+    "res/dB.9.png": {
+      "sha256": "77d8cc5447360efba3b3f1659bea9680eccbe47e2aaa07424d562f0e5c8af829",
+      "bytes": 500
+    },
+    "res/df.xml": {
+      "sha256": "a0153ae342182d8655fb5d275ef6bdcdaa06034c02e954a0d48a8216c86f319b",
+      "bytes": 532
+    },
+    "res/eO.xml": {
+      "sha256": "8063a7a63920fee5267c6e529bad32110444d1d5e7c813e6de25457041b22014",
+      "bytes": 1436
+    },
+    "res/f9.png": {
+      "sha256": "788a3b9472e9a46e1b6b68d918cd1571914b732e93aab014d77f20be5374e9de",
+      "bytes": 562
+    },
+    "res/gK.9.png": {
+      "sha256": "2f7fbda0ba6e53e9a47e2fc0e24e32c447c613a5808c2d6285dc651e83a07ad7",
+      "bytes": 215
+    },
+    "res/gX.xml": {
+      "sha256": "a57f8b0ee5dfa0b232eee86cb3314ec2d69dde02820ca386f62d5d2c56f575b6",
+      "bytes": 448
+    },
+    "res/hO.xml": {
+      "sha256": "0b3ecb223c56bba0cc5775d23951f3975dbb22bd10ed17574ae555632cff3a35",
+      "bytes": 1472
+    },
+    "res/hP.9.png": {
+      "sha256": "092bf333080e2b3ece63147ea15e6ac04915968c010e5c3f85f8cb650d61ecb7",
+      "bytes": 808
+    },
+    "res/iQ.png": {
+      "sha256": "e816dc0998f4ee90d7b630f17e16fcc2e72d91078c5315adaac4bc2da4c226d7",
+      "bytes": 489
+    },
+    "res/iQ.xml": {
+      "sha256": "00150e604011b40972c1975987f19f11fe6f2c286f04a47f5092bf5548c921e8",
+      "bytes": 988
+    },
+    "res/iW.png": {
+      "sha256": "f221f962a62c954a11b1734e9631fc8531e34bee557665fea864aa4386e25e39",
+      "bytes": 808
+    },
+    "res/iz.xml": {
+      "sha256": "7d9849710d3370f225b2fd8267a75bd207bdc88cc66f7c7bddf71a7401ec64e3",
+      "bytes": 1472
+    },
+    "res/je.9.png": {
+      "sha256": "21f0b55280be10b187ceff8edef4a5a7047683e6e9fcf47de410aa3839f41094",
+      "bytes": 212
+    },
+    "res/k9.xml": {
+      "sha256": "2b2ceec94c5716ff434b89e55a346fd50034e2ac7fb2d3530b89b714b69c8284",
+      "bytes": 548
+    },
+    "res/lB.xml": {
+      "sha256": "019cb9d5de3305f0c88f93832162c8b8a1f0fa31e0fce7d9f6fbaf135d1687c3",
+      "bytes": 1068
+    },
+    "res/lQ.xml": {
+      "sha256": "2f0107edea0d0dc38424073c27031c9367baa867676acd1f4522f623005bc825",
+      "bytes": 448
+    },
+    "res/lR.xml": {
+      "sha256": "bc4303cb66962f4556729deadaa3886f6b1a4d1dc882641a3abae35802096053",
+      "bytes": 440
+    },
+    "res/mK.xml": {
+      "sha256": "1fce87a60e161c6cad232c76d97fcec82a60e9676676e1a64f9f695ef041c3a3",
+      "bytes": 496
+    },
+    "res/mQ.xml": {
+      "sha256": "2d3833f30bc7743c6bc16486ef79829fcade9b9b1278a0ab28286adf9e46aa15",
+      "bytes": 1272
+    },
+    "res/nC.9.png": {
+      "sha256": "08a416adad6c0e9bece3238674a76b24bbac2ce95c1cffca817b3c675ac69f6b",
+      "bytes": 465
+    },
+    "res/nz.xml": {
+      "sha256": "1bd768e0311fac8462f9f6eb19663dde43bda8b735f59aa77f7931e2cb5eaa87",
+      "bytes": 532
+    },
+    "res/oO.9.png": {
+      "sha256": "71bfd776b21b1102f26e31a0f6dc65d40de2cbae650c7528241d5cdc17eac991",
+      "bytes": 610
+    },
+    "res/o_.9.png": {
+      "sha256": "20343222f9f79dd565c3a2248494d452e70820ac1c437173c38badd45f962afd",
+      "bytes": 252
+    },
+    "res/p7.xml": {
+      "sha256": "ae0b0e70aa4f53a0c8ea970068e1a5569fce696dbdaf377286d702711e91611f",
+      "bytes": 548
+    },
+    "res/pI.xml": {
+      "sha256": "666bb9ba1b93f25748bdcc9df8601fdcb3078cf857c44bfe17e4051b48faf238",
+      "bytes": 548
+    },
+    "res/pR.xml": {
+      "sha256": "12986f39a70e0a779699d7f9b3ccd1f1b67b522427e7dde705f6fa65831b72f0",
+      "bytes": 792
+    },
+    "res/pY.png": {
+      "sha256": "8430ec003e003f3f2ba2f78d48fd150e25407667e530e82e87a7d4841c0fd676",
+      "bytes": 107
+    },
+    "res/qF.xml": {
+      "sha256": "5ef20e971497f76063ae165ee4aebc767cb12bcdd9fad3a0ca2c73d2c32f8163",
+      "bytes": 290
+    },
+    "res/qu.xml": {
+      "sha256": "758fc2559852620e9d27aa1cfc392f7be92860ec4ac88c8b0de1f540ffb5f715",
+      "bytes": 1272
+    },
+    "res/s4.png": {
+      "sha256": "0d773e62c756422313262846c787e58f67e0ee87e45e1ae9942002e816c4cb9e",
+      "bytes": 98
+    },
+    "res/sA.9.png": {
+      "sha256": "0c6328c7b2420570a7ec38b3beb3bac9a29d895ac1ab7239315aba7266418593",
+      "bytes": 212
+    },
+    "res/sW.xml": {
+      "sha256": "474df31dab48d570c73138aea411005b5c7c93f7bcd7f65cd2665a6aa711ee88",
+      "bytes": 1520
+    },
+    "res/sq.xml": {
+      "sha256": "4c58ac5c81618b46cc122dca15a0f2c60f6b2151737c66b2df593bf34da286c2",
+      "bytes": 988
+    },
+    "res/tU.xml": {
+      "sha256": "e168d6905ebbd125f92f42129160d0bf525bbcdc0ce23db31ea568e48c1e9ef4",
+      "bytes": 1440
+    },
+    "res/tW.xml": {
+      "sha256": "1efe4fb39d6c6a7ffd60e6abd9f5466689858ce2562d075aa8955d710d227e18",
+      "bytes": 1524
+    },
+    "res/tr.9.png": {
+      "sha256": "d66f7061c274b1b6f8524993367af902737ddf9187db0cc8d91a8c64ad9b944a",
+      "bytes": 960
+    },
+    "res/un.xml": {
+      "sha256": "531515e9cd63358039329105875712eeaa4ef29d638f7767d22c415e8f0658e8",
+      "bytes": 448
+    },
+    "res/us.9.png": {
+      "sha256": "42a1b93ba380eeba9d499582df981a535f872af234ad6600675fff37459306e5",
+      "bytes": 1638
+    },
+    "res/vL.9.png": {
+      "sha256": "99c14d6855b8be296d58017d3751b8dc849c47b6d1d80ab614ff9075080e461b",
+      "bytes": 223
+    },
+    "res/vi.xml": {
+      "sha256": "2e336d481c0b94c0e73584758ed659884cbd2ad4cf570008122bb7bd0883de5c",
+      "bytes": 548
+    },
+    "res/vo.png": {
+      "sha256": "5db3ab4d30063b5e8fa63ae2993f83efd0af71d6526b3a1468f9e3bf891af587",
+      "bytes": 727
+    },
+    "res/vy.xml": {
+      "sha256": "174884d87709e6c1c0a2b385c9bae6cea5eb742b64df66ca2d9a090edd3e309c",
+      "bytes": 1952
+    },
+    "res/w-.xml": {
+      "sha256": "da600b2caa696f646618821dfd2f201ef50b75859f2a4153f9ee30460bc6a14b",
+      "bytes": 952
+    },
+    "res/w2.9.png": {
+      "sha256": "71f14a18275f8678fd9f0c1c0affc400a975a0b815b82eca7345b6aaecf978ee",
+      "bytes": 1138
+    },
+    "res/w6.xml": {
+      "sha256": "83fa479ca54aa20f714b9bcd86da6a9bedb040ca687e4ae64b58e9dfb18ebc5b",
+      "bytes": 408
+    },
+    "res/wN.9.png": {
+      "sha256": "18b328d8017e677d5aad3dbd66bae356b5cac978c6f0670938ea648e51d0eb66",
+      "bytes": 225
+    },
+    "res/wo.xml": {
+      "sha256": "357e428186c8c96fa16f2d87ceffe81ad083e2368f8c74a2387faf9cc180fc76",
+      "bytes": 796
+    },
+    "res/xN.xml": {
+      "sha256": "fd3ac93fe66aa91284b856d1f361281a1fd95f37b3a85403d4b0a3f0a1b26164",
+      "bytes": 2456
+    },
+    "res/xX.xml": {
+      "sha256": "35506081c0c4047032f8161acee128a5a053a7734adae1ae2808782c7a9659df",
+      "bytes": 1084
+    },
+    "res/xa.9.png": {
+      "sha256": "3e09afa21c45372c035598c017c8fb405a6d678e6cb84dc857581cb3b40e482d",
+      "bytes": 221
+    },
+    "res/xv.xml": {
+      "sha256": "561bce828f61d35e412366a2e585c80fb14d0a29a3c8e645c756d59d35bf42b4",
+      "bytes": 1088
+    },
+    "res/y6.xml": {
+      "sha256": "651bd08dd5ef579a153daf93df0cfae3b87db7c8054ab420482569a1cb49104f",
+      "bytes": 588
+    },
+    "res/yW.xml": {
+      "sha256": "6c5301170f698fd0ac85aeccf1efd4b89b011d0a4a85a5fe3d12d74c118d3668",
+      "bytes": 1480
+    },
+    "res/yq.xml": {
+      "sha256": "ca7d2c0b3e4c2f13758873815e04fb17aaf77ae9f8a3729a6783d9a035d82fd0",
+      "bytes": 548
+    },
+    "res/z-.9.png": {
+      "sha256": "559bf783d765c02338e97952bdc9c6689c7ff99090b8c9813369118da8b080f0",
+      "bytes": 221
+    },
+    "res/zw.9.png": {
+      "sha256": "be03693c47d3c4d4466f14a695eaccd210b61e91d808c0c4a46d6f021b598278",
+      "bytes": 1510
+    },
+    "res/zz.xml": {
+      "sha256": "32ae0eacb770a9f27f927287a1dea4348be39bd14d6c3908a0abe5c078e2b07f",
+      "bytes": 1640
+    },
+    "resources.arsc": {
+      "sha256": "a6d7abf1f21d82cbb5ab0ea08003f89ef91a015df035a42abd2cd6c9e4bb0ce0",
+      "bytes": 164536
+    }
+  },
+  "signature_verification": {
+    "verified": true,
+    "certificate_sha256": [
+      "d425e1a47b90276aefb8d8ae1617fd44b0528113be25712faea20079b1211993"
+    ],
+    "tool": "Android SDK apksigner",
+    "build_tools": "35.0.0"
+  },
+  "meaning": "Equality verifies these build inputs and packaged bytes; it does not audit remote services.",
+  "source_commit": "c4161725a690310665c9a2505e746ccf39874c43",
+  "reference_vcs_matches_source_commit": true,
+  "rebuilt_vcs_matches_source_commit": true,
+  "selected_apk_client_resource_names": [
+    "google_app_id",
+    "google_api_key",
+    "gcm_defaultSenderId",
+    "project_id",
+    "moa_push_endpoint"
+  ],
+  "selected_client_inputs_sha256": "f0f2e49dc01dadd59a76831ff20f92284ac8a1f53c05f8aacf1ddcefc524d864",
+  "wrapper_jar_sha256": "498495120a03b9a6ab5d155f5de3c8f0d986a449153702fb80fc80e134484f17",
+  "wrapper_properties_sha256": "527958dda95c558340516313e452924a39ab3ce8718e1451749541f2aa0157e4",
+  "jdk": {
+    "version": "17.0.20.1",
+    "vendor": "Eclipse Adoptium"
+  },
+  "gradle_build_cache_used": false,
+  "allowed_preexisting_generated_file_count": 0,
+  "extra_gradle_user_configuration_allowed": false,
+  "inherited_jvm_and_gradle_project_options_removed": true,
+  "configuration_cache_used": false,
+  "all_tasks_rerun": true,
+  "offline_dependencies": true,
+  "temporary_client_inputs_deleted": true,
+  "signing_key_required": false,
+  "server_credentials_required": false,
+  "limitations": [
+    "Dependency downloads/cache must be independently trusted or verified.",
+    "JDK/SDK/dependency versions can affect reproducibility.",
+    "APK client settings are intentionally taken from the reference APK.",
+    "Packaged-byte equality does not prove remote server behavior or absence of all bugs."
+  ]
+}

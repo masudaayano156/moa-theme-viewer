@@ -1,0 +1,65 @@
+{
+  "schema": 1,
+  "version": "0.8.2",
+  "sha256": "862c0b7f81ab9a75d5d96d74e1b0bec771a0ae22aac6c24b29fb7ed29db5e9e9",
+  "bytes": 3166675,
+  "package": "app.moa.client",
+  "version_code": 20,
+  "signature_verified": true,
+  "certificate_sha256": "d425e1a47b90276aefb8d8ae1617fd44b0528113be25712faea20079b1211993",
+  "debuggable": false,
+  "permissions": [
+    {
+      "name": "android.permission.ACCESS_NETWORK_STATE",
+      "max_sdk": null,
+      "implied": false
+    },
+    {
+      "name": "android.permission.INTERNET",
+      "max_sdk": null,
+      "implied": false
+    },
+    {
+      "name": "android.permission.POST_NOTIFICATIONS",
+      "max_sdk": null,
+      "implied": false
+    },
+    {
+      "name": "android.permission.READ_EXTERNAL_STORAGE",
+      "max_sdk": 28,
+      "implied": true,
+      "reason": "requested WRITE_EXTERNAL_STORAGE"
+    },
+    {
+      "name": "android.permission.RECEIVE_BOOT_COMPLETED",
+      "max_sdk": null,
+      "implied": false
+    },
+    {
+      "name": "android.permission.WAKE_LOCK",
+      "max_sdk": null,
+      "implied": false
+    },
+    {
+      "name": "android.permission.WRITE_EXTERNAL_STORAGE",
+      "max_sdk": 28,
+      "implied": false
+    },
+    {
+      "name": "app.moa.client.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION",
+      "max_sdk": null,
+      "implied": false
+    },
+    {
+      "name": "com.google.android.c2dm.permission.RECEIVE",
+      "max_sdk": null,
+      "implied": false
+    }
+  ],
+  "source_commit": "c4161725a690310665c9a2505e746ccf39874c43",
+  "embedded_vcs_revision": "c4161725a690310665c9a2505e746ccf39874c43",
+  "embedded_revision_matches_source": true,
+  "private_material_checks": "no_detected_match",
+  "identity_result": "pass",
+  "scope": "Release identity, declared/effective permissions and limited forbidden-file/key patterns; not a malware-free certification."
+}

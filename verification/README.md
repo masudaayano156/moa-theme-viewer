@@ -10,7 +10,30 @@
 - [발견 사항과 수정 기록](source-review.md)
 - [공개 자동 검사 실행 기록](https://github.com/masudaayano156/moa-theme-viewer/actions)
 
-## 최신 0.8.1 검사 결과
+## 최신 0.8.2 검사 결과
+
+| 검사 | 결과와 한계 |
+|---|---|
+| APK 해시·서명·권한 | 전용 인증서와 v2/v3 서명 유효, 디버깅 꺼짐. 권한 9개(구형 OS의 암묵적 읽기 1개 포함). 카메라·마이크 없음 |
+| 소스 내용 재빌드 | DEX·Manifest·리소스·자산·내장 Git 정보 등 **189/189 항목 바이트 동일** |
+| 파일 전체 재현 | **완전 일치 아님.** 서명 블록만 제거해도 ZIP 헤더·정렬 등의 포장 바이트는 다름 |
+| VirusTotal | **68개 엔진 미탐지, 7개 형식 미지원**, 2026-10-18 13:19:21 KST 기준. 무악성 인증이 아님 |
+| 의존성 | 68개 해석 항목의 라이브러리·버전·해시 공개. 중복을 합친 Maven 66개의 OSV 알려진 취약점 일치 없음 |
+| 개발 검증 | Android JVM 755회 통과·실패/오류/스킵 0, lint 오류 0. 별도 검증 도구 합성 입력 45회 통과. 전문 보안 감사가 아님 |
+| 공개 자동 검사 | [소스 검사·lint·CodeQL·OSV 실행](https://github.com/masudaayano156/moa-theme-viewer/actions/workflows/security.yml), [APK 검증 실행](https://github.com/masudaayano156/moa-theme-viewer/actions/workflows/verify-release.yml)의 실제 상태 확인 |
+
+- [APK 다운로드](https://github.com/masudaayano156/moa-theme-viewer/releases/download/v0.8.2/moa-0.8.2.apk) · [릴리스·체크섬](https://github.com/masudaayano156/moa-theme-viewer/releases/tag/v0.8.2)
+- [VirusTotal 원본 보고서](https://www.virustotal.com/gui/file/862c0b7f81ab9a75d5d96d74e1b0bec771a0ae22aac6c24b29fb7ed29db5e9e9) · [검사 시점 요약](reports/v0.8.2-virustotal.json)
+- [버전 정보](releases/v0.8.2.json) · [APK 검사](reports/v0.8.2-apk.json) · [재빌드 상세 비교](reports/v0.8.2-rebuild.json)
+- [검토·개발 검증 범위](reports/v0.8.2-review.json) · [실제 비밀값 제외 대조 범위](reports/v0.8.2-secret-exclusion.json)
+
+빌드 소스 커밋은 `c4161725a690310665c9a2505e746ccf39874c43`이며 APK 내장 revision도 같습니다. 이후 문서·검증 워크플로 수정과 구분합니다. 로컬의 깨끗한 소스에서 만든 비서명 APK 두 개는 파일 전체가 같았지만, 배포 서명 과정에서는 ZIP 헤더·정렬도 바뀝니다. 따라서 배포 파일의 완전한 비트 단위 재현 성공으로 표시하지 않습니다.
+
+공개 custom attestation은 배포 파일의 해시·서명·권한과 **모든 ZIP 항목 내용의 소스 대조 결과**를 명시합니다. `isBitExactReproduction: false`, `rawApkBytesExcludingSigningBlock: different`이면 포장 차이가 남아 있다는 뜻입니다. 원본 APK를 Actions가 최초 제작했다는 증명도 아닙니다.
+
+0.8.2에서는 긴 주소 처리의 정규식 성능 문제를 수정했고, [공개 소스 검사 실행](https://github.com/masudaayano156/moa-theme-viewer/actions/runs/39096346205)이 완료됐습니다. CodeQL의 해당 경고는 해소됐으며, 남은 11개 경고는 숨기지 않고 [항목별 검토 근거](codeql-review.md)와 [현재 분석 기록](reports/v0.8.2-codeql.json)에 구분했습니다. 자동 분석 성공은 무경고·무악성 인증이 아닙니다.
+
+## 이전 0.8.1 검사 결과
 
 | 검사 | 결과와 한계 |
 |---|---|
@@ -54,7 +77,7 @@
 Python 3와 Android SDK Build Tools 35.0.0, Java가 준비된 환경에서 실행합니다. 이 도구는 APK를 설치하거나 실행하지 않으며 개인키를 요구하지 않습니다.
 
 ```sh
-python verification/verify_apk.py --apk moa-0.8.0.apk --manifest verification/releases/v0.8.0.json --sdk "$ANDROID_HOME" --report apk-report.json
+python verification/verify_apk.py --apk moa-0.8.2.apk --manifest verification/releases/v0.8.2.json --sdk "$ANDROID_HOME" --report apk-report.json
 ```
 
 재현 빌드는 지정 source commit의 깨끗한 checkout에서 실행해야 합니다. 서명 블록 외의 차이를 숨기지 않습니다. 개인 빌드 로그나 추출한 임시 설정을 이슈·PR·검사 사이트에 올리지 마세요.
