@@ -30,8 +30,12 @@
   "allowed_rebuild_differences": [],
   "provenance_note": "Locally built and signed from the identified clean public source. All 109 packaged entry bytes match an independent clean-source rebuild, including VCS. ZIP packaging differs after removing the signing block; not bit-exact reproduction.",
   "external_antivirus": {
-    "status": "not_submitted",
-    "reason": "This new APK has not been submitted. Earlier-version scan results do not apply."
+    "status": "completed",
+    "url": "https://www.virustotal.com/gui/file/f5bf1f1e0d9d2387b4d3c231add96b5ebcd9111b8d0a1288e19fd1200f3996aa",
+    "analysis_date_utc": "2026-10-18T05:46:10Z",
+    "malicious_detections": 0,
+    "undetected_engines": 67,
+    "unsupported_engines": 8
   },
   "source_content_rebuild_verified": true,
   "bit_exact_reproduction": false,

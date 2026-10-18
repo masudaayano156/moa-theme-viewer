@@ -172,3 +172,4 @@
 !/verification/reports/v0.9.0-dependencies.cdx.json
 !/verification/reports/v0.9.0-dependencies-osv.json
 !/verification/reports/v0.9.0-ci.json
+!/verification/reports/v0.9.0-virustotal.json

@@ -32,7 +32,8 @@
     "No live Android login-account notification-delivery test for this new APK.",
     "Original site notification DOM/functions and account settings can change.",
     "An already in-flight original site response/confirmation is not cancelled by the app popup switch.",
-    "No external antivirus submission for this new APK; old scan results do not apply.",
+    "Snapshot of the displayed antivirus results for this exact APK; no malware-free certification, and unsupported engines did not analyze the file.",
     "All entry bytes match; raw ZIP packaging differs, so not bit-exact reproduction."
-  ]
+  ],
+  "external_antivirus_report": "verification/reports/v0.9.0-virustotal.json"
 }

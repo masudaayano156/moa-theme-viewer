@@ -23,10 +23,11 @@
 | 의존성 | 공개 Maven 15개, OSV 조회 완료·알려진 취약점 일치 없음. Firebase·Google Play services 런타임 제거 |
 | 개발 검사 | Android JVM 513개·웹 224개 통과, 실패 0·lint 오류 0. 테스트 코드와 개인 자료는 공개하지 않음 |
 | 팝업 | 7개 테마·밝음/어두움·강조색, 한 화면의 90초 주기, 비활성화·중복 방지 검사. 실제 휴대폰 계정의 새 알림 수신은 미검증 |
-| 외부 다중 백신 | 새 APK 미제출. 0.8.1·0.8.2 VirusTotal 결과를 이 버전에 적용하지 않음 |
+| VirusTotal | **67개 엔진 미탐지, 8개 형식 미지원**, 2026-10-18 14:46:10 KST 기준. 무악성 인증이 아님 |
 | GitHub 자동 검사 | [소스·lint·CodeQL·OSV 완료](https://github.com/masudaayano156/moa-theme-viewer/actions/runs/39101041090) · [APK 재빌드·서명·검증 증명 확인 완료](https://github.com/masudaayano156/moa-theme-viewer/actions/runs/39101135395) · [실제 완료 기록](reports/v0.9.0-ci.json) |
 
 - [0.9.0 APK 다운로드](https://github.com/masudaayano156/moa-theme-viewer/releases/download/v0.9.0/moa-0.9.0.apk) · [릴리스와 SHA-256](https://github.com/masudaayano156/moa-theme-viewer/releases/tag/v0.9.0)
+- [VirusTotal 원본 보고서](https://www.virustotal.com/gui/file/f5bf1f1e0d9d2387b4d3c231add96b5ebcd9111b8d0a1288e19fd1200f3996aa) · [검사 시점 요약](reports/v0.9.0-virustotal.json)
 - [버전·해시·권한](releases/v0.9.0.json) · [APK 검사](reports/v0.9.0-apk.json) · [재빌드 비교](reports/v0.9.0-rebuild.json)
 - [검토·개발 검사 범위](reports/v0.9.0-review.json) · [의존성 목록](reports/v0.9.0-dependencies.cdx.json) · [OSV 결과](reports/v0.9.0-dependencies-osv.json)
 
