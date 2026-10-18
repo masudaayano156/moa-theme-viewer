@@ -225,12 +225,16 @@ def verify(args):
         write_json(public / "comparison.json", sanitized_comparison(comparison))
         dependencies = sanitized_inventory(inventory(source, state, sdk), args.version)
         write_json(public / "dependencies.cdx.json", dependencies)
-        complete = (comparison["exact_bytes_equal_after_removing_only_signing_block"] is True and
-                    comparison["all_zip_entry_bytes_equal"] is True and
+        complete = (comparison["all_zip_entry_bytes_equal"] is True and
                     comparison["reference_vcs_matches_source_commit"] is True and
                     comparison["rebuilt_vcs_matches_source_commit"] is True and
                     comparison["ignored_entries"] == [] and identity["embedded_revision_matches_source"] is True)
-        status["result"] = "pass" if complete else "mismatch"
+        exact = comparison["exact_bytes_equal_after_removing_only_signing_block"] is True
+        status["result"] = ("pass" if exact else "content_verified_container_differs") if complete else "mismatch"
+        status["bit_exact_reproduction"] = complete and exact
+        status["all_packaged_entries_verified"] = complete
+        if complete and not exact:
+            status["container_note"] = "ZIP entry bytes match, but raw container bytes still differ after removing the signature block. This is not bit-exact APK reproduction."
         status["runtime_dependency_components"] = len(dependencies["components"])
     except Exception:
         # No arbitrary tool exception, URL, local path, environment or build log
@@ -257,7 +261,9 @@ def attestation(args):
             raise ValueError("Invalid verification artifact file")
         reports[name] = json.loads(path.read_text(encoding="utf-8"))
     status, identity, comparison = (reports[name] for name in ("verification.json", "apk-identity.json", "comparison.json"))
-    if (status.get("result") != "pass" or status.get("repository") != REPOSITORY or
+    exact = comparison.get("exact_bytes_equal_after_removing_only_signing_block")
+    expected_result = "pass" if exact is True else "content_verified_container_differs"
+    if (type(exact) is not bool or status.get("result") != expected_result or status.get("repository") != REPOSITORY or
             status.get("version") != args.version or status.get("source_commit") != expected["source_commit"] or
             status.get("verification_tool_commit") != git_commit(HERE.parent) or
             status.get("apk_sha256") != expected["apk"]["sha256"] or
@@ -265,7 +271,6 @@ def attestation(args):
             identity.get("sha256") != expected["apk"]["sha256"] or
             identity.get("certificate_sha256") != verify_apk.CERTIFICATE or
             identity.get("embedded_revision_matches_source") is not True or
-            comparison.get("exact_bytes_equal_after_removing_only_signing_block") is not True or
             comparison.get("all_zip_entry_bytes_equal") is not True or comparison.get("ignored_entries") != [] or
             comparison.get("reference_apk_sha256") != expected["apk"]["sha256"] or
             comparison.get("source_commit") != expected["source_commit"] or
@@ -274,7 +279,8 @@ def attestation(args):
         raise ValueError("Reports do not establish the exact reviewed release verification")
     if (entry_map(comparison.get("reference_entries")) != entry_map(comparison.get("rebuilt_entries")) or
             any(comparison.get(key) != [] for key in ("missing_entries", "added_entries", "changed_entries")) or
-            comparison.get("reference_without_signing_block_sha256") != comparison.get("rebuilt_apk_sha256") or
+            not HEX.fullmatch(comparison.get("reference_without_signing_block_sha256", "")) or
+            (comparison.get("reference_without_signing_block_sha256") == comparison.get("rebuilt_apk_sha256")) != exact or
             not HEX.fullmatch(comparison.get("rebuilt_apk_sha256", "")) or
             not HEX.fullmatch(comparison.get("selected_client_inputs_sha256", "")) or
             comparison.get("selected_apk_client_resource_names") != list(reproduce_apk.CLIENT_NAMES) or
@@ -283,20 +289,22 @@ def attestation(args):
             identity.get("version") != args.version or identity.get("bytes") != expected["apk"]["bytes"]):
         raise ValueError("Verification report hashes or metadata are inconsistent")
     sanitized_inventory(reports["dependencies.cdx.json"], args.version)
-    predicate = {"schema": 1, "claim": "verification-of-an-existing-release",
+    predicate = {"schema": 1, "claim": "verification-of-existing-release-content",
+                 "isBitExactReproduction": exact,
                  "isBuildProvenance": False, "repository": "https://github.com/" + REPOSITORY,
                  "releaseVersion": args.version, "releaseSourceCommit": expected["source_commit"],
                  "verificationToolCommit": git_commit(HERE.parent),
                  "publisherCertificateSha256": verify_apk.CERTIFICATE,
                  "checks": {"releaseDigest": "matched-reviewed-main-manifest", "apkSignature": "verified",
                             "permissions": "matched-reviewed-main-manifest", "allPackagedEntryBytes": "identical",
-                            "rawApkBytesExcludingSigningBlock": "identical", "sourceRevision": "matched",
+                            "rawApkBytesExcludingSigningBlock": "identical" if exact else "different", "sourceRevision": "matched",
                             "ignoredZipEntries": []},
                  "clientInputs": {"origin": "five-allowlisted-public-resource-values-from-reference-apk",
                                   "names": list(reproduce_apk.CLIENT_NAMES),
                                   "sha256": comparison["selected_client_inputs_sha256"]},
                  "reports": [{"name": name, "sha256": file_hash(folder / name)} for name in REPORT_FILES],
                  "limitations": ["This workflow did not produce or sign the downloaded release APK.",
+                                  "When isBitExactReproduction is false, only packaged entry content and source metadata are matched; container differences remain visible in the reports.",
                                   "No malware-free certification or assertion about remote service behavior.",
                                   "Dependency inventory covers Android runtime inputs, not the entire build environment."]}
     write_json(args.predicate, predicate)
