@@ -52,8 +52,9 @@ jobs:
       - name: Select an isolated Gradle cache
         run: echo "GRADLE_USER_HOME=$RUNNER_TEMP/security-gradle" >> "$GITHUB_ENV"
       - name: Install the public Android SDK packages
-        run: sdkmanager 'platforms;android-35' 'build-tools;34.0.0' 'build-tools;35.0.0'
+        run: '"$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-35" "build-tools;34.0.0" "build-tools;35.0.0"'
       - name: Initialize Java analysis
+        id: codeql_init
         uses: github/codeql-action/init@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4
         with:
           languages: java-kotlin
@@ -73,7 +74,7 @@ jobs:
           --inventory "$RUNNER_TEMP/runtime-dependencies.cdx.json"
           --report "$RUNNER_TEMP/dependency-vulnerabilities.json"
       - name: Complete Java CodeQL analysis
-        if: always() && !cancelled()
+        if: always() && !cancelled() && steps.codeql_init.outcome == 'success'
         uses: github/codeql-action/analyze@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4
         with:
           category: /language:java-kotlin
