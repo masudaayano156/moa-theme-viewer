@@ -65,7 +65,7 @@ def workflow_outputs(values):
         return
     with open(destination, "a", encoding="utf-8") as stream:
         for key, value in values.items():
-            if not re.fullmatch(r"[a-z_]+", key) or "\n" in str(value) or "\r" in str(value):
+            if not re.fullmatch(r"[a-z_][a-z0-9_]*", key) or "\n" in str(value) or "\r" in str(value):
                 raise ValueError("Invalid workflow output")
             stream.write(key + "=" + str(value) + "\n")
 
@@ -331,8 +331,9 @@ def main():
     args = parser.parse_args()
     try:
         return {"prepare": prepare, "verify": verify, "attestation": attestation}[args.command](args)
-    except Exception:
-        print("Release verification stopped: required metadata, download, build or report validation did not pass.", file=sys.stderr)
+    except Exception as error:
+        reason = str(error) if isinstance(error, ValueError) else type(error).__name__
+        print("Release verification stopped: " + reason, file=sys.stderr)
         return 2
 
 
