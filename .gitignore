@@ -173,3 +173,9 @@
 !/.github/workflows/security.yml
 !/.github/workflows/verify-release.yml
 !/.github/dependabot.yml
+!/verification/releases/v0.8.1.json
+!/verification/reports/v0.8.1-apk.json
+!/verification/reports/v0.8.1-rebuild.json
+!/verification/reports/v0.8.1-virustotal.json
+!/verification/reports/v0.8.1-review.json
+!/verification/reports/v0.8.1-secret-exclusion.json

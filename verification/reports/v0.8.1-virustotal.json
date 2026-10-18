@@ -1,0 +1,14 @@
+{
+  "schema": 1,
+  "version": "0.8.1",
+  "apk_sha256": "4923612ab3bdf0106816befcf27350731ceb16039aa6ae3675247e2476e4e9ed",
+  "analysis_date_utc": "2026-10-18T03:58:56Z",
+  "observed_at_utc": "2026-10-18T04:04:05.555309+00:00",
+  "source": "VirusTotal public web report",
+  "url": "https://www.virustotal.com/gui/file/4923612ab3bdf0106816befcf27350731ceb16039aa6ae3675247e2476e4e9ed",
+  "status": "completed",
+  "malicious_detections": 0,
+  "undetected_engines": 68,
+  "unsupported_engines": 7,
+  "scope": "Snapshot of the displayed antivirus results for this exact APK; no malware-free certification, and unsupported engines did not analyze the file."
+}

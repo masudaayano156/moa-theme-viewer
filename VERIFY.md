@@ -11,13 +11,13 @@
 Windows PowerShell에서 파일을 받은 폴더를 열고 실행합니다.
 
 ```powershell
-Get-FileHash .\moa-0.8.0.apk -Algorithm SHA256
+Get-FileHash .\moa-0.8.1.apk -Algorithm SHA256
 ```
 
 macOS/Linux에서는 다음과 같이 확인합니다.
 
 ```sh
-shasum -a 256 moa-0.8.0.apk
+shasum -a 256 moa-0.8.1.apk
 ```
 
 출력값이 **같은 버전**의 `SHA256SUMS.txt`와 검사 자료의 값에 모두 일치해야 합니다. 이 검사는 파일이 공개한 것과 같은지 확인하며, 파일 내용의 안전성을 판정하는 검사는 아닙니다.
@@ -80,6 +80,8 @@ gh attestation verify moa-VERSION.apk --repo masudaayano156/moa-theme-viewer \
 ```
 
 증명에 적힌 검사 범위와 결과를 함께 읽습니다. 실행이 실패했거나 증명이 없으면 있다고 간주하지 않습니다. 같은 저장소의 운영 권한까지 손상된 경우를 증명 하나로 해결하지는 못합니다.
+
+증명에서 `isBitExactReproduction`도 확인하세요. `false`이면 모든 ZIP 항목의 내용이 같아도 파일 포장 바이트에는 차이가 남아 있다는 뜻입니다. 0.8.1은 이 경우이며, 원시 비교의 차이를 숨기거나 완전한 파일 재현 성공으로 표시하지 않습니다.
 
 ## Play 프로텍트 경고
 

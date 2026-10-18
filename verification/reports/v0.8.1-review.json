@@ -1,0 +1,28 @@
+{
+  "schema": 1,
+  "version": "0.8.1",
+  "source_commit": "c790884f9ff0ead51ca47981c3646ee3cc75135c",
+  "review_date": "2026-10-18",
+  "review_type": "AI-assisted source review and developer regression tests, not an independent professional audit.",
+  "android_jvm_regression": {
+    "tests": 747,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "android_lint_errors": 0,
+  "public_verification_tool_synthetic_checks": 44,
+  "camera_permission_removed": true,
+  "microphone_permission_removed": true,
+  "automatic_external_navigation_restricted": true,
+  "notification_postponement_preserved": true,
+  "article_pull_to_refresh": true,
+  "image_save_max_bytes": 104857600,
+  "image_save_deadline_seconds": 120,
+  "test_code_fixtures_personal_logs_published": false,
+  "limitations": [
+    "No comprehensive dynamic penetration test or all-library malware certification.",
+    "Existing true notification preferences are not retroactively reclassified or erased.",
+    "Original website scripts, OS/WebView and FCM sender remain separate trust boundaries."
+  ]
+}
