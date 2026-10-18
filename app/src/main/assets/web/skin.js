@@ -7,7 +7,7 @@
 (function () {
   'use strict';
   if (window.top !== window) return;
-  if (window.MoaSkin && window.MoaSkin.version === '3.0.6') return;
+  if (window.MoaSkin && window.MoaSkin.version === '3.0.7') return;
   if (window.MoaSkin && typeof window.MoaSkin.disable === 'function') window.MoaSkin.disable();
 
   var themes = {
@@ -61,7 +61,7 @@
   // User content is never traversed for naming. Even an exact UI phrase in a
   // title, author, body, comment, editable field, or hidden token stays intact.
   var protectedSelector = [
-    '.gall-detail-lst', '.gall-lst', '.detail-top-lst', '.gallview-tit-box',
+    '.gall-detail-lst', '.gall-lst', '.sch-lst', '.flex-gall-lst', '.detail-top-lst', '.gallview-tit-box',
     '.thum-txt', '.all-comment-lst', '.ginfo', '.ginfo2', '.nick',
     '#textbox', '[contenteditable]', 'input', 'textarea', 'select', 'option',
     'script', 'style', 'noscript', 'template'
@@ -69,7 +69,8 @@
 
   function pageType() {
     if (location.protocol !== 'https:' || location.hostname !== 'm.dcinside.com') return null;
-    if (/^\/board\/[a-zA-Z0-9_]+(?:\/\d+)?\/?$/.test(location.pathname)) {
+    if (/^\/search(?:\/(?:search_main|gall_name|gall_content|movie))?\/?$/.test(location.pathname)) return 'search';
+    if (/^\/(?:board|mini|person)\/[a-zA-Z0-9_]+(?:\/\d+)?\/?$/.test(location.pathname)) {
       return /\/\d+\/?$/.test(location.pathname) ? 'view' : 'list';
     }
     if (/^\/write\/[a-zA-Z0-9_]+(?:\/(?:modify\/)?\d+)?\/?$/.test(location.pathname)) return 'write';
@@ -464,6 +465,7 @@
     if (!current) return;
     var type = pageType();
     setAttribute(root, 'data-moa-layout', 'app');
+    if (type === 'search') return;
     // The independent cleanup module owns ad hiding. Slots it has already
     // hidden must not leave an empty copy of the site's header or footer.
     document.querySelectorAll('body > .header, body > .nav, body > .footer, .gall-tit-box').forEach(function (chrome) {
@@ -662,7 +664,7 @@
     var type = pageType();
     if (!type) return disable('unsupported-page');
     if (!document.querySelector(
-      type === 'write' ? '#writeForm #textbox' : type === 'view' ? '.gallview-tit-box' : '.gall-tit-group'
+      type === 'write' ? '#writeForm #textbox' : type === 'view' ? '.gallview-tit-box' : type === 'search' ? '.search-wrapping' : '.gall-tit-group'
     )) return disable('unsupported-layout');
     var theme = Object.prototype.hasOwnProperty.call(themes, options.theme) ? options.theme : 'mail';
     if (!installStyle()) return disable('missing-css');
@@ -690,7 +692,7 @@
   }
 
   window.MoaSkin = Object.freeze({
-    version: '3.0.6', apply: apply, disable: disable,
+    version: '3.0.7', apply: apply, disable: disable,
     presentationState: function () {
       var currentRoot = document.documentElement;
       var style = document.getElementById('moa-skin-style');

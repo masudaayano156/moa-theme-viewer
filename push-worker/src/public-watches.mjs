@@ -1,3 +1,5 @@
+import { commentTarget, laterCommentId, readPublicReplySnapshot, ReplyReadError } from './reply-parser.mjs';
+
 const WATCH_TTL = 3 * 86400;
 const CHECK_INTERVAL = 300;
 const LIST_LIMIT = 20;
@@ -20,11 +22,11 @@ export class WatchError extends Error {
 
 export function canonicalWatchUrl(value) {
   if (typeof value !== 'string' || value.length > 256
-      || !/^https:\/\/m\.dcinside\.com\/(?:board|mini|person)\/[A-Za-z0-9_]{1,80}\/[1-9][0-9]{0,18}$/.test(value)) return null;
+      || !/^https:\/\/m\.dcinside\.com\/(?:board|mini|person)\/[A-Za-z0-9_]{1,80}\/[1-9][0-9]{0,18}(?:\?comment=[1-9][0-9]{0,18})?$/.test(value)) return null;
   try {
     const url = new URL(value);
     return url.origin === 'https://m.dcinside.com' && !url.username && !url.password
-      && !url.port && !url.search && !url.hash && url.href === value ? url.href : null;
+      && !url.port && (!url.search || commentTarget(value)) && !url.hash && url.href === value ? url.href : null;
   } catch { return null; }
 }
 
@@ -97,14 +99,16 @@ export async function watchRoute(request, env, installationId, watchId, now, hel
     return reply(200, { removed: true });
   }
   if (request.method !== 'PUT' || watchId) throw new WatchError(404, 'not_found');
-  const value = await bodyObject(request, ['url', 'newPost', 'publishedAt']);
+  const value = await bodyObject(request, ['url', 'newPost', 'publishedAt', 'notifyExisting']);
   if (Object.hasOwn(value, 'newPost') && typeof value.newPost !== 'boolean') throw new WatchError(400, 'invalid_payload');
   if (value.newPost === true && !Object.hasOwn(value, 'publishedAt')) throw new WatchError(400, 'invalid_payload');
+  if (Object.hasOwn(value, 'notifyExisting') && (typeof value.notifyExisting !== 'boolean' || value.newPost !== true)) throw new WatchError(400, 'invalid_payload');
   if (Object.hasOwn(value, 'publishedAt') && (value.newPost !== true || !Number.isSafeInteger(value.publishedAt)
       || value.publishedAt <= 0 || value.publishedAt > 4102444800)) throw new WatchError(400, 'invalid_payload');
   const url = canonicalWatchUrl(value.url);
   if (!url) throw new WatchError(400, 'invalid_watch_url');
   const newPost = value.newPost === true;
+  const initialNotification = newPost && value.notifyExisting !== false;
   // A future client clock cannot request a period beyond three days from now.
   const startedAt = newPost && value.publishedAt ? Math.min(now, value.publishedAt) : now;
   const expiresAt = startedAt + WATCH_TTL, newWatchId = crypto.randomUUID();
@@ -124,7 +128,7 @@ export async function watchRoute(request, env, installationId, watchId, now, hel
       ON CONFLICT(installation_id, target_id) DO UPDATE SET
         expires_at = CASE WHEN ? THEN watch_subscriptions.expires_at ELSE excluded.expires_at END,
         created_at = CASE WHEN ? THEN watch_subscriptions.created_at ELSE excluded.created_at END`)
-      .bind(newWatchId, installationId, startedAt, expiresAt, newPost ? 1 : 0, url, installationId, newPost ? 1 : 0, newPost ? 1 : 0),
+      .bind(newWatchId, installationId, startedAt, expiresAt, initialNotification ? 1 : 0, url, installationId, newPost ? 1 : 0, newPost ? 1 : 0),
     // The UUID belongs only to this insertion. A retried PUT cannot replay an
     // initial notification or silently change an existing manual subscription.
     env.DB.prepare(`UPDATE watch_targets SET initial_watch = 1 WHERE baseline_count IS NULL
@@ -300,7 +304,7 @@ async function checkOneTarget(env, now) {
   const target = await env.DB.prepare(`UPDATE watch_targets SET lease_until = ?, lease_token = ?
     WHERE target_id = (SELECT target_id FROM watch_targets WHERE next_check_at <= ? AND lease_until <= ?
       ORDER BY next_check_at, target_id LIMIT 1)
-    RETURNING target_id, url, failures, poll_seq`).bind(now + 90, lease, now, now).first();
+    RETURNING target_id, url, failures, poll_seq, last_reply_no`).bind(now + 90, lease, now, now).first();
   if (!target) return { state: 'idle' };
   const active = await env.DB.prepare(`SELECT 1 AS found FROM watch_subscriptions s JOIN devices d USING(installation_id)
     WHERE s.target_id = ? AND s.expires_at > ? AND d.fcm_token IS NOT NULL LIMIT 1`)
@@ -315,10 +319,14 @@ async function checkOneTarget(env, now) {
     ]);
     return { state: 'inactive' };
   }
-  let count;
-  try { count = await readPublicCount(target.url); }
+  let count, replyNo = null;
+  const replyTarget = commentTarget(target.url);
+  try {
+    if (replyTarget) { const state = await readPublicReplySnapshot(target.url); count = state.count; replyNo = state.latestReplyNo; }
+    else count = await readPublicCount(target.url);
+  }
   catch (error) {
-    const status = error instanceof WatchError ? error.code : 'unavailable';
+    const status = error instanceof WatchError || error instanceof ReplyReadError ? error.code : 'unavailable';
     const delay = status === 'blocked' ? 21600 : status === 'rate_limited' ? 3600
       : Math.min(21600, CHECK_INTERVAL * 2 ** Math.min(target.failures + 1, 6));
     await env.DB.prepare(`UPDATE watch_targets SET status = ?, last_checked = ?, next_check_at = ?,
@@ -330,7 +338,11 @@ async function checkOneTarget(env, now) {
   // Manual subscriptions use the first sample only as a baseline. A newly
   // authored-post opt-in starts at zero, so its first positive count is eligible.
   // start_poll_seq keeps manual subscribers out of that initial revision.
-  const increase = '((baseline_count IS NOT NULL AND baseline_count < ?1) OR (baseline_count IS NULL AND initial_watch = 1 AND ?1 > 0))';
+  const increase = replyTarget
+    ? '((baseline_count IS NOT NULL AND ?7 = 1) OR (baseline_count IS NULL AND initial_watch = 1 AND ?1 > 0))'
+    : '((baseline_count IS NOT NULL AND baseline_count < ?1) OR (baseline_count IS NULL AND initial_watch = 1 AND ?1 > 0))';
+  const newerReply = replyTarget && laterCommentId(replyNo, target.last_reply_no);
+  const highWater = replyTarget ? (newerReply ? replyNo : target.last_reply_no || replyNo) : null;
   await env.DB.prepare(`UPDATE watch_targets SET
     revision = revision + CASE WHEN ${increase} THEN 1 ELSE 0 END,
     increase_from_seq = CASE WHEN ${increase} THEN poll_seq ELSE increase_from_seq END,
@@ -341,10 +353,10 @@ async function checkOneTarget(env, now) {
     fanout_cursor = CASE WHEN ${increase} AND fanout_pending = 0 THEN '' ELSE fanout_cursor END,
     fanout_next_at = CASE WHEN ${increase} AND fanout_pending = 0 THEN ?3 ELSE fanout_next_at END,
     fanout_pending = CASE WHEN ${increase} THEN 1 ELSE fanout_pending END,
-    baseline_count = ?1, poll_seq = poll_seq + 1, last_checked = ?3, next_check_at = ?4,
+    baseline_count = ?1, poll_seq = poll_seq + 1, last_checked = ?3, next_check_at = ?4, last_reply_no = ?8,
     status = 'active', failures = 0, paused_no_device = 0, lease_until = 0, lease_token = NULL
     WHERE target_id = ?5 AND lease_token = ?6`)
-    .bind(count, eventId, now, now + CHECK_INTERVAL, target.target_id, lease).run();
+    .bind(count, eventId, now, now + CHECK_INTERVAL, target.target_id, lease, newerReply ? 1 : 0, highWater).run();
   return { state: 'checked' };
 }
 

@@ -12,6 +12,7 @@ import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Build;
 import java.net.URI;
+import java.net.URLDecoder;
 import java.util.Map;
 
 /** Data messages are rendered locally so source names and post text cannot leak. */
@@ -80,17 +81,34 @@ public final class PushNotifications {
         }
     }
 
-    /** Only direct post URLs, with no credentials, query, fragment, redirect, or editor path. */
+    /** Direct public posts, optionally focused on exactly one numeric comment; never arbitrary queries. */
     public static String validatedTarget(String value) {
         if (value == null || value.length() > 240) return null;
         try {
             URI uri = URI.create(value);
             if (!"https".equals(uri.getScheme()) || !"m.dcinside.com".equals(uri.getHost())
                     || uri.getRawUserInfo() != null || uri.getPort() != -1
-                    || uri.getRawQuery() != null || uri.getRawFragment() != null
+                    || uri.getRawQuery() != null && !uri.getRawQuery().matches("comment=[1-9][0-9]{0,18}") || uri.getRawFragment() != null
                     || !uri.getRawPath().matches("/(?:board|mini|person)/[A-Za-z0-9_]{1,80}/[1-9][0-9]{0,18}")) return null;
             return uri.toASCIIString();
         } catch (RuntimeException malformed) { return null; }
+    }
+
+    /** Strip display-only parameters while preserving one explicit public comment focus. */
+    public static String canonicalWatchTarget(String value) {
+        String base = CommunityStore.canonicalArticleUrl(value);
+        if (base == null) return null;
+        try {
+            String query = URI.create(value).getRawQuery(), comment = null;
+            if (query != null) for (String part : query.split("&")) {
+                String[] field = part.split("=", 2);
+                if (!"comment".equals(URLDecoder.decode(field[0], "UTF-8"))) continue;
+                if (comment != null || field.length != 2) return null;
+                comment = URLDecoder.decode(field[1], "UTF-8");
+                if (!comment.matches("[1-9][0-9]{0,18}")) return null;
+            }
+            return comment == null ? base : validatedTarget(base + "?comment=" + comment);
+        } catch (Exception invalid) { return null; }
     }
 
     /** Consuming once prevents an Activity recreation from navigating repeatedly. */
@@ -113,6 +131,12 @@ public final class PushNotifications {
         if (event == null || !event.matches("[A-Za-z0-9_-]{1,128}")) return false;
         String url = test ? null : validatedTarget(data.get("url"));
         if (!test && url == null) return false;
+        if (!test && data.containsKey("comment_id")) {
+            String comment = data.get("comment_id");
+            if (comment == null || !comment.matches("[1-9][0-9]{0,18}") || url.contains("?")) return false;
+            url = validatedTarget(url + "?comment=" + comment);
+            if (url == null) return false;
+        }
         if (test) testReceived(context, event);
         String blocked = blockedReason(context);
         if (!blocked.isEmpty()) {
@@ -141,7 +165,7 @@ public final class PushNotifications {
         Notification notification = new Notification.Builder(context, CHANNEL)
                 .setSmallIcon(icon).setColor(theme.palette(dark).accent)
                 .setContentTitle(theme.displayName)
-                .setContentText(test ? "알림 연결을 확인했어요." : message(theme))
+                .setContentText(test ? "알림 연결을 확인했어요." : url.contains("?comment=") ? "댓글에 새 답글이 달렸어요." : message(theme))
                 .setContentIntent(pending).setAutoCancel(true).setOnlyAlertOnce(true)
                 .setCategory(Notification.CATEGORY_SOCIAL).setVisibility(Notification.VISIBILITY_PRIVATE)
                 .setPublicVersion(publicVersion).build();

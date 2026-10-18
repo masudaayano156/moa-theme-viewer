@@ -81,7 +81,7 @@ public final class CommentWatchDialog {
 
     private void render(String message) {
         content.removeAllViews();
-        paragraph("알림을 켜면 이 앱에서 작성한 내 글은 게시 후 3일간 자동으로 댓글 알림을 받아요. 글 개수 제한이나 글마다 따로 동의하는 절차는 없어요.");
+        paragraph("알림을 켜면 이 앱에서 작성한 글의 댓글과 내 댓글의 답글을 작성 후 3일간 자동으로 받아요. 글 개수 제한이나 글마다 따로 동의하는 절차는 없어요.");
         paragraph("3일이 지나면 해당 글 확인을 자동으로 멈춥니다. 댓글이 달리거나 앱을 열어도 기간은 늘어나지 않아요. 주기적으로 확인하므로 즉시 알림은 아니에요. 서버 대기량에 따라 더 늦어질 수 있고, 본인 댓글도 포함됩니다.");
         if (!message.isEmpty()) {
             TextView status = paragraph(message);
@@ -98,17 +98,17 @@ public final class CommentWatchDialog {
         }
         if (!CommunityOptions.autoWatchOwnPosts(activity))
             button("내 글 댓글 알림 켜기", "watch_enable_notifications", () -> { dismiss(); host.openPushSettings(); });
-        String currentUrl = CommunityStore.canonicalArticleUrl(host.currentUrl());
+        String currentUrl = PushNotifications.canonicalWatchTarget(host.currentUrl());
         if (currentUrl != null) {
-            heading("현재 글");
+            heading(currentUrl.contains("?comment=") ? "현재 댓글" : "현재 글");
             paragraph(articleLabel(currentUrl));
             boolean saved = false;
             for (PushRelayClient.Watch watch : watches) if (watch.url.equals(currentUrl)) saved = true;
-            button(saved ? "지금부터 3일 더 받기" : "이 글도 알림 받기", "watch_current", () -> change(currentUrl, null));
+            button(saved ? "지금부터 3일 더 받기" : currentUrl.contains("?comment=") ? "이 댓글 답글 알림 받기" : "이 글도 알림 받기", "watch_current", () -> change(currentUrl, null));
         } else paragraph("게시글을 연 뒤 이 화면에서 그 글의 댓글 알림을 등록할 수 있어요.");
         button("알림 목록 새로고침", "watch_refresh", this::refresh);
         heading("최근 알림 글");
-        if (watches.isEmpty() && !busy) paragraph("앞으로 작성한 글의 댓글 알림이 여기에 자동으로 나타납니다.");
+        if (watches.isEmpty() && !busy) paragraph("앞으로 작성한 글과 댓글의 알림이 여기에 자동으로 나타납니다.");
         for (PushRelayClient.Watch watch : watches) {
             View line = new View(activity); line.setBackgroundColor(colors.border);
             content.addView(line, new LinearLayout.LayoutParams(-1, dp(1)));
@@ -193,7 +193,7 @@ public final class CommentWatchDialog {
     private static String date(long seconds) { return DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(new Date(seconds * 1000)); }
     private static String articleLabel(String url) {
         String[] parts = URI.create(url).getPath().split("/");
-        return parts[2] + " · " + parts[3] + "번 글";
+        return parts[2] + " · " + parts[3] + "번 글" + (url.contains("?comment=") ? " · 댓글 답글" : "");
     }
     private static String statusText(String value) {
         switch (value) {

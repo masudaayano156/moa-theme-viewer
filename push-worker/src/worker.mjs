@@ -273,7 +273,8 @@ async function sendMessage(env, token, data, now) {
       ? !validRegistrationId(data.registration_id) || !ID_PATTERN.test(data.installation_id || '')
         || !/^[A-Za-z0-9_-]{43}$/.test(data.challenge || '') || !/^[A-Za-z0-9_-]{43}$/.test(data.token_hash || '')
       : !/^[0-9a-f-]{36}$/.test(data.event_id || '') || !['test', 'comment'].includes(data.kind)
-        || (data.kind === 'comment' && !canonicalWatchUrl(data.url)))) {
+        || (data.kind === 'comment' && (!canonicalWatchUrl(data.url)
+          || data.comment_id !== undefined && !/^[1-9][0-9]{0,18}$/.test(data.comment_id))))) {
     throw new HttpError(400, 'invalid_notification');
   }
   const account = serviceAccount(env);
@@ -300,7 +301,12 @@ async function sendTest(env, token, eventId, now) {
 }
 
 async function sendComment(env, token, eventId, url, now) {
-  return sendMessage(env, token, { kind: 'comment', event_id: eventId, url }, now);
+  if (!canonicalWatchUrl(url)) throw new HttpError(400, 'invalid_notification');
+  // Older apps can still display a neutral alert and open the article.
+  const target = new URL(url), comment = target.searchParams.get('comment');
+  target.search = '';
+  return sendMessage(env, token, { kind: 'comment', event_id: eventId, url: target.href,
+    ...(comment ? { comment_id: comment } : {}) }, now);
 }
 
 async function sendRegistration(env, token, registrationId, installationId, challenge, tokenHash, now) {

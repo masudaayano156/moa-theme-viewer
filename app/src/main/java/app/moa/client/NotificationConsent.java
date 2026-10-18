@@ -8,6 +8,15 @@ public final class NotificationConsent {
     private static final String PREFS = "moa_notification_consent";
     private static final int VERSION = 1;
     private NotificationConsent() { }
+
+    /** The old hidden per-post option must not mute an already enabled notification connection. */
+    public static void migrateEnabledConnection(Context context) {
+        SharedPreferences prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+        if (prefs.getBoolean("global_connection_migrated", false)) return;
+        if (PushClient.isEnabled(context) && PushRelayClient.isPaired(context) && PushNotifications.canNotify(context))
+            CommunityOptions.setAutoWatchOwnPosts(context, true);
+        prefs.edit().putBoolean("global_connection_migrated", true).commit();
+    }
     private static SharedPreferences prefs(Context context) {
         return context.getApplicationContext().getSharedPreferences(PREFS, Context.MODE_PRIVATE);
     }

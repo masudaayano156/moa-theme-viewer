@@ -309,8 +309,9 @@ public final class PushRelayClient {
         try {
             if (!current(app, expected, device, true) || !isConnectionReady(app)
                     || !OwnPostWatchQueue.current(app, entry)) return 0;
-            Response response = request(device, "PUT", "/watches", new JSONObject().put("url", entry.url)
-                    .put("newPost", true).put("publishedAt", entry.createdAt / 1000), true);
+            JSONObject publication = new JSONObject().put("url", entry.url).put("newPost", true).put("publishedAt", entry.createdAt / 1000);
+            if (!entry.notifyExisting) publication.put("notifyExisting", false);
+            Response response = request(device, "PUT", "/watches", publication, true);
             synchronized (LOCK) {
                 // An opt-out, account cleanup or newer outbox entry owns the state now.
                 if (!current(app, expected, device, true) || !OwnPostWatchQueue.current(app, entry)) return 0;
@@ -727,7 +728,7 @@ public final class PushRelayClient {
 
     /** Call only after the user accepts sending this public address to the relay. */
     public static void watch(Context context, String url, Callback callback) {
-        changeWatch(context, CommunityStore.canonicalArticleUrl(url), null, callback);
+        changeWatch(context, PushNotifications.canonicalWatchTarget(url), null, callback);
     }
 
     public static void unwatch(Context context, String watchId, Callback callback) {
@@ -756,7 +757,9 @@ public final class PushRelayClient {
                 if (url != null && response.status == 200) {
                     Watch accepted = parseWatch(response.body.optJSONObject("watch"));
                     if (!url.equals(accepted.url)) throw new IOException("Unexpected watch");
-                    deliver(app, expected, callback, true, "이 글의 댓글 수를 지금부터 3일간 확인해요. 이후에는 자동으로 멈춥니다.", true);
+                    deliver(app, expected, callback, true, url.contains("?comment=")
+                            ? "이 댓글의 새 답글을 지금부터 3일간 확인해요. 이후에는 자동으로 멈춥니다."
+                            : "이 글의 댓글 수를 지금부터 3일간 확인해요. 이후에는 자동으로 멈춥니다.", true);
                 } else if (url == null && response.is(200, "removed")) {
                     deliver(app, expected, callback, true, "이 글의 댓글 알림을 해제했어요.", true);
                 } else failWatch(app, expected, device, callback, response);
@@ -777,7 +780,7 @@ public final class PushRelayClient {
     private static Watch parseWatch(JSONObject item) throws IOException {
         if (item == null) throw new IOException("Invalid watch");
         String id = item.optString("watchId", ""), url = item.optString("url", ""), status = item.optString("status", "");
-        if (!validWatchId(id) || !url.equals(CommunityStore.canonicalArticleUrl(url))
+        if (!validWatchId(id) || !url.equals(PushNotifications.validatedTarget(url))
                 || !status.matches("pending|active|blocked|rate_limited|unavailable|parse_error|delivery_error|token_expired"))
             throw new IOException("Invalid watch");
         Object raw = item.opt("baselineCount");

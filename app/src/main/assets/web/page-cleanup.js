@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.top !== window) return;
-  if (window.MoaPageCleanup && window.MoaPageCleanup.version === '1.0.3') {
+  if (window.MoaPageCleanup && window.MoaPageCleanup.version === '1.0.4') {
     window.MoaPageCleanup.apply();
     return;
   }
@@ -35,6 +35,8 @@
     '#kakao_backup_slot_viewbottom', '#kakao_backup_slot_bottom',
     '#kakao_backup_slot_anchor', '#kakao_backup_slot_contentmiddle',
     '#kakao_backup_slot_mid'
+    ,'.search-wrapping #topNaverAD', '.search-wrapping #pwlink_foot',
+    '.search-wrapping #view_title.power-tit'
   ];
   // The source switches the article-bottom slot between AdFit and AdSense.
   // Both insert dedicated INS units inside the protected article wrapper.
@@ -58,7 +60,7 @@
       (/^\/(?:board|mini|person)\/[a-zA-Z0-9_]+(?:\/\d+)?\/?$/.test(location.pathname) ||
        /^\/write\/[a-zA-Z0-9_]+(?:\/(?:modify\/)?\d+)?\/?$/.test(location.pathname) ||
        /^\/modify\/[a-zA-Z0-9_]+(?:\/\d+)?\/?$/.test(location.pathname) ||
-       /^\/search\/?$/.test(location.pathname));
+       /^\/search(?:\/(?:search_main|gall_name|gall_content|movie))?\/?$/.test(location.pathname));
   }
 
   function safe(node) {
@@ -133,7 +135,8 @@
     return 'html[' + rootMarker + '="1"] [' + marker + '="1"]{' +
       'display:none!important;min-height:0!important;height:0!important;' +
       'margin:0!important;padding:0!important;border:0!important;}' +
-      selectors.join(',') + '{display:none!important;}';
+      selectors.join(',') + '{display:none!important;}' +
+      'html[' + rootMarker + '="1"] :is(.comment-write,#comment_write,#comment_write_reple,#comment_write_mention,#writeForm) .btm-wrt-btns :is(#submit_voice,.sp-write-form-icon.add-voice){display:none!important;}';
   }
 
   function installStyle() {
@@ -305,6 +308,6 @@
     if (document.documentElement) document.documentElement.removeAttribute(rootMarker);
   }
 
-  window.MoaPageCleanup = Object.freeze({ version: '1.0.3', apply: apply, disable: disable });
+  window.MoaPageCleanup = Object.freeze({ version: '1.0.4', apply: apply, disable: disable });
   apply();
 })();

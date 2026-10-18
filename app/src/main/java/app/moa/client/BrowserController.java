@@ -69,6 +69,8 @@ public final class BrowserController {
         default boolean onOpenArticle(String url) { return false; }
         default void onUserActions(String nickname, String id, String ip) { }
         default void onOwnArticlePublished(String url) { }
+        default void onOwnCommentPublished(String url) { }
+        default void onOwnCommentRestored(String url, long publishedAtMillis) { }
         default void onAuthenticationChanged() { }
         default void onAuthenticationSettled() { }
     }
@@ -101,7 +103,7 @@ public final class BrowserController {
     private int favoritesGeneration, documentGeneration, accountGeneration, authenticationGeneration, navigationIntentGeneration;
     private float fontScale = 1f;
     private String css = "", script = "", favoritesScript = "", draftScript = "", cleanupScript = "", recoveryUrl = "", draftOwner = "";
-    private String communityScript = "", communityCss = "";
+    private String communityScript = "", communityCss = "", commentNotificationScript = "";
     private int lastDraftPromptGeneration = -1;
     private AlertDialog draftDialog, permissionDialog;
     private AlertDialog imageMenu;
@@ -123,6 +125,7 @@ public final class BrowserController {
     private boolean mediaPickerOutstanding;
     private AlertDialog fileActionDialog;
     private final PostSubmissionTracker postSubmissions = new PostSubmissionTracker();
+    private final CommentSubmissionTracker commentSubmissions = new CommentSubmissionTracker();
     private String publishedCandidate = "";
     private boolean peerIdentityWaiting, peerPageStale;
     private DownloadRequest pendingDownload;
@@ -155,6 +158,7 @@ public final class BrowserController {
             draftScript = readAsset("web/drafts.js");
             cleanupScript = readAsset("web/page-cleanup.js");
             communityScript = readAsset("web/community-tools.js");
+            commentNotificationScript = readAsset("web/comment-notifications.js");
             communityCss = readAsset("web/community-tools.css");
         } catch (Exception exception) {
             listener.onError("테마 파일을 읽지 못했습니다. 원본 화면으로 이용할 수 있습니다.");
@@ -322,24 +326,25 @@ public final class BrowserController {
     }
     private void openInternal(String url) {
         if (destroyed) return;
-        postSubmissions.cancel();
+        postSubmissions.cancel(); commentSubmissions.cancel();
         if (peerIdentityWaiting) { listener.onError("다른 화면의 로그인 처리가 끝난 뒤 다시 열어 주세요."); return; }
-        if (UrlPolicy.isDcHttps(url)) {
-            snapshotDraft(() -> { prepareNavigation(url); web.loadUrl(url); });
+        String mobile = UrlPolicy.mobileReadingUrl(url), target = mobile == null ? url : mobile;
+        if (UrlPolicy.isDcHttps(target)) {
+            snapshotDraft(() -> { prepareNavigation(target); web.loadUrl(target); });
         } else {
             openExternal(url);
         }
     }
     public boolean canGoBack() { return !destroyed && (fullscreenView != null || web.canGoBack()); }
     public void goBack() {
-        postSubmissions.cancel();
+        postSubmissions.cancel(); commentSubmissions.cancel();
         if (fullscreenView != null) hideFullscreen();
         else if (!destroyed && web.canGoBack()) { cancelFavoritesNavigation(); snapshotDraft(() -> { prepareHistoryNavigation(-1); web.goBack(); }); }
     }
     public boolean canGoForward() { return !destroyed && web.canGoForward(); }
-    public void goForward() { if (canGoForward()) { postSubmissions.cancel(); publishedCandidate=""; cancelFavoritesNavigation(); snapshotDraft(() -> { prepareHistoryNavigation(1); web.goForward(); }); } }
+    public void goForward() { if (canGoForward()) { postSubmissions.cancel(); commentSubmissions.cancel(); publishedCandidate=""; cancelFavoritesNavigation(); snapshotDraft(() -> { prepareHistoryNavigation(1); web.goForward(); }); } }
     public void reload() {
-        postSubmissions.cancel();
+        postSubmissions.cancel(); commentSubmissions.cancel();
         if (peerIdentityWaiting) { listener.onError("다른 화면의 로그인 처리가 끝난 뒤 새로고침해 주세요."); return; }
         cancelFavoritesNavigation(); if (!recoveryUrl.isEmpty()) openInternal(recoveryUrl); else snapshotDraft(() -> { beginPresentation(getUrl(), false); web.reload(); });
     }
@@ -522,6 +527,26 @@ public final class BrowserController {
                             if (PostSubmissionTracker.isNewWriteDocument(getUrl())) {
                                 postSubmissions.begin(getUrl(),android.os.SystemClock.elapsedRealtime());
                             }
+                        } else if ("submitting_comment".equals(value.optString("action"))) {
+                            if (PushClient.isEnabled(activity) && CommunityOptions.autoWatchOwnPosts(activity))
+                                commentSubmissions.begin(getUrl(), value.optString("ticket"), android.os.SystemClock.elapsedRealtime());
+                        } else if ("comment_published".equals(value.optString("action"))) {
+                            String targetUrl = commentSubmissions.complete(getUrl(), value.optString("ticket"),
+                                    value.optString("commentId"), android.os.SystemClock.elapsedRealtime());
+                            if (targetUrl != null && PushClient.isEnabled(activity) && CommunityOptions.autoWatchOwnPosts(activity))
+                                listener.onOwnCommentPublished(targetUrl);
+                        } else if ("restore_comment".equals(value.optString("action"))) {
+                            String comment = value.optString("commentId"), base = CommunityStore.canonicalArticleUrl(getUrl());
+                            Object time = value.opt("publishedAt"); long now = System.currentTimeMillis() / 1000;
+                            if (base != null && comment.matches("[1-9][0-9]{0,18}") && time instanceof Number
+                                    && ((Number) time).doubleValue() == ((Number) time).longValue()
+                                    && ((Number) time).longValue() > now - 3 * 86400 && ((Number) time).longValue() <= now + 120
+                                    && PushClient.isEnabled(activity) && CommunityOptions.autoWatchOwnPosts(activity))
+                                listener.onOwnCommentRestored(base + "?comment=" + comment, ((Number) time).longValue() * 1000);
+                        } else if ("comment_tracking_failed".equals(value.optString("action"))) {
+                            if (commentSubmissions.fail(getUrl(), value.optString("ticket"), android.os.SystemClock.elapsedRealtime())
+                                    && PushClient.isEnabled(activity) && CommunityOptions.autoWatchOwnPosts(activity))
+                                listener.onError("댓글은 등록됐어요. 알림 연결은 이 화면을 다시 확인할 때 자동으로 재시도해요.");
                         } else if ("user".equals(value.optString("action"))) {
                             String name = safeIdentity(value.optString("nickname")), id = safeIdentity(value.optString("id")), ip = safeIdentity(value.optString("ip"));
                             if (!name.isEmpty() || !id.isEmpty() || !ip.isEmpty()) listener.onUserActions(name,id,ip);
@@ -547,7 +572,17 @@ public final class BrowserController {
             if (!isLive(view)) return true;
             if (!request.isForMainFrame()) return false;
             String url = request.getUrl().toString();
-            if (view == web && request.hasGesture() && !request.isRedirect()) { cancelFavoritesNavigation(); postSubmissions.cancel(); }
+            String mobile = UrlPolicy.mobileReadingUrl(url);
+            if (mobile != null && view != web && UrlPolicy.isSearchPage(getUrl())) {
+                Dialog popup = popups.get(view);
+                handler.post(() -> { if (!isLive(view)) return; if (popup != null) popup.dismiss(); openInternal(mobile); });
+                return true;
+            }
+            if (mobile != null && view == web && !mobile.equals(url)) {
+                if (request.hasGesture() && !request.isRedirect() && CommunityStore.canonicalArticleUrl(mobile) != null && listener.onOpenArticle(mobile)) return true;
+                prepareNavigation(mobile); web.loadUrl(mobile); return true;
+            }
+            if (view == web && request.hasGesture() && !request.isRedirect()) { cancelFavoritesNavigation(); postSubmissions.cancel(); commentSubmissions.cancel(); }
             if (UrlPolicy.isDcHttps(url)) {
                 if (view == web && request.hasGesture() && !request.isRedirect()
                         && CommunityStore.canonicalArticleUrl(url) != null && listener.onOpenArticle(url)) return true;
@@ -561,7 +596,7 @@ public final class BrowserController {
         @Override public void onPageStarted(WebView view, String url, Bitmap favicon) {
             if (!isLive(view)) return;
             cancelPageRequests(view);
-            if (view == web) peerPageStale = false;
+            if (view == web) { peerPageStale = false; commentSubmissions.cancel(); }
             if (UrlPolicy.isAuthenticationPage(url)) {
                 cancelImageSelection();
                 if (!authNavigationPending) listener.onAuthenticationChanged();
@@ -618,6 +653,8 @@ public final class BrowserController {
             swipeRefresh.finish();
             if (UrlPolicy.canTheme(url)) {
                 view.evaluateJavascript(draftScript, null);
+                if (CommunityStore.canonicalArticleUrl(url) != null && !commentNotificationScript.isEmpty())
+                    view.evaluateJavascript(commentSource(), null);
                 // DOCUMENT_START_SCRIPT can be unavailable even when the secure message listener works.
                 // This idempotent listener is separate from theme readiness and original-view mode.
                 if (PostSubmissionTracker.isNewWriteDocument(url)) view.evaluateJavascript(submissionHook(), null);
@@ -996,7 +1033,7 @@ public final class BrowserController {
         try {
             if (!WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) return;
             if (documentScript != null) { documentScript.remove(); documentScript = null; }
-            String source = cleanupScript + "\n" + draftScript + "\n" + communitySource("") + "\n" + submissionHook() + ((!original && !script.isEmpty()) ? "\n" + skinSource() : "");
+            String source = cleanupScript + "\n" + draftScript + "\n" + communitySource("") + "\n" + commentSource() + "\n" + submissionHook() + ((!original && !script.isEmpty()) ? "\n" + skinSource() : "");
             documentScript = WebViewCompat.addDocumentStartJavaScript(web, source, Collections.singleton("https://m.dcinside.com"));
         } catch (RuntimeException | LinkageError unavailableProvider) {
             // Older or unavailable providers still receive the onPageFinished skin.
@@ -1008,6 +1045,8 @@ public final class BrowserController {
         if (peerPageStale) { showPeerAccountCover(); return; }
         if (UrlPolicy.canTheme(getUrl()) && !cleanupScript.isEmpty()) web.evaluateJavascript(cleanupScript, null);
         if (UrlPolicy.canTheme(getUrl()) && !communityScript.isEmpty()) web.evaluateJavascript(communitySource(getUrl()), null);
+        if (CommunityStore.canonicalArticleUrl(getUrl()) != null && !commentNotificationScript.isEmpty())
+            web.evaluateJavascript(commentSource(), null);
         if (original || !UrlPolicy.canTheme(getUrl())) {
             if (original && presentation != null) revealOriginalPresentation();
             else {
@@ -1016,6 +1055,11 @@ public final class BrowserController {
             }
         } else if (presentation != null) presentation.probe();
         else if (!script.isEmpty()) web.evaluateJavascript(skinSource(), null);
+    }
+
+    private String commentSource() {
+        return "window.__moaNotificationsOn=" + (PushClient.isEnabled(activity) && CommunityOptions.autoWatchOwnPosts(activity))
+                + ";\n" + commentNotificationScript + ";window.MoaCommentNotifications&&window.MoaCommentNotifications.refresh(window.__moaNotificationsOn);";
     }
 
     private String communitySource(String url) {
@@ -1039,7 +1083,7 @@ public final class BrowserController {
     public void beginPeerAuthentication() {
         if (destroyed) return;
         peerIdentityWaiting = true; peerPageStale = UrlPolicy.canTheme(getUrl());
-        postSubmissions.cancel(); publishedCandidate = "";
+        postSubmissions.cancel(); commentSubmissions.cancel(); publishedCandidate = "";
         cancelPageRequests(web);
         authenticationGeneration++; favoritesGeneration++;
         if (favoritesWeb != null) { container.removeView(favoritesWeb); favoritesWeb.destroy(); favoritesWeb = null; }
@@ -1125,7 +1169,6 @@ public final class BrowserController {
         switch(kind) {
             case "autopicture": selector = "#galleryConfig a[href^=\"javascript:moveAutozzal(\"]"; break;
             case "source_affixes": selector = "#galleryConfig a[href^=\"javascript:moveGallText(\"]"; break;
-            case "voice": selector = "#comment_write #submit_voice"; break;
             default: listener.onError("지원하지 않는 원본 도구입니다."); return;
         }
         guardNavigation(() -> {
@@ -1553,6 +1596,7 @@ public final class BrowserController {
 
     private void updateDraftOwner(String owner) {
         if (draftOwner.equals(owner)) return;
+        commentSubmissions.cancel();
         cancelNavigationGuard();
         invalidatePendingDownload("계정 정보가 변경되어 저장을 취소했습니다. 파일을 다시 선택해 주세요.");
         draftOwner = owner;

@@ -20,8 +20,13 @@ public final class OwnPostWatchQueue {
         final String id, url;
         final long createdAt, retryAt;
         final int failures;
+        final boolean notifyExisting;
         Entry(String id, String url, long createdAt, long retryAt, int failures) {
+            this(id, url, createdAt, retryAt, failures, true);
+        }
+        Entry(String id, String url, long createdAt, long retryAt, int failures, boolean notifyExisting) {
             this.id = id; this.url = url; this.createdAt = createdAt; this.retryAt = retryAt; this.failures = failures;
+            this.notifyExisting = notifyExisting;
         }
     }
 
@@ -29,8 +34,20 @@ public final class OwnPostWatchQueue {
 
     /** Only call from the trusted, successful-new-publication callback after notification consent. */
     public static EnqueueResult enqueue(Context context, String value) {
+        return enqueue(context, value, System.currentTimeMillis(), true);
+    }
+
+    public static EnqueueResult restoreComment(Context context, String value, long publishedAtMillis) {
+        String url = PushNotifications.canonicalWatchTarget(value);
+        long now = System.currentTimeMillis();
+        if (url == null || !url.contains("?comment=") || publishedAtMillis <= now - WATCH_WINDOW_MILLIS
+                || publishedAtMillis > now + 120_000) return EnqueueResult.INVALID;
+        return enqueue(context, url, Math.min(now, publishedAtMillis), false);
+    }
+
+    private static EnqueueResult enqueue(Context context, String value, long publishedAt, boolean notifyExisting) {
         Context app = context.getApplicationContext();
-        String url = CommunityStore.canonicalArticleUrl(value);
+        String url = PushNotifications.canonicalWatchTarget(value);
         if (url == null) return EnqueueResult.INVALID;
         EnqueueResult result;
         synchronized (LOCK) {
@@ -40,12 +57,30 @@ public final class OwnPostWatchQueue {
             try (Database helper = new Database(app)) {
                 SQLiteDatabase db = helper.getWritableDatabase();
                 try (Cursor found = db.rawQuery("SELECT id FROM pending_posts WHERE url = ?", new String[]{url})) {
-                    if (found.moveToFirst()) return EnqueueResult.ALREADY_QUEUED;
+                    if (found.moveToFirst()) {
+                        if (notifyExisting) db.execSQL("UPDATE pending_posts SET notify_existing = 1 WHERE url = ?", new Object[]{url});
+                        return EnqueueResult.ALREADY_QUEUED;
+                    }
+                }
+                if (url.contains("?comment=")) {
+                    try (Cursor seen = db.rawQuery("SELECT url FROM observed_comments WHERE url = ? AND created_at > ?",
+                            new String[]{url, Long.toString(System.currentTimeMillis() - WATCH_WINDOW_MILLIS)})) {
+                        if (seen.moveToFirst()) return EnqueueResult.ALREADY_QUEUED;
+                    }
                 }
                 ContentValues row = new ContentValues();
                 row.put("id", UUID.randomUUID().toString()); row.put("url", url);
-                row.put("created_at", System.currentTimeMillis()); row.put("retry_at", 0); row.put("failures", 0);
-                db.insertOrThrow("pending_posts", null, row);
+                row.put("created_at", publishedAt); row.put("retry_at", 0); row.put("failures", 0); row.put("notify_existing", notifyExisting ? 1 : 0);
+                db.beginTransaction();
+                try {
+                    db.insertOrThrow("pending_posts", null, row);
+                    if (url.contains("?comment=")) {
+                        ContentValues observed = new ContentValues(); observed.put("url", url); observed.put("created_at", publishedAt);
+                        if (db.insertWithOnConflict("observed_comments", null, observed, SQLiteDatabase.CONFLICT_REPLACE) < 0)
+                            throw new SQLiteException("Unable to remember comment");
+                    }
+                    db.setTransactionSuccessful();
+                } finally { db.endTransaction(); }
                 storageError = false; result = EnqueueResult.ADDED;
             } catch (SQLiteException unavailable) { storageError = true; return EnqueueResult.STORAGE_ERROR; }
         }
@@ -75,7 +110,7 @@ public final class OwnPostWatchQueue {
             try (Database helper = new Database(context)) {
                 SQLiteDatabase db = helper.getWritableDatabase();
                 db.beginTransaction();
-                try { db.delete("pending_posts", null, null); db.delete("queue_state", null, null); db.setTransactionSuccessful(); }
+                try { db.delete("pending_posts", null, null); db.delete("queue_state", null, null); db.delete("observed_comments", null, null); db.setTransactionSuccessful(); }
                 finally { db.endTransaction(); }
                 storageError = !gate(context).edit().remove("clear_required").commit();
             } catch (SQLiteException unavailable) { storageError = true; }
@@ -104,10 +139,10 @@ public final class OwnPostWatchQueue {
             try (Database helper = new Database(context)) {
                 SQLiteDatabase db = helper.getWritableDatabase(); discardExpired(db); long now = System.currentTimeMillis();
                 if (pauseUntil(db) > now) return null;
-                try (Cursor cursor = db.rawQuery("SELECT id,url,created_at,retry_at,failures FROM pending_posts "
+                try (Cursor cursor = db.rawQuery("SELECT id,url,created_at,retry_at,failures,notify_existing FROM pending_posts "
                         + "WHERE retry_at <= ? ORDER BY retry_at,created_at,id LIMIT 1", new String[]{Long.toString(now)})) {
                     return cursor.moveToFirst() ? new Entry(cursor.getString(0), cursor.getString(1), cursor.getLong(2),
-                            cursor.getLong(3), cursor.getInt(4)) : null;
+                            cursor.getLong(3), cursor.getInt(4), cursor.getInt(5) != 0) : null;
                 }
             } catch (SQLiteException unavailable) { storageError = true; return null; }
         }
@@ -167,6 +202,7 @@ public final class OwnPostWatchQueue {
 
     private static void discardExpired(SQLiteDatabase db) {
         db.delete("pending_posts", "created_at <= ?", new String[]{Long.toString(System.currentTimeMillis() - WATCH_WINDOW_MILLIS)});
+        db.delete("observed_comments", "created_at <= ?", new String[]{Long.toString(System.currentTimeMillis() - WATCH_WINDOW_MILLIS)});
     }
 
     private static boolean enabled(Context context) {
@@ -190,14 +226,24 @@ public final class OwnPostWatchQueue {
     }
 
     private static final class Database extends SQLiteOpenHelper {
-        Database(Context context) { super(context.getApplicationContext(), "moa_own_post_outbox.db", null, 1); }
+        Database(Context context) { super(context.getApplicationContext(), "moa_own_post_outbox.db", null, 2); }
         @Override public void onCreate(SQLiteDatabase db) {
             db.execSQL("CREATE TABLE pending_posts(id TEXT PRIMARY KEY,url TEXT NOT NULL UNIQUE,created_at INTEGER NOT NULL,"
-                    + "retry_at INTEGER NOT NULL,failures INTEGER NOT NULL)");
+                    + "retry_at INTEGER NOT NULL,failures INTEGER NOT NULL,notify_existing INTEGER NOT NULL DEFAULT 1)");
             db.execSQL("CREATE INDEX own_post_ready ON pending_posts(retry_at,created_at,id)");
             db.execSQL("CREATE INDEX own_post_expiry ON pending_posts(created_at)");
             db.execSQL("CREATE TABLE queue_state(name TEXT PRIMARY KEY,value INTEGER NOT NULL)");
+            createObserved(db);
         }
-        @Override public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) { }
+        private void createObserved(SQLiteDatabase db) {
+            db.execSQL("CREATE TABLE observed_comments(url TEXT PRIMARY KEY,created_at INTEGER NOT NULL)");
+            db.execSQL("CREATE INDEX observed_comment_expiry ON observed_comments(created_at)");
+        }
+        @Override public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
+            if (oldVersion < 2) {
+                db.execSQL("ALTER TABLE pending_posts ADD COLUMN notify_existing INTEGER NOT NULL DEFAULT 1");
+                createObserved(db);
+            }
+        }
     }
 }

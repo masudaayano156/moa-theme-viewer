@@ -103,6 +103,7 @@ public final class MainActivity extends Activity implements BrowserController.Li
         colors = selectedPalette();
         loadFavorites();
         CommunityStore.migrateLegacySavedArticles(this);
+        NotificationConsent.migrateEnabledConnection(this);
         getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
         if (Build.VERSION.SDK_INT >= 30) {
             getWindow().setDecorFitsSystemWindows(false);
@@ -281,6 +282,12 @@ public final class MainActivity extends Activity implements BrowserController.Li
             }
             @Override public void onOwnArticlePublished(String url) {
                 if (owner[0] == detailBrowser) MainActivity.this.onOwnArticlePublished(url);
+            }
+            @Override public void onOwnCommentPublished(String url) {
+                if (owner[0] == detailBrowser) MainActivity.this.onOwnCommentPublished(url);
+            }
+            @Override public void onOwnCommentRestored(String url, long publishedAtMillis) {
+                if (owner[0] == detailBrowser) MainActivity.this.onOwnCommentRestored(url, publishedAtMillis);
             }
             @Override public void onAuthenticationChanged() { forwardAuthentication(owner[0], true); }
             @Override public void onAuthenticationSettled() { forwardAuthentication(owner[0], false); }
@@ -1046,7 +1053,7 @@ public final class MainActivity extends Activity implements BrowserController.Li
                 navigate(url);
             } else {
                 dialog.dismiss();
-                navigate("https://search.dcinside.com/combine/q/" + Uri.encode(value));
+                navigate("https://m.dcinside.com/search?keyword=" + Uri.encode(value));
             }
         }));
         showAdaptiveDialog(dialog, () -> {
@@ -1263,12 +1270,6 @@ public final class MainActivity extends Activity implements BrowserController.Li
                         startActivity(MediaToolsActivity.createIntent(MainActivity.this, new ArrayList<>(), true)
                                 .putExtra(MediaToolsActivity.EXTRA_STANDALONE, true));
                         break;
-                    case "voice":
-                        try {
-                            startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse("https://play.google.com/store/apps/details?id=com.dcinside.app.android"))
-                                    .addCategory(Intent.CATEGORY_BROWSABLE));
-                        } catch (android.content.ActivityNotFoundException missing) { toast("공식 설치 페이지를 열 브라우저를 찾지 못했어요."); }
-                        break;
                     case "autopicture": case "source_affixes":
                         openOriginalCommunityTool(action); break;
                     default: toast("이 기능은 현재 화면에서 사용할 수 없어요.");
@@ -1361,6 +1362,16 @@ public final class MainActivity extends Activity implements BrowserController.Li
             toast("글은 등록됐지만 댓글 알림 준비를 저장하지 못했어요. 휴대폰 저장 공간을 확인해주세요.");
     }
 
+    @Override public void onOwnCommentPublished(String url) {
+        OwnPostWatchQueue.EnqueueResult result = OwnPostWatchQueue.enqueue(this, url);
+        if (result == OwnPostWatchQueue.EnqueueResult.STORAGE_ERROR)
+            toast("댓글은 등록됐지만 답글 알림 준비를 저장하지 못했어요. 휴대폰 저장 공간을 확인해주세요.");
+    }
+
+    @Override public void onOwnCommentRestored(String url, long publishedAtMillis) {
+        OwnPostWatchQueue.restoreComment(this, url, publishedAtMillis);
+    }
+
     private void showAccountProfiles() {
         ScrollView scroll = new ScrollView(this);
         LinearLayout panel = vertical(); panel.setTag("account-profiles"); panel.setPadding(dp(23), dp(10), dp(23), dp(18));
@@ -1442,15 +1453,15 @@ public final class MainActivity extends Activity implements BrowserController.Li
                 : !PushNotifications.canNotify(this) ? "휴대폰에서 알림이 차단되어 있어요"
                 : PushRelayClient.connectionStatus(this);
         panel.addView(text(state, 17, colors.text, true));
-        TextView description = text("알림을 켜면 이 앱에서 작성한 내 글의 새 댓글을 자동으로 알려드려요. 글마다 등록하거나 별도 스위치를 켤 필요가 없어요. 서버가 주기적으로 확인하므로 알림은 늦어질 수 있습니다.", 13, colors.mutedText, false);
+        TextView description = text("알림을 켜면 이 앱에서 작성한 글의 댓글과 내 댓글에 달린 답글을 자동으로 알려드려요. 글마다 등록하거나 별도 스위치를 켤 필요가 없어요. 서버가 주기적으로 확인하므로 알림은 늦어질 수 있습니다.", 13, colors.mutedText, false);
         description.setPadding(0, dp(12), 0, dp(12));
         description.setLineSpacing(dp(3), 1f);
         panel.addView(description);
         panel.addView(text(CommunityOptions.autoWatchOwnPosts(this) && enabled
-                ? "내 글 댓글 알림 · 자동으로 받기" : "내 글 댓글 알림 · 꺼짐", 14, colors.text, true));
+                ? "내 글·댓글 알림 · 자동으로 받기" : "내 글·댓글 알림 · 꺼짐", 14, colors.text, true));
         long pendingPosts = OwnPostWatchQueue.pendingCount(this);
-        if (pendingPosts > 0) panel.addView(text("연결을 기다리는 작성 글 " + pendingPosts + "개 · 연결되면 자동으로 이어서 처리해요.", 12, colors.mutedText, false));
-        if (!browser.supportsAutomaticPostTracking()) panel.addView(text("글 작성 감지를 위해 Android System WebView를 업데이트해 주세요.", 12, colors.accent, false));
+        if (pendingPosts > 0) panel.addView(text("연결을 기다리는 글·댓글 " + pendingPosts + "개 · 연결되면 자동으로 이어서 처리해요.", 12, colors.mutedText, false));
+        if (!browser.supportsAutomaticPostTracking()) panel.addView(text("글·댓글 작성 감지를 위해 Android System WebView를 업데이트해 주세요.", 12, colors.accent, false));
         if (!pushStatus.isEmpty()) {
             TextView status = text(pushStatus, 13, colors.text, false);
             status.setPadding(0, 0, 0, dp(12));
@@ -1540,7 +1551,7 @@ public final class MainActivity extends Activity implements BrowserController.Li
 
     private PushRelayClient.Callback pushRelayResult(long request) {
         return new PushRelayClient.Callback() {
-            @Override public void onSuccess(String message) { finishPushAction(request, message); }
+            @Override public void onSuccess(String message) { finishPushAction(request, message); if (!isFinishing() && !isDestroyed()) refreshCommunityOptions(); }
             @Override public void onError(String message) { finishPushAction(request, message); }
         };
     }
@@ -1581,9 +1592,9 @@ public final class MainActivity extends Activity implements BrowserController.Li
     private void showNotificationConsent() {
         if (isFinishing() || isDestroyed() || notificationConsentDialog != null) return;
         if (pushDialog != null) pushDialog.dismiss();
-        AlertDialog dialog = dialogBuilder().setTitle("내 글의 댓글 알림을 받을까요?")
-                .setMessage("한 번 켜면 이 앱에서 작성한 내 글의 새 댓글 알림을 게시 후 3일간 자동으로 받아요. 글마다 등록할 필요는 없어요.\n\n"
-                        + "기기 연결 정보는 Google과 알림 서버에, 작성한 공개 글의 주소와 댓글 수는 알림 서버에 저장됩니다. 본문·닉네임·로그인 정보는 보내지 않아요.\n\n"
+        AlertDialog dialog = dialogBuilder().setTitle("글과 댓글의 새 답글 알림을 받을까요?")
+                .setMessage("한 번 켜면 이 앱에서 작성한 글의 새 댓글과 내가 쓴 댓글의 답글 알림을 각각 작성 후 3일간 자동으로 받아요. 글마다 등록할 필요는 없어요.\n\n"
+                        + "기기 연결 정보는 Google과 알림 서버에, 작성한 공개 글·댓글의 주소와 댓글 번호·새 답글 확인 정보는 알림 서버에 저장됩니다. 본문·닉네임·로그인 정보는 보내지 않아요.\n\n"
                         + "댓글을 주기적으로 확인하므로 알림이 늦어질 수 있고, 설정에서 언제든 끌 수 있어요.")
                 .setNegativeButton("나중에", (d, w) -> NotificationConsent.postpone(this))
                 .setPositiveButton("알림 받기", (d, w) -> {
@@ -1828,7 +1839,7 @@ public final class MainActivity extends Activity implements BrowserController.Li
                 + "개인정보와 기기 저장\n"
                 + "선택한 테마, 글자 크기, 직접 저장한 페이지, 차단 규칙, 이용자 메모, 글 보관함, 최근 본 글과 작성 문구는 이 기기에 저장됩니다. 최근 기록은 도구에서 끄거나 삭제할 수 있습니다. 작성 중인 텍스트 초안도 복원을 위해 기기에 임시 저장될 수 있습니다. 비밀번호와 첨부파일은 초안에 저장하지 않습니다. 간편 계정은 지원되는 WebView의 별도 로그인 공간을 사용하며 앱에는 공간 이름만 저장합니다. 로그인 쿠키와 웹 저장소는 Android WebView에 저장되고 로그인 정보·작성 내용은 해당 서비스로 전달됩니다. 앱은 별도의 계정 서버나 자체 분석 도구를 사용하지 않습니다.\n\n"
                 + "계정 즐겨찾기는 로그인한 서비스에서 불러옵니다. 이 목록을 별도 파일로 저장하지 않으며, 로그아웃 상태가 확인되거나 새로 불러오기에 실패하면 홈의 계정 목록을 비웁니다. 직접 저장한 페이지는 계정 즐겨찾기와 분리하여 이 기기에 보관합니다.\n\n"
-                + "푸시 알림은 선택 기능입니다. 켜면 Google FCM에 기기별 식별자가 등록되고, 기기 수신 확인을 거친 자동 연결 시 Cloudflare 발송 서버에 푸시 토큰과 임의의 기기 연결 정보가 저장됩니다. 알림에 동의한 뒤 이 앱에서 작성한 새 글은 게시 후 3일간 자동으로 등록되며, 공개 글 주소와 댓글 수가 서버에 저장됩니다. 다른 글은 직접 추가할 수 있습니다. 최소 5분 간격으로 확인하며 혼잡할 때는 더 늦어질 수 있습니다. 디시 로그인 비밀번호·쿠키와 비공개 글은 서버에 전달하지 않습니다. 공개 글을 서버가 조회하므로 해당 사이트에 서버의 접근 기록이 남을 수 있습니다. 즉시 알림은 아니며 네트워크·사이트 제한에 따라 지연되거나 중단될 수 있습니다. 알림을 끄면 기기에서 표시를 중단하고 토큰 폐기·서버 연결 삭제를 요청합니다. 통신 실패 시 서버 삭제는 다음 연결 때 재시도합니다.\n\n"
+                + "푸시 알림은 선택 기능입니다. 켜면 Google FCM에 기기별 식별자가 등록되고, 기기 수신 확인을 거친 자동 연결 시 Cloudflare 발송 서버에 푸시 토큰과 임의의 기기 연결 정보가 저장됩니다. 알림에 동의한 뒤 이 앱에서 작성한 글·댓글은 각각 작성 후 3일간 자동으로 등록되며, 공개 글·댓글 주소, 댓글 번호와 최신 답글 번호 등 확인 정보가 서버에 저장됩니다. 이전 글이나 댓글도 직접 추가할 수 있습니다. 최소 5분 간격으로 확인하며 혼잡할 때는 더 늦어질 수 있습니다. 디시 로그인 비밀번호·쿠키와 비공개 글은 서버에 전달하지 않습니다. 공개 글을 서버가 조회하므로 해당 사이트에 서버의 접근 기록이 남을 수 있습니다. 즉시 알림은 아니며 네트워크·사이트 제한에 따라 지연되거나 중단될 수 있습니다. 알림을 끄면 기기에서 표시를 중단하고 토큰 폐기·서버 연결 삭제를 요청합니다. 통신 실패 시 서버 삭제는 다음 연결 때 재시도합니다.\n\n"
                 + "사진을 첨부할 때 Android 파일 선택창에서 직접 고릅니다. 원본 페이지가 외부 서비스를 포함하면 해당 서비스의 개인정보 처리방침이 적용됩니다.\n\n"
                 + "테마를 바꿔도 열린 페이지는 다시 불러오지 않습니다. 앱 강제 종료·기기 재시작 뒤 작성 중 내용 복구는 보장되지 않으니 긴 글은 등록 전 별도로 보관해 주세요.\n\n"
                 + "콘텐츠 출처: dcinside.com\n화면 스타일 참고: Gmail · X · Instagram · Excel · 네이버 카페\n각 서비스의 공식 앱이 아닌 모아 테마 뷰어입니다.";

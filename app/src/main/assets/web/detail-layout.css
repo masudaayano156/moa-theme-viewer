@@ -49,23 +49,6 @@ html[data-moa-theme][data-moa-detail] :is(.comment-write,#writeForm) .sp-write-f
 html[data-moa-theme][data-moa-detail] .sp-write-form-icon.add-dccon { --moa-tool-icon:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cg fill='none' stroke='black' stroke-width='1.7' stroke-linecap='round'%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3Cpath d='M8 14q4 5 8 0M8 9h.1M16 9h.1'/%3E%3C/g%3E%3C/svg%3E"); }
 html[data-moa-theme][data-moa-detail] .sp-write-form-icon.add-txtdccon { --moa-tool-icon:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cg fill='none' stroke='black' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='3' width='18' height='18' rx='3'/%3E%3Cpath d='M7 8h10M12 8v9'/%3E%3C/g%3E%3C/svg%3E"); }
 html[data-moa-theme][data-moa-detail] .sp-write-form-icon.add-voice { --moa-tool-icon:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cg fill='none' stroke='black' stroke-width='1.7' stroke-linecap='round'%3E%3Cpath d='M14 3h7v7M21 3 11 13M10 5H4a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-6'/%3E%3C/g%3E%3C/svg%3E"); }
-/* The themed voice control opens the official app's store page. Show that destination
-   explicitly instead of presenting a microphone as an in-app recording tool. */
-html[data-moa-theme][data-moa-detail] :is(.comment-write,#comment_write,#writeForm) :is(#submit_voice,.sp-write-form-icon.add-voice)[data-moa-official-voice="true"] {
-  position:relative; box-sizing:border-box !important; width:calc(76px * var(--moa-font-scale)); min-width:76px; height:52px; min-height:52px;
-  padding:0 !important; margin:0; flex:0 0 auto; overflow:hidden; background:none !important; color:transparent !important;
-  font-size:0 !important; line-height:0; text-indent:100%; white-space:nowrap;
-  --moa-tool-icon:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M14 3h7v7M21 3 11 13M10 5H4a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-6' fill='none' stroke='black' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
-}
-html[data-moa-theme][data-moa-detail] :is(.comment-write,#comment_write,#writeForm) :is(#submit_voice,.sp-write-form-icon.add-voice)[data-moa-official-voice="true"]::after {
-  content:''; display:block; position:absolute; width:20px; height:20px; top:5px; left:50%; transform:translateX(-50%);
-  background:var(--moa-ink); -webkit-mask:var(--moa-tool-icon) center/contain no-repeat; mask:var(--moa-tool-icon) center/contain no-repeat; pointer-events:none;
-}
-html[data-moa-theme][data-moa-detail] :is(.comment-write,#comment_write,#writeForm) :is(#submit_voice,.sp-write-form-icon.add-voice)[data-moa-official-voice="true"]::before {
-  content:'공식앱 설치'; position:absolute; display:block; inset:auto 0 5px; width:auto; height:auto; margin:0; padding:0;
-  background:none; color:var(--moa-muted); font:500 calc(11px * var(--moa-font-scale))/1.3 system-ui,sans-serif;
-  text-indent:0; text-align:center; letter-spacing:0; white-space:nowrap; pointer-events:none;
-}
 html[data-moa-theme][data-moa-detail] .moa-detail-compose-heading { min-width:0; font-size:20px; line-height:1.4; font-weight:600; }
 html[data-moa-theme][data-moa-detail] [data-moa-compose-heading] > .wrt-tit { display:none; }
 html[data-moa-theme][data-moa-detail] .moa-detail-compose-destination { display:flex; align-items:baseline; gap:14px; padding:18px 16px; border-bottom:1px solid var(--moa-line); font-size:14px; line-height:1.6; }

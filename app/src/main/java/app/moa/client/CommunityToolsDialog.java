@@ -126,7 +126,6 @@ public final class CommunityToolsDialog {
         heading("계정 · 작성 · 알림");
         action("간편 계정 전환", "accounts");
         action("사진 편집 · 움짤 만들기", "media_editor");
-        action("보이스 · 공식앱 설치", "voice");
         action("게시판별 자동 짤방", "autopicture");
         action("푸시 알림", "push");
         heading("텍스트 초안 자동 보관");
