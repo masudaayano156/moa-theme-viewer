@@ -26,7 +26,6 @@ jobs:
       version: ${{ steps.prepare.outputs.version }}
     env:
       MOA_VERSION: ${{ inputs.version }}
-      GRADLE_USER_HOME: ${{ runner.temp }}/release-verification-gradle
     steps:
       - name: Read verification tools and release manifest from main
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -109,3 +108,16 @@ jobs:
           predicate-path: ${{ runner.temp }}/apk-verification-predicate.json
           create-storage-record: false
           push-to-registry: false
+      - name: Download the public subject again for signature verification
+        run: >-
+          python3 verification-tools/verification/ci_verify_release.py prepare
+          --version "$MOA_VERSION" --state "$RUNNER_TEMP/attested-public-apk"
+      - name: Verify the published attestation with GitHub CLI
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          gh attestation verify "$RUNNER_TEMP/attested-public-apk/moa-$MOA_VERSION.apk"
+          --repo masudaayano156/moa-theme-viewer
+          --signer-workflow masudaayano156/moa-theme-viewer/.github/workflows/verify-release.yml
+          --deny-self-hosted-runners
+          --predicate-type https://github.com/masudaayano156/moa-theme-viewer/verification/apk/v1
