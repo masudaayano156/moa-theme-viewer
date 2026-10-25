@@ -26,13 +26,14 @@
 | 의존성·OSV | 공개 Maven 16개. 2026-10-25 21:07:36 KST OSV 조회에서 알려진 취약점 일치 없음. ExifInterface 1.4.2 포함 |
 | VirusTotal | **탐지 0, 62개 엔진 미탐지, 8개 형식 미지원, 5개 시간 초과**. 2026-10-25 21:11:08 KST 기준. 시간 초과는 일반 4개·확인 시간 초과 1개이며 미탐지 판정에 포함하지 않음 |
 | GitHub 소스 검사 | [소스·lint·CodeQL·OSV 실행 성공](https://github.com/masudaayano156/moa-theme-viewer/actions/runs/40191390758). CodeQL 경고 10개는 [별도 검토](codeql-review.md)하며 성공이 무경고·무악성 인증을 뜻하지 않음 |
-| 공개 APK 재검증 | 배포 파일 공개 후 별도 검증 워크플로 실행 예정. 로컬 독립 재빌드 완료와 구분 |
-| AI 검토용 텍스트 | 최종 APK와 일치하는 소스·평문 Manifest·권한·실제 검사 결과를 합쳐 준비 예정 |
+| 공개 APK 재검증 | [공개 다운로드·서명·95/95 재빌드·검증 증명과 GitHub CLI 확인 성공](https://github.com/masudaayano156/moa-theme-viewer/actions/runs/40192605954). 원본 APK 빌드 provenance 증명과 구분 |
+| AI 검토용 텍스트 | [UTF-8 파일 하나](https://github.com/masudaayano156/moa-theme-viewer/releases/download/v0.9.2/moa-0.9.2-ai-security-review.txt): 앱 소스 68개·평문 Manifest·실제 권한·검사 결과·CodeQL 10건 검토 근거. 제3자 전체 소스와 DEX 전체 역컴파일은 제외 |
 
 - [0.9.2 APK 다운로드](https://github.com/masudaayano156/moa-theme-viewer/releases/download/v0.9.2/moa-0.9.2.apk) · [릴리스와 SHA-256](https://github.com/masudaayano156/moa-theme-viewer/releases/tag/v0.9.2)
 - [버전·해시·권한](releases/v0.9.2.json) · [APK 검사](reports/v0.9.2-apk.json) · [재빌드 비교](reports/v0.9.2-rebuild.json)
 - [검토·개발 검사 범위](reports/v0.9.2-review.json) · [의존성](reports/v0.9.2-dependencies.cdx.json) · [OSV 결과](reports/v0.9.2-dependencies-osv.json)
 - [VirusTotal 원본](https://www.virustotal.com/gui/file/c94caefea5c9f807008b648704121ea0340d94b8b6a627e310dad711f96c8971) · [검사 시점 기록](reports/v0.9.2-virustotal.json)
+- [공개 APK CI·검증 증명](reports/v0.9.2-ci.json) · [현재 CodeQL 경고·검토](reports/v0.9.2-codeql.json) · [비밀정보 제외 검사](reports/v0.9.2-secret-exclusion.json)
 
 APK SHA-256: `c94caefea5c9f807008b648704121ea0340d94b8b6a627e310dad711f96c8971`
 

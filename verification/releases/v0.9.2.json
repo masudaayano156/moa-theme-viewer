@@ -43,8 +43,10 @@
   "background_push_removed": true,
   "firebase_sdk_removed": true,
   "ci_verification": {
-    "status": "pending",
-    "scope": "Public APK identity and all packaged entry bytes; not original APK build provenance.",
+    "status": "completed",
+    "url": "https://github.com/masudaayano156/moa-theme-viewer/actions/runs/40192605954",
+    "github_cli_attestation_verified": true,
+    "scope": "All packaged entry content and release identity; raw ZIP container differs. Not original build provenance.",
     "bit_exact_reproduction": false
   },
   "foreground_notification_inbox": true
