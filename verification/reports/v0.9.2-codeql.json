@@ -1,0 +1,358 @@
+{
+  "schema": 1,
+  "version": "0.9.2",
+  "repository": "masudaayano156/moa-theme-viewer",
+  "source_commit": "bb006ed7f30ed48e50f86606fc679e14112c6f8f",
+  "queried_state": "open",
+  "observed_at_utc": "2026-10-25T12:12:06.823697+00:00",
+  "query_page_size": 100,
+  "query_pages": 1,
+  "query_complete_for_open_list": true,
+  "reported_alert_count": 10,
+  "zero_warnings": false,
+  "workflow_run": "https://github.com/masudaayano156/moa-theme-viewer/actions/runs/40191390758",
+  "workflow_result": "success",
+  "analysis_completed": true,
+  "alerts": [
+    {
+      "number": 12,
+      "rule_id": "java/user-controlled-bypass",
+      "severity": "error",
+      "security_severity": "high",
+      "state": "open",
+      "source_path": "app/src/main/java/app/moa/client/ImageContextMenu.java",
+      "start_line": 31,
+      "observed_commit": "bb006ed7f30ed48e50f86606fc679e14112c6f8f",
+      "url": "https://github.com/masudaayano156/moa-theme-viewer/security/code-scanning/12",
+      "ai_assisted_source_review": {
+        "function": "ImageContextMenu.readDocument",
+        "assessment": "No authentication bypass identified in this reviewed UI-eligibility path.",
+        "evidence": [
+          {
+            "source_path": "app/src/main/java/app/moa/client/ImageContextMenu.java",
+            "start_line": 29,
+            "end_line": 55,
+            "fact": "The URL classifier rejects non-dcinside HTTPS and authentication pages, then determines reading-page eligibility."
+          },
+          {
+            "source_path": "app/src/main/java/app/moa/client/BrowserController.java",
+            "start_line": 426,
+            "end_line": 429,
+            "fact": "The result gates the native image menu."
+          },
+          {
+            "source_path": "app/src/main/java/app/moa/client/BrowserController.java",
+            "start_line": 1147,
+            "end_line": 1149,
+            "fact": "The classifier also gates pull-refresh on a reading page; it does not grant site authentication or server permissions."
+          }
+        ],
+        "remaining_trust_boundaries": [
+          "The site and server must enforce authentication and authorization. This review does not certify the site login or every other caller of UrlPolicy."
+        ]
+      }
+    },
+    {
+      "number": 11,
+      "rule_id": "java/comparison-with-wider-type",
+      "severity": "warning",
+      "security_severity": "high",
+      "state": "open",
+      "source_path": "app/src/main/java/app/moa/client/MediaImageOps.java",
+      "start_line": 50,
+      "observed_commit": "bb006ed7f30ed48e50f86606fc679e14112c6f8f",
+      "url": "https://github.com/masudaayano156/moa-theme-viewer/security/code-scanning/11",
+      "ai_assisted_source_review": {
+        "function": "MediaImageOps.sampleSize",
+        "assessment": "No integer-overflow path identified under the current method guards; counter and arithmetic use long.",
+        "evidence": [
+          {
+            "source_path": "app/src/main/java/app/moa/client/MediaImageOps.java",
+            "start_line": 47,
+            "end_line": 52,
+            "fact": "Dimensions are 1..100000, edge/pixels are positive, sample is long, and rounding/product use long. At sample=131072 both rounded dimensions are 1, so every accepted input stops by this bound."
+          }
+        ],
+        "remaining_trust_boundaries": [
+          "Android image decoders and the document provider remain trusted. This arithmetic review does not establish the safety of every image or decoder."
+        ]
+      }
+    },
+    {
+      "number": 10,
+      "rule_id": "java/comparison-with-wider-type",
+      "severity": "warning",
+      "security_severity": "high",
+      "state": "open",
+      "source_path": "app/src/main/java/app/moa/client/MediaImageOps.java",
+      "start_line": 50,
+      "observed_commit": "bb006ed7f30ed48e50f86606fc679e14112c6f8f",
+      "url": "https://github.com/masudaayano156/moa-theme-viewer/security/code-scanning/10",
+      "ai_assisted_source_review": {
+        "function": "MediaImageOps.sampleSize",
+        "assessment": "No integer-overflow path identified under the current method guards; counter and arithmetic use long.",
+        "evidence": [
+          {
+            "source_path": "app/src/main/java/app/moa/client/MediaImageOps.java",
+            "start_line": 47,
+            "end_line": 52,
+            "fact": "Dimensions are 1..100000, edge/pixels are positive, sample is long, and rounding/product use long. At sample=131072 both rounded dimensions are 1, so every accepted input stops by this bound."
+          }
+        ],
+        "remaining_trust_boundaries": [
+          "Android image decoders and the document provider remain trusted. This arithmetic review does not establish the safety of every image or decoder."
+        ]
+      }
+    },
+    {
+      "number": 8,
+      "rule_id": "java/android/websettings-javascript-enabled",
+      "severity": "warning",
+      "security_severity": "high",
+      "state": "open",
+      "source_path": "app/src/main/java/app/moa/client/BrowserController.java",
+      "start_line": 403,
+      "observed_commit": "bb006ed7f30ed48e50f86606fc679e14112c6f8f",
+      "url": "https://github.com/masudaayano156/moa-theme-viewer/security/code-scanning/8",
+      "ai_assisted_source_review": {
+        "function": "BrowserController.configure",
+        "assessment": "JavaScript is intentionally enabled for community functionality; the web-content trust boundary remains.",
+        "evidence": [
+          {
+            "source_path": "app/src/main/java/app/moa/client/BrowserController.java",
+            "start_line": 400,
+            "end_line": 424,
+            "fact": "JavaScript and DOM storage are enabled; file/content and file-URL cross-origin access are disabled, mixed content is refused, Safe Browsing enabled and third-party cookies disabled."
+          },
+          {
+            "source_path": "app/src/main/java/app/moa/client/BrowserController.java",
+            "start_line": 716,
+            "end_line": 717,
+            "fact": "The WebView SSL error handler cancels the request."
+          }
+        ],
+        "remaining_trust_boundaries": [
+          "The original dcinside page and same-origin scripts remain trusted; this is not a separate isolated JavaScript world.",
+          "Android OS and WebView behavior are outside this source review.",
+          "These settings do not isolate or certify original website scripts, and Safe Browsing coverage is not an absence-of-malware guarantee."
+        ]
+      }
+    },
+    {
+      "number": 7,
+      "rule_id": "java/android/intent-redirection",
+      "severity": "error",
+      "security_severity": "high",
+      "state": "open",
+      "source_path": "app/src/main/java/app/moa/client/BrowserController.java",
+      "start_line": 1455,
+      "observed_commit": "bb006ed7f30ed48e50f86606fc679e14112c6f8f",
+      "url": "https://github.com/masudaayano156/moa-theme-viewer/security/code-scanning/7",
+      "ai_assisted_source_review": {
+        "function": "BrowserController.openExternal",
+        "assessment": "Restricted external-app launch after user action/confirmation; no unrestricted privileged intent bridge identified in this path.",
+        "evidence": [
+          {
+            "source_path": "app/src/main/java/app/moa/client/BrowserController.java",
+            "start_line": 601,
+            "end_line": 606,
+            "fact": "Web navigation requires a user gesture before reaching openExternal."
+          },
+          {
+            "source_path": "app/src/main/java/app/moa/client/BrowserController.java",
+            "start_line": 1431,
+            "end_line": 1464,
+            "fact": "Parsed intent component/selector, flags, extras and ClipData are cleared; ACTION_VIEW and BROWSABLE are set. Empty/file/content/javascript/data target schemes are rejected, a confirmation precedes startActivity, and fallback is HTTPS-only."
+          }
+        ],
+        "remaining_trust_boundaries": [
+          "The destination package can remain selected by the original intent. Android exported-component and permission checks, the destination app and the user confirmation remain security boundaries.",
+          "Custom target schemes are allowed beyond the denied set; the review does not certify the destination app or its URI handling."
+        ]
+      }
+    },
+    {
+      "number": 5,
+      "rule_id": "java/xss",
+      "severity": "error",
+      "security_severity": "high",
+      "state": "open",
+      "source_path": "app/src/main/java/app/moa/client/BrowserController.java",
+      "start_line": 1941,
+      "observed_commit": "bb006ed7f30ed48e50f86606fc679e14112c6f8f",
+      "url": "https://github.com/masudaayano156/moa-theme-viewer/security/code-scanning/5",
+      "ai_assisted_source_review": {
+        "function": "BrowserController.offerDraftRestore (restore action)",
+        "assessment": "User-confirmed restore supplies the normal canonical JSON array as data; bundled restore writes plain text, not restored HTML.",
+        "evidence": [
+          {
+            "source_path": "app/src/main/java/app/moa/client/BrowserController.java",
+            "start_line": 1937,
+            "end_line": 1942,
+            "fact": "The positive restore action checks the current PageContext and quotes context.url."
+          },
+          {
+            "source_path": "app/src/main/assets/web/drafts.js",
+            "start_line": 212,
+            "end_line": 235,
+            "fact": "Restoration restricts selectors, editor context, expected page and active comment, then assigns field.text through innerText or value. editorSnapshot innerHTML is used for a comparison signature, not restoration."
+          }
+        ],
+        "remaining_trust_boundaries": [
+          "The original dcinside page and same-origin scripts remain trusted; this is not a separate isolated JavaScript world.",
+          "Android OS and WebView behavior are outside this source review.",
+          "The app process and MODE_PRIVATE draft preferences must remain unmodified. new JSONArray(stored) is a syntax check, not a sanitizer for arbitrary JavaScript-bearing storage tampering."
+        ]
+      }
+    },
+    {
+      "number": 4,
+      "rule_id": "java/xss",
+      "severity": "error",
+      "security_severity": "high",
+      "state": "open",
+      "source_path": "app/src/main/java/app/moa/client/BrowserController.java",
+      "start_line": 1932,
+      "observed_commit": "bb006ed7f30ed48e50f86606fc679e14112c6f8f",
+      "url": "https://github.com/masudaayano156/moa-theme-viewer/security/code-scanning/4",
+      "ai_assisted_source_review": {
+        "function": "BrowserController.offerDraftRestore (canRestore probe)",
+        "assessment": "The normal writer supplies canonically serialized JSON data. No injection found along that writer-to-probe flow; raw stored text is not claimed safe after storage tampering.",
+        "evidence": [
+          {
+            "source_path": "app/src/main/java/app/moa/client/BrowserController.java",
+            "start_line": 1906,
+            "end_line": 1913,
+            "fact": "The observed writer obtains JSONArray fields and stores fields.toString()."
+          },
+          {
+            "source_path": "app/src/main/java/app/moa/client/BrowserController.java",
+            "start_line": 1924,
+            "end_line": 1934,
+            "fact": "The probe reads the account/document draft key, checks JSONArray syntax, uses quoted context.url and validates the live page/account before showing the restore prompt."
+          }
+        ],
+        "remaining_trust_boundaries": [
+          "The original dcinside page and same-origin scripts remain trusted; this is not a separate isolated JavaScript world.",
+          "Android OS and WebView behavior are outside this source review.",
+          "The app process and MODE_PRIVATE draft preferences must remain unmodified. new JSONArray(stored) is a syntax check, not a sanitizer for arbitrary JavaScript-bearing storage tampering."
+        ]
+      }
+    },
+    {
+      "number": 3,
+      "rule_id": "java/xss",
+      "severity": "error",
+      "security_severity": "high",
+      "state": "open",
+      "source_path": "app/src/main/java/app/moa/client/BrowserController.java",
+      "start_line": 1901,
+      "observed_commit": "bb006ed7f30ed48e50f86606fc679e14112c6f8f",
+      "url": "https://github.com/masudaayano156/moa-theme-viewer/security/code-scanning/3",
+      "ai_assisted_source_review": {
+        "function": "BrowserController.snapshotDraft",
+        "assessment": "Dynamic URL is quoted; returned fields are parsed and serialized as JSON before private storage. No raw page-result concatenation identified.",
+        "evidence": [
+          {
+            "source_path": "app/src/main/java/app/moa/client/BrowserController.java",
+            "start_line": 147,
+            "end_line": 147,
+            "fact": "Draft preferences use MODE_PRIVATE."
+          },
+          {
+            "source_path": "app/src/main/java/app/moa/client/BrowserController.java",
+            "start_line": 1882,
+            "end_line": 1918,
+            "fact": "Capture uses JSONObject.quote(context.url), rejects stale PageContext, obtains a JSONArray and writes fields.toString() as the observed draft writer."
+          }
+        ],
+        "remaining_trust_boundaries": [
+          "The original dcinside page and same-origin scripts remain trusted; this is not a separate isolated JavaScript world.",
+          "Android OS and WebView behavior are outside this source review.",
+          "Page scripts can affect the returned draft data; the app process and private preference storage remain trusted."
+        ]
+      }
+    },
+    {
+      "number": 2,
+      "rule_id": "java/xss",
+      "severity": "error",
+      "security_severity": "high",
+      "state": "open",
+      "source_path": "app/src/main/java/app/moa/client/BrowserController.java",
+      "start_line": 1811,
+      "observed_commit": "bb006ed7f30ed48e50f86606fc679e14112c6f8f",
+      "url": "https://github.com/masudaayano156/moa-theme-viewer/security/code-scanning/2",
+      "ai_assisted_source_review": {
+        "function": "BrowserController.guardNavigation",
+        "assessment": "Dynamic URL is quoted as JavaScript data in a bundled script; no string-to-code injection identified in this path.",
+        "evidence": [
+          {
+            "source_path": "app/src/main/java/app/moa/client/BrowserController.java",
+            "start_line": 1803,
+            "end_line": 1820,
+            "fact": "The call is limited to themable URLs; check.context.url uses JSONObject.quote. The response is parsed as data and fed to the navigation-state decision."
+          },
+          {
+            "source_path": "app/src/main/java/app/moa/client/BrowserController.java",
+            "start_line": 1839,
+            "end_line": 1845,
+            "fact": "NavigationCheck rejects a stale document/account context."
+          }
+        ],
+        "remaining_trust_boundaries": [
+          "The original dcinside page and same-origin scripts remain trusted; this is not a separate isolated JavaScript world.",
+          "Android OS and WebView behavior are outside this source review.",
+          "A compromised same-origin script can alter the reported editor state; this guard does not authenticate server operations."
+        ]
+      }
+    },
+    {
+      "number": 1,
+      "rule_id": "java/xss",
+      "severity": "error",
+      "security_severity": "high",
+      "state": "open",
+      "source_path": "app/src/main/java/app/moa/client/BrowserController.java",
+      "start_line": 1167,
+      "observed_commit": "bb006ed7f30ed48e50f86606fc679e14112c6f8f",
+      "url": "https://github.com/masudaayano156/moa-theme-viewer/security/code-scanning/1",
+      "ai_assisted_source_review": {
+        "function": "BrowserController.copyPendingText",
+        "assessment": "Dynamic URL is quoted as JavaScript data in a bundled script; no string-to-code injection identified in this path.",
+        "evidence": [
+          {
+            "source_path": "app/src/main/java/app/moa/client/BrowserController.java",
+            "start_line": 154,
+            "end_line": 158,
+            "fact": "draftScript is loaded from the packaged web/drafts.js asset."
+          },
+          {
+            "source_path": "app/src/main/java/app/moa/client/BrowserController.java",
+            "start_line": 1164,
+            "end_line": 1178,
+            "fact": "The call is limited to themable URLs, context.url uses JSONObject.quote, and the callback checks PageContext before copying text."
+          }
+        ],
+        "remaining_trust_boundaries": [
+          "The original dcinside page and same-origin scripts remain trusted; this is not a separate isolated JavaScript world.",
+          "Android OS and WebView behavior are outside this source review."
+        ]
+      }
+    }
+  ],
+  "scope": "Current public CodeQL open-alert metadata. Successful analysis does not mean zero findings.",
+  "ai_assisted_triage": {
+    "reviewed_at_utc": "2026-10-25T12:15:03.737606+00:00",
+    "reviewed_source_commit": "bb006ed7f30ed48e50f86606fc679e14112c6f8f",
+    "reviewed_alert_count": 10,
+    "github_alert_states_changed": false,
+    "security_certification": false,
+    "result": "No actionable vulnerability confirmed by this limited source review. All 10 observed GitHub alerts remain open.",
+    "limitations": [
+      "AI-assisted source-path triage is not an independent security certification or a proof that no vulnerability exists.",
+      "Review covers the listed current sinks and guards, not all third-party code, platform components or remote website behavior.",
+      "Historical alerts and removed code are distinguished from current open-alert metadata."
+    ]
+  }
+}

@@ -10,7 +10,7 @@ Android 8.0 이상. 기존 0.3.2 이상은 삭제하지 않고 업데이트 설�
 
 **설치 전 확인:** [검증 방법](VERIFY.md) · [권한과 용도](PERMISSIONS.md) · [검사 결과](verification/README.md) · [개인정보 안내](PRIVACY.md) · [보안 신고](SECURITY.md)
 
-0.9.2 최종 APK의 VirusTotal·서명·재빌드·공개 CI 검사는 발행 준비 중입니다. 완료한 실제 결과는 [버전별 검사 자료](verification/README.md)에 기록하며, 0.9.1의 검사 결과를 새 APK에 적용하지 않습니다.
+0.9.2 최종 APK의 [VirusTotal 검사](https://www.virustotal.com/gui/file/c94caefea5c9f807008b648704121ea0340d94b8b6a627e310dad711f96c8971)는 **탐지 0, 62개 엔진 미탐지, 8개 형식 미지원, 5개 시간 초과**입니다(2026-10-25 21:11:08 KST). [검사 시점 기록](verification/reports/v0.9.2-virustotal.json)을 함께 공개합니다. 미지원·시간 초과는 미탐지 판정에 포함하지 않으며 무악성 인증이 아닙니다.
 
 **AI 보안 검토용:** 0.9.2 최종 APK에 맞는 소스·평문 Manifest·권한·실제 검사 결과를 UTF-8 텍스트 파일 하나로 준비합니다. 자료 생성·첨부가 끝나면 다운로드와 해시를 기록합니다. 앱 설치에는 APK만 필요합니다.
 

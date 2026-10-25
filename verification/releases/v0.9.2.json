@@ -1,0 +1,51 @@
+{
+  "schema": 1,
+  "repository": "masudaayano156/moa-theme-viewer",
+  "version": "0.9.2",
+  "version_code": 23,
+  "package": "app.moa.client",
+  "source_commit": "bb006ed7f30ed48e50f86606fc679e14112c6f8f",
+  "embedded_vcs_revision": "bb006ed7f30ed48e50f86606fc679e14112c6f8f",
+  "certificate_sha256": "d425e1a47b90276aefb8d8ae1617fd44b0528113be25712faea20079b1211993",
+  "apk": {
+    "filename": "moa-0.9.2.apk",
+    "bytes": 1198171,
+    "sha256": "c94caefea5c9f807008b648704121ea0340d94b8b6a627e310dad711f96c8971",
+    "url": "https://github.com/masudaayano156/moa-theme-viewer/releases/download/v0.9.2/moa-0.9.2.apk"
+  },
+  "permissions": [
+    {
+      "name": "android.permission.INTERNET",
+      "max_sdk": null
+    },
+    {
+      "name": "android.permission.READ_EXTERNAL_STORAGE",
+      "max_sdk": 28
+    },
+    {
+      "name": "android.permission.WRITE_EXTERNAL_STORAGE",
+      "max_sdk": 28
+    }
+  ],
+  "allowed_rebuild_differences": [],
+  "provenance_note": "Locally built and signed from the exact identified public source. All 95 packaged entry bytes, including VCS, match an independent clean-source rebuild. Raw ZIP bytes after removal of the signing block differ; not bit-exact reproduction.",
+  "external_antivirus": {
+    "status": "completed",
+    "url": "https://www.virustotal.com/gui/file/c94caefea5c9f807008b648704121ea0340d94b8b6a627e310dad711f96c8971",
+    "analysis_date_utc": "2026-10-25T12:11:08Z",
+    "malicious_detections": 0,
+    "undetected_engines": 62,
+    "unsupported_engines": 8,
+    "timeout_engines": 5
+  },
+  "source_content_rebuild_verified": true,
+  "bit_exact_reproduction": false,
+  "background_push_removed": true,
+  "firebase_sdk_removed": true,
+  "ci_verification": {
+    "status": "pending",
+    "scope": "Public APK identity and all packaged entry bytes; not original APK build provenance.",
+    "bit_exact_reproduction": false
+  },
+  "foreground_notification_inbox": true
+}

@@ -173,3 +173,13 @@
 !/app/src/main/res/mipmap-anydpi/ic_launcher_photogram.xml
 !/app/src/main/res/mipmap-anydpi/ic_launcher_post.xml
 !/app/src/main/res/mipmap-anydpi/ic_launcher_sheet.xml
+!/verification/releases/v0.9.2.json
+!/verification/reports/v0.9.2-apk.json
+!/verification/reports/v0.9.2-rebuild.json
+!/verification/reports/v0.9.2-review.json
+!/verification/reports/v0.9.2-secret-exclusion.json
+!/verification/reports/v0.9.2-virustotal.json
+!/verification/reports/v0.9.2-dependencies.cdx.json
+!/verification/reports/v0.9.2-dependencies-osv.json
+!/verification/reports/v0.9.2-ci.json
+!/verification/reports/v0.9.2-codeql.json

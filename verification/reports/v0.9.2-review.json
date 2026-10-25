@@ -1,0 +1,54 @@
+{
+  "schema": 1,
+  "version": "0.9.2",
+  "source_commit": "bb006ed7f30ed48e50f86606fc679e14112c6f8f",
+  "review_date": "2026-10-25",
+  "review_type": "AI-assisted source review and automated developer regressions, not an independent professional audit.",
+  "android_jvm_regression": {
+    "tests": 597,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "web_regression": {
+    "tests": 266,
+    "failures": 0
+  },
+  "android_lint_errors": 0,
+  "draft_restore_requires_real_editor_intent": true,
+  "draft_prompt_cancelled_on_pause_or_pane_change": true,
+  "raw_and_wrapped_double_dccon_horizontal": true,
+  "article_embedded_authors_from_source": true,
+  "notification_inbox_local_account_scope": true,
+  "native_notification_bridge_fields": [
+    "action",
+    "url",
+    "unread",
+    "open"
+  ],
+  "notification_history_limit": 100,
+  "own_notification_read_delete_state_only": true,
+  "system_notification_permission_removed": true,
+  "background_push_removed": true,
+  "firebase_sdk_removed": true,
+  "test_code_fixtures_personal_logs_published": false,
+  "theme_names_icons_palette_unchanged": true,
+  "limitations": [
+    "No full real-device verification for every account, original-site script version and keyboard.",
+    "Notification history uses the WebView same-origin storage and therefore shares the original website JavaScript trust boundary.",
+    "Unpublished developer regression tests are separate from public CI checks and are not professional malware certification.",
+    "Source and APK entry bytes match; raw ZIP packaging differs, so not bit-exact reproduction."
+  ],
+  "external_antivirus_report": "verification/reports/v0.9.2-virustotal.json",
+  "android_lint_warnings": 0,
+  "confirmed_local_audit_fix_groups": 17,
+  "lint_recommendations_reviewed": 41,
+  "lint_code_resource_changes": 37,
+  "documented_narrow_false_positives": 4,
+  "current_public_release_lint": {
+    "errors": 0,
+    "warnings": 0
+  },
+  "regression_scope": "Developer working-source automated regressions. Private tests and offline transport hooks are not published. Public production source removes the two files' test-only hooks; default production behavior was independently compared, then the exact public source was built, linted and independently rebuilt.",
+  "new_runtime_dependency": "androidx.exifinterface:exifinterface:1.4.2"
+}

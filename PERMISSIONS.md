@@ -1,6 +1,6 @@
 # 휴대폰 권한
 
-다음은 0.9.2 소스 기준입니다. 0.9.0·0.9.1과 권한 범위는 같습니다. 소스의 명시적 선언은 `INTERNET`과 최대 API 28의 `WRITE_EXTERNAL_STORAGE` 2개이며, APK 도구에서는 구형 Android의 암묵적 읽기 권한까지 3개로 표시할 수 있습니다. 최종 APK의 해시와 실제 권한은 [버전별 검사 결과](verification/README.md)에서 확인하세요.
+다음은 0.9.2 최종 APK 기준입니다. 0.9.0·0.9.1과 권한 범위는 같습니다. 소스의 명시적 선언은 `INTERNET`과 최대 API 28의 `WRITE_EXTERNAL_STORAGE` 2개이며, APK의 aapt 결과에서는 구형 Android의 암묵적 읽기 권한까지 3개를 확인했습니다. 최종 APK의 해시와 실제 권한은 [버전별 검사 결과](verification/README.md)에서 확인하세요.
 
 ## 사용자가 허용하는 권한
 

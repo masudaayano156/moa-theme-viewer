@@ -10,7 +10,7 @@
 - [발견 사항과 수정 기록](source-review.md)
 - [공개 자동 검사 실행 기록](https://github.com/masudaayano156/moa-theme-viewer/actions)
 
-## 최신 0.9.2 검사 준비와 확인 범위
+## 최신 0.9.2 검사 결과
 
 로그인·분할 화면·페이지 이동·초안·알림함·화면 갱신·이미지 저장에서 재현한 문제 묶음 17개를 수정했습니다. Android lint 경고 41개를 코드·리소스 수정 37개와 확인한 오탐의 좁은 예외 4개로 정리했습니다. Firebase·백그라운드 푸시·새 알림 권한은 추가하지 않았습니다.
 
@@ -19,16 +19,24 @@
 | 로컬 Android 회귀 검사 | JVM 597개 통과, 실패·오류·스킵 0. 디버그 빌드 성공 |
 | 로컬 웹 회귀 검사 | 266개 통과, 실패 0. 두 번째 점검의 최종 실행이며 이후 lint 정리에서는 웹 자산 변경·웹 검사 재실행 없음 |
 | Android lint | 로컬 오류 0·경고 0. 전역 비활성화나 새 baseline 없음. 모든 런타임 결함의 부재를 뜻하지 않음 |
-| 권한 소스 | 명시적 선언 2개: 인터넷, 최대 API 28의 이미지 저장 쓰기. 구형 Android의 암묵적 읽기까지 APK에서 3개로 표시할 수 있으며 최종 파일에서 확인 예정 |
-| 최종 APK·해시·서명 | 발행 준비 중. 최종 서명 파일에 대한 검사 완료 후 별도 기록 |
-| 공개 소스 재빌드 | 최종 APK와의 독립 비교 준비 중. 과거 버전의 항목 수·결과를 적용하지 않음 |
-| 의존성·OSV | ExifInterface 1.4.2 추가. 최종 의존성 목록과 실제 OSV 조회 결과 준비 중 |
-| VirusTotal | 새 최종 APK 제출·검사 준비 중. 0.9.1 미탐지 결과를 새 파일의 결과로 표시하지 않음 |
-| GitHub 소스 검사·공개 APK 재검증 | 새 버전 실행 전. 실제 실행 링크·결과·증명 확인 후 기록 |
+| 최종 APK·서명 | 1,198,171 bytes. 기존 전용 인증서 서명 유효·디버깅 꺼짐. 소스와 내장 VCS revision 일치 |
+| 실제 권한 | 인터넷, Android 8~9 이미지 저장 쓰기·암묵적 읽기 3개. 소스의 명시적 선언은 2개이며 기존 범위 유지 |
+| 공개 소스 재빌드 | 내장 VCS·DEX·Manifest·자산·리소스를 포함해 **95/95 항목 내용 동일** |
+| 파일 전체 재현 | 서명 블록을 제거해도 ZIP 포장 바이트 차이가 남아 **비트 단위 완전 일치 아님** |
+| 의존성·OSV | 공개 Maven 16개. 2026-10-25 21:07:36 KST OSV 조회에서 알려진 취약점 일치 없음. ExifInterface 1.4.2 포함 |
+| VirusTotal | **탐지 0, 62개 엔진 미탐지, 8개 형식 미지원, 5개 시간 초과**. 2026-10-25 21:11:08 KST 기준. 시간 초과는 일반 4개·확인 시간 초과 1개이며 미탐지 판정에 포함하지 않음 |
+| GitHub 소스 검사 | [소스·lint·CodeQL·OSV 실행 성공](https://github.com/masudaayano156/moa-theme-viewer/actions/runs/40191390758). CodeQL 경고 10개는 [별도 검토](codeql-review.md)하며 성공이 무경고·무악성 인증을 뜻하지 않음 |
+| 공개 APK 재검증 | 배포 파일 공개 후 별도 검증 워크플로 실행 예정. 로컬 독립 재빌드 완료와 구분 |
 | AI 검토용 텍스트 | 최종 APK와 일치하는 소스·평문 Manifest·권한·실제 검사 결과를 합쳐 준비 예정 |
 
-- [0.9.2 릴리스와 SHA-256](https://github.com/masudaayano156/moa-theme-viewer/releases/tag/v0.9.2)
-- [수정·개발 검사 범위](source-review.md) · [권한 선언과 용도](../PERMISSIONS.md)
+- [0.9.2 APK 다운로드](https://github.com/masudaayano156/moa-theme-viewer/releases/download/v0.9.2/moa-0.9.2.apk) · [릴리스와 SHA-256](https://github.com/masudaayano156/moa-theme-viewer/releases/tag/v0.9.2)
+- [버전·해시·권한](releases/v0.9.2.json) · [APK 검사](reports/v0.9.2-apk.json) · [재빌드 비교](reports/v0.9.2-rebuild.json)
+- [검토·개발 검사 범위](reports/v0.9.2-review.json) · [의존성](reports/v0.9.2-dependencies.cdx.json) · [OSV 결과](reports/v0.9.2-dependencies-osv.json)
+- [VirusTotal 원본](https://www.virustotal.com/gui/file/c94caefea5c9f807008b648704121ea0340d94b8b6a627e310dad711f96c8971) · [검사 시점 기록](reports/v0.9.2-virustotal.json)
+
+APK SHA-256: `c94caefea5c9f807008b648704121ea0340d94b8b6a627e310dad711f96c8971`
+
+빌드 소스와 APK 내장 revision은 `bb006ed7f30ed48e50f86606fc679e14112c6f8f`입니다. 이후 문서·검사 자료 커밋과 구분합니다. VirusTotal은 동일 파일의 재검사 2회 중 위 시점의 최종 결과를 기록했으며, 형식 미지원·시간 초과를 미탐지로 합산하지 않습니다.
 
 테스트 코드·실제 게시글·사진·계정 자료·개발 로그는 공개하지 않습니다. 실제 휴대폰의 모든 계정·키보드·원본 사이트 조합이나 localStorage의 교차 프로세스 원자성을 검증한 것은 아닙니다. 알림함은 동일 출처 WebView 저장소를 사용하므로 원본 사이트 JavaScript도 신뢰 경계에 포함됩니다.
 
