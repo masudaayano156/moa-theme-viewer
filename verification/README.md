@@ -10,7 +10,30 @@
 - [발견 사항과 수정 기록](source-review.md)
 - [공개 자동 검사 실행 기록](https://github.com/masudaayano156/moa-theme-viewer/actions)
 
-## 최신 0.9.0 검사 결과
+## 최신 0.9.1 검사 결과
+
+초안 복원 조건·더블콘 배치·본문 아래 목록 작성자를 수정하고, 계정별 앱 안 알림함을 추가했습니다. Android 알림 권한·Firebase·백그라운드 서버 조회는 다시 추가하지 않았습니다.
+
+| 검사 | 실제 결과와 범위 |
+|---|---|
+| APK | 기존 전용 인증서 v2/v3 서명 유효·디버깅 꺼짐, 1,162,104 bytes |
+| 실제 권한 | 인터넷, Android8~9 이미지 저장 쓰기·암묵적 읽기 3개. 0.9.0과 동일 |
+| 공개 소스 재빌드 | 내장 VCS·DEX·Manifest·자산·리소스를 포함해 **110/110 항목 내용 동일** |
+| 파일 전체 재현 | 서명 블록을 제거해도 ZIP 포장 바이트 차이가 남아 비트 단위 완전 일치 아님 |
+| 개발 회귀 검사 | Android JVM530개·웹255개 통과, 실패0·lint 오류0. 테스트·실제 게시글·로그는 공개하지 않음 |
+| 의존성 | 공개 Maven15개, 2026-10-25 OSV 조회에서 알려진 취약점 일치 없음 |
+| VirusTotal | **66개 엔진 미탐지, 8개 형식 미지원, 1개 시간 초과**. 2026-10-25 18:45:17 KST 기준. 무악성 인증이 아님 |
+| GitHub 소스 검사 | [소스·lint·CodeQL·OSV 실행 성공](https://github.com/masudaayano156/moa-theme-viewer/actions/runs/40182042511). 성공은 경고0이라는 뜻이 아님 |
+| 공개 APK 재검증 | 배포 후 별도 검증 워크플로 실행 결과를 기록함. 현재 단계의 로컬 독립 재빌드와 구분 |
+
+- [0.9.1 APK 다운로드](https://github.com/masudaayano156/moa-theme-viewer/releases/download/v0.9.1/moa-0.9.1.apk) · [릴리스와 SHA-256](https://github.com/masudaayano156/moa-theme-viewer/releases/tag/v0.9.1)
+- [버전·해시·권한](releases/v0.9.1.json) · [APK 검사](reports/v0.9.1-apk.json) · [재빌드 비교](reports/v0.9.1-rebuild.json)
+- [검토·개발 검사 범위](reports/v0.9.1-review.json) · [의존성](reports/v0.9.1-dependencies.cdx.json) · [OSV 결과](reports/v0.9.1-dependencies-osv.json)
+- [VirusTotal 원본](https://www.virustotal.com/gui/file/c06b27d0f8f806d681640462f2fe5f8269c1c79bd37091dd3cecacc581988cce) · [검사 시점 기록](reports/v0.9.1-virustotal.json)
+
+실제 휴대폰의 모든 계정·키보드·원본 사이트 개편 조합을 검증한 것은 아닙니다. 알림함은 동일 출처 WebView 저장소를 사용하므로 원본 사이트 JavaScript도 신뢰 경계에 포함됩니다.
+
+## 이전 0.9.0 검사 결과
 
 백그라운드 푸시·Firebase SDK·기기 등록·글별 추적과 알림 권한을 제거했습니다. 앱 이름·테마 이름·색상·아이콘은 그대로입니다. 운영자 요청으로 구버전 릴리스 13개와 첨부 파일 26개를 삭제했으며, 아래 과거 보고서는 기록으로만 남깁니다. 구버전 APK 다운로드는 제공하지 않습니다.
 

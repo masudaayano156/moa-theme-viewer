@@ -11,13 +11,13 @@
 Windows PowerShell에서 파일을 받은 폴더를 열고 실행합니다.
 
 ```powershell
-Get-FileHash .\moa-0.9.0.apk -Algorithm SHA256
+Get-FileHash .\moa-0.9.1.apk -Algorithm SHA256
 ```
 
 macOS/Linux에서는 다음과 같이 확인합니다.
 
 ```sh
-shasum -a 256 moa-0.9.0.apk
+shasum -a 256 moa-0.9.1.apk
 ```
 
 출력값이 **같은 버전**의 `SHA256SUMS.txt`와 검사 자료의 값에 모두 일치해야 합니다. 이 검사는 파일이 공개한 것과 같은지 확인하며, 파일 내용의 안전성을 판정하는 검사는 아닙니다.

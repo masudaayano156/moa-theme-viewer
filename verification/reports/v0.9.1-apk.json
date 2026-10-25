@@ -1,0 +1,35 @@
+{
+  "schema": 1,
+  "version": "0.9.1",
+  "sha256": "c06b27d0f8f806d681640462f2fe5f8269c1c79bd37091dd3cecacc581988cce",
+  "bytes": 1162104,
+  "package": "app.moa.client",
+  "version_code": 22,
+  "signature_verified": true,
+  "certificate_sha256": "d425e1a47b90276aefb8d8ae1617fd44b0528113be25712faea20079b1211993",
+  "debuggable": false,
+  "permissions": [
+    {
+      "name": "android.permission.INTERNET",
+      "max_sdk": null,
+      "implied": false
+    },
+    {
+      "name": "android.permission.READ_EXTERNAL_STORAGE",
+      "max_sdk": 28,
+      "implied": true,
+      "reason": "requested WRITE_EXTERNAL_STORAGE"
+    },
+    {
+      "name": "android.permission.WRITE_EXTERNAL_STORAGE",
+      "max_sdk": 28,
+      "implied": false
+    }
+  ],
+  "source_commit": "1042ac23aac4addba1e0a2adacdd1ec91ba617e1",
+  "embedded_vcs_revision": "1042ac23aac4addba1e0a2adacdd1ec91ba617e1",
+  "embedded_revision_matches_source": true,
+  "private_material_checks": "no_detected_match",
+  "identity_result": "pass",
+  "scope": "Release identity, declared/effective permissions and limited forbidden-file/key patterns; not a malware-free certification."
+}

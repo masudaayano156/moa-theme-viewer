@@ -174,3 +174,11 @@
 !/verification/reports/v0.9.0-ci.json
 !/verification/reports/v0.9.0-virustotal.json
 !/app/src/main/assets/web/notification-history.js
+!/verification/releases/v0.9.1.json
+!/verification/reports/v0.9.1-apk.json
+!/verification/reports/v0.9.1-rebuild.json
+!/verification/reports/v0.9.1-review.json
+!/verification/reports/v0.9.1-dependencies.cdx.json
+!/verification/reports/v0.9.1-dependencies-osv.json
+!/verification/reports/v0.9.1-virustotal.json
+!/verification/reports/v0.9.1-ci.json

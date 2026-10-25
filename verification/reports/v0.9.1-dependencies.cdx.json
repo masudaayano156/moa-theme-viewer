@@ -1,0 +1,215 @@
+{
+    "bomFormat": "CycloneDX",
+    "specVersion": "1.6",
+    "version": 1,
+    "metadata": {
+        "component": {
+            "type": "application",
+            "name": "app.moa.client",
+            "version": "0.9.1"
+        },
+        "properties": [
+            {
+                "name": "scope",
+                "value": "Resolved Android releaseRuntimeClasspath inputs only; excludes OS, WebView, build toolchain and remote services."
+            }
+        ]
+    },
+    "components": [
+        {
+            "type": "library",
+            "group": "androidx.annotation",
+            "name": "annotation-experimental",
+            "version": "1.4.1",
+            "purl": "pkg:maven/androidx.annotation/annotation-experimental@1.4.1?type=aar",
+            "hashes": [
+                {
+                    "alg": "SHA-256",
+                    "content": "6bd4c7c7476f8260cd3bdbb81183583e93fc9f790c27dea7dc314181cbf87aa0"
+                }
+            ]
+        },
+        {
+            "type": "library",
+            "group": "androidx.annotation",
+            "name": "annotation-jvm",
+            "version": "1.8.1",
+            "purl": "pkg:maven/androidx.annotation/annotation-jvm@1.8.1?type=jar",
+            "hashes": [
+                {
+                    "alg": "SHA-256",
+                    "content": "9aab326d9492800991854360ac248f493ce7f7c3183519309b78ace9e240f6f6"
+                }
+            ]
+        },
+        {
+            "type": "library",
+            "group": "androidx.arch.core",
+            "name": "core-common",
+            "version": "2.0.0",
+            "purl": "pkg:maven/androidx.arch.core/core-common@2.0.0?type=jar",
+            "hashes": [
+                {
+                    "alg": "SHA-256",
+                    "content": "4b80b337779b526e64b0ee0ca9e0df43b808344d145f8e9b1c42a134dac57ad8"
+                }
+            ]
+        },
+        {
+            "type": "library",
+            "group": "androidx.collection",
+            "name": "collection",
+            "version": "1.0.0",
+            "purl": "pkg:maven/androidx.collection/collection@1.0.0?type=jar",
+            "hashes": [
+                {
+                    "alg": "SHA-256",
+                    "content": "9c8d117b5c2bc120a1cdfeb857e05b495b16c36013570372a708f7827e3ac9f9"
+                }
+            ]
+        },
+        {
+            "type": "library",
+            "group": "androidx.core",
+            "name": "core",
+            "version": "1.1.0",
+            "purl": "pkg:maven/androidx.core/core@1.1.0?type=aar",
+            "hashes": [
+                {
+                    "alg": "SHA-256",
+                    "content": "76c7cfbe596fe3c09a6983bf1c89e889299c08ac9a3b52ce5182a088d056647e"
+                }
+            ]
+        },
+        {
+            "type": "library",
+            "group": "androidx.interpolator",
+            "name": "interpolator",
+            "version": "1.0.0",
+            "purl": "pkg:maven/androidx.interpolator/interpolator@1.0.0?type=aar",
+            "hashes": [
+                {
+                    "alg": "SHA-256",
+                    "content": "33193135a64fe21fa2c35eec6688f1a76e512606c0fc83dc1b689e37add7732a"
+                }
+            ]
+        },
+        {
+            "type": "library",
+            "group": "androidx.lifecycle",
+            "name": "lifecycle-common",
+            "version": "2.0.0",
+            "purl": "pkg:maven/androidx.lifecycle/lifecycle-common@2.0.0?type=jar",
+            "hashes": [
+                {
+                    "alg": "SHA-256",
+                    "content": "7bad7a188804adea6fa1f35d5ef99b705f20bd93ecadde484760ff86b535fefc"
+                }
+            ]
+        },
+        {
+            "type": "library",
+            "group": "androidx.lifecycle",
+            "name": "lifecycle-runtime",
+            "version": "2.0.0",
+            "purl": "pkg:maven/androidx.lifecycle/lifecycle-runtime@2.0.0?type=aar",
+            "hashes": [
+                {
+                    "alg": "SHA-256",
+                    "content": "e4afc9e636183f6f3e0edf1cf46121a492ffd2c673075bb07f55c7a99dd43cfb"
+                }
+            ]
+        },
+        {
+            "type": "library",
+            "group": "androidx.swiperefreshlayout",
+            "name": "swiperefreshlayout",
+            "version": "1.2.0",
+            "purl": "pkg:maven/androidx.swiperefreshlayout/swiperefreshlayout@1.2.0?type=aar",
+            "hashes": [
+                {
+                    "alg": "SHA-256",
+                    "content": "1de8aee6173d2ca251a1126fe18d4ca7d5c0dbc7a80fb9e6ff74a3ba5e9c9b92"
+                }
+            ]
+        },
+        {
+            "type": "library",
+            "group": "androidx.versionedparcelable",
+            "name": "versionedparcelable",
+            "version": "1.1.0",
+            "purl": "pkg:maven/androidx.versionedparcelable/versionedparcelable@1.1.0?type=aar",
+            "hashes": [
+                {
+                    "alg": "SHA-256",
+                    "content": "9a1d77140ac222b7866b5054ee7d159bc1800987ed2d46dd6afdd145abb710c1"
+                }
+            ]
+        },
+        {
+            "type": "library",
+            "group": "androidx.webkit",
+            "name": "webkit",
+            "version": "1.12.1",
+            "purl": "pkg:maven/androidx.webkit/webkit@1.12.1?type=aar",
+            "hashes": [
+                {
+                    "alg": "SHA-256",
+                    "content": "18a0a51ad129e0c8563f031d46c8a7e61169f56ae84e562a0d75686941262111"
+                }
+            ]
+        },
+        {
+            "type": "library",
+            "group": "org.jetbrains.kotlin",
+            "name": "kotlin-stdlib-common",
+            "version": "1.7.10",
+            "purl": "pkg:maven/org.jetbrains.kotlin/kotlin-stdlib-common@1.7.10?type=jar",
+            "hashes": [
+                {
+                    "alg": "SHA-256",
+                    "content": "19f102efe9629f8eabc63853ad15c533e47c47f91fca09285c5bde86e59f91d4"
+                }
+            ]
+        },
+        {
+            "type": "library",
+            "group": "org.jetbrains.kotlin",
+            "name": "kotlin-stdlib",
+            "version": "1.7.10",
+            "purl": "pkg:maven/org.jetbrains.kotlin/kotlin-stdlib@1.7.10?type=jar",
+            "hashes": [
+                {
+                    "alg": "SHA-256",
+                    "content": "e771fe74250a943e8f6346713201ff1d8cb95c3a5d1a91a22b65a9e04f6a8901"
+                }
+            ]
+        },
+        {
+            "type": "library",
+            "group": "org.jetbrains",
+            "name": "annotations",
+            "version": "13.0",
+            "purl": "pkg:maven/org.jetbrains/annotations@13.0?type=jar",
+            "hashes": [
+                {
+                    "alg": "SHA-256",
+                    "content": "ace2a10dc8e2d5fd34925ecac03e4988b2c0f851650c94b8cef49ba1bd111478"
+                }
+            ]
+        },
+        {
+            "type": "library",
+            "group": "org.jspecify",
+            "name": "jspecify",
+            "version": "1.0.0",
+            "purl": "pkg:maven/org.jspecify/jspecify@1.0.0?type=jar",
+            "hashes": [
+                {
+                    "alg": "SHA-256",
+                    "content": "1fad6e6be7557781e4d33729d49ae1cdc8fdda6fe477bb0cc68ce351eafdfbab"
+                }
+            ]
+        }
+    ]
+}
