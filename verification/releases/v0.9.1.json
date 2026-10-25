@@ -43,8 +43,11 @@
   "background_push_removed": true,
   "firebase_sdk_removed": true,
   "ci_verification": {
-    "status": "pending",
-    "scope": "source checks and packaged entry comparison; no signing key uploaded"
+    "status": "completed",
+    "url": "https://github.com/masudaayano156/moa-theme-viewer/actions/runs/40182806332",
+    "github_cli_attestation_verified": true,
+    "scope": "all packaged entry content and release identity; raw ZIP container differs",
+    "bit_exact_reproduction": false
   },
   "foreground_notification_inbox": true
 }

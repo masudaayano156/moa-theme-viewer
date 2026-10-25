@@ -1,0 +1,21 @@
+{
+  "schema": 1,
+  "version": "0.9.1",
+  "apk_sha256": "c06b27d0f8f806d681640462f2fe5f8269c1c79bd37091dd3cecacc581988cce",
+  "build_source_commit": "1042ac23aac4addba1e0a2adacdd1ec91ba617e1",
+  "verification_tool_commit": "ba2ecd4878f1418c2f944ba11a074e99b41c7b52",
+  "observed_at_utc": "2026-10-25T10:03:00.726659+00:00",
+  "verification_workflow": "https://github.com/masudaayano156/moa-theme-viewer/actions/runs/40182806332",
+  "verification_result": "success",
+  "source_analysis_workflow": "https://github.com/masudaayano156/moa-theme-viewer/actions/runs/40182042511",
+  "source_analysis_result": "success",
+  "custom_verification_attestation_published": true,
+  "github_cli_attestation_verify_step": "success",
+  "attestation_predicate_type": "https://github.com/masudaayano156/moa-theme-viewer/verification/apk/v1",
+  "scope": "Existing APK identity and all packaged entry bytes; not original APK build provenance.",
+  "bit_exact_reproduction": false,
+  "container_difference_disclosed": true,
+  "firebase_client_inputs": 0,
+  "signing_or_server_private_keys_supplied_to_actions": false,
+  "user_fixtures_or_logs_uploaded": false
+}

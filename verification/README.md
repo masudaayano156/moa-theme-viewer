@@ -24,7 +24,7 @@
 | 의존성 | 공개 Maven15개, 2026-10-25 OSV 조회에서 알려진 취약점 일치 없음 |
 | VirusTotal | **66개 엔진 미탐지, 8개 형식 미지원, 1개 시간 초과**. 2026-10-25 18:45:17 KST 기준. 무악성 인증이 아님 |
 | GitHub 소스 검사 | [소스·lint·CodeQL·OSV 실행 성공](https://github.com/masudaayano156/moa-theme-viewer/actions/runs/40182042511). 성공은 경고0이라는 뜻이 아님 |
-| 공개 APK 재검증 | 배포 후 별도 검증 워크플로 실행 결과를 기록함. 현재 단계의 로컬 독립 재빌드와 구분 |
+| 공개 APK 재검증 | [GitHub 재빌드·서명·검증 증명 확인 완료](https://github.com/masudaayano156/moa-theme-viewer/actions/runs/40182806332) · [실제 완료 기록](reports/v0.9.1-ci.json) |
 
 - [0.9.1 APK 다운로드](https://github.com/masudaayano156/moa-theme-viewer/releases/download/v0.9.1/moa-0.9.1.apk) · [릴리스와 SHA-256](https://github.com/masudaayano156/moa-theme-viewer/releases/tag/v0.9.1)
 - [버전·해시·권한](releases/v0.9.1.json) · [APK 검사](reports/v0.9.1-apk.json) · [재빌드 비교](reports/v0.9.1-rebuild.json)
