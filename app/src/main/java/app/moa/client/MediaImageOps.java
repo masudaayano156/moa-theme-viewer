@@ -1,5 +1,6 @@
 package app.moa.client;
 
+import android.annotation.SuppressLint;
 import android.content.ContentResolver;
 import android.content.Context;
 import android.graphics.Bitmap;
@@ -10,8 +11,8 @@ import android.graphics.Matrix;
 import android.graphics.Paint;
 import android.graphics.Rect;
 import android.graphics.RectF;
-import android.media.ExifInterface;
 import android.net.Uri;
+import androidx.exifinterface.media.ExifInterface;
 import java.io.File;
 import java.io.FilterInputStream;
 import java.io.FilterOutputStream;
@@ -79,6 +80,7 @@ final class MediaImageOps {
         return decoded;
     }
 
+    @SuppressLint("Recycle") // The returned owning wrapper closes source; callers use try-with-resources.
     static InputStream boundedInput(ContentResolver resolver, Uri uri) throws IOException {
         InputStream source = resolver.openInputStream(uri);
         if (source == null) throw new IOException("Cannot open selected image");

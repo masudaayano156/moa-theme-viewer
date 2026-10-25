@@ -298,8 +298,11 @@
   }
 
   function observe() {
-    observer.observe(document, { childList: true, subtree: true, attributes: true,
-      attributeFilter: ['class', 'id', 'style', marker, 'data-ad-unit', 'data-ad-client', 'data-ad-slot'] });
+    // Recognition also depends on the promotion label/destination and on
+    // editor/login protections. Attribute-only source updates must release
+    // previously hidden nodes as promptly as newly inserted form controls.
+    observer.observe(document, { childList: true, subtree: true, characterData: true, attributes: true,
+      attributeFilter: ['class', 'id', 'style', 'href', 'contenteditable', 'type', marker, 'data-ad-unit', 'data-ad-client', 'data-ad-slot'] });
   }
 
   function apply() {

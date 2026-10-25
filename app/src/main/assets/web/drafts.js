@@ -113,10 +113,28 @@
     }
     interacted = true;
     if (editor && /^(beforeinput|input|change|paste|drop)$/.test(event.type)) {
-      originalFor(editor, /^(beforeinput|paste|drop)$/.test(event.type)).authored = true;
+      var edited = originalFor(editor, /^(beforeinput|paste|drop)$/.test(event.type));
+      edited.authored = true; edited.toolbarOnly = false;
     } else if (event.type === 'click' && target.closest('#writeForm') && !target.closest('input[type="submit"],button[type="submit"]')) {
       var body = document.querySelector('#writeForm #textbox');
-      if (body) originalFor(body, true).authored = true;
+      if (body) {
+        var originalBody = originalFor(body, true);
+        if (!originalBody.authored) originalBody.toolbarOnly = true;
+        originalBody.authored = true;
+      }
+    } else if (event.type === 'click' && target.closest('[data-moa-community-owned="tools"] .moa-community-affix')) {
+      // The user's affix button changes the main comment through synthetic
+      // input events. Retain the settled original before its programmatic focus
+      // event, which would otherwise replace the original with the new text.
+      var comment = target.closest('#comment_write').querySelector('#comment_memo');
+      if (comment) {
+        var original = originalFor(comment, true), wasAuthored = original.authored;
+        original.authored = true;
+        setTimeout(function () {
+          // A cancelled or over-limit insertion must preserve any pending draft.
+          if (originals.get(comment) === original && textValue(comment) === original.text) original.authored = wasAuthored;
+        }, 0);
+      }
     }
   }
   ['focusin', 'pointerdown', 'keydown', 'beforeinput', 'input', 'change', 'paste', 'drop', 'click'].forEach(function (name) {
@@ -179,6 +197,11 @@
       if (!element || element.getAttribute('type') === 'password' || !element.getClientRects().length) return;
       var original = originalFor(element, false), value = textValue(element);
       if (!original.authored) return;
+      // A toolbar can open a picker or settings without changing the body.
+      // Keep its original until a delayed insertion arrives, but do not export
+      // an unchanged empty snapshot that would erase a pending saved draft.
+      if (original.toolbarOnly && value === original.text) return;
+      original.toolbarOnly = false;
       authored = true;
       if (value.trim() && value !== original.text) fields.push({selector:selector,text:value.slice(0,100000),context:original.context});
     });
@@ -206,7 +229,7 @@
       var element = document.querySelector(field.selector);
       var original = originalFor(element, false);
       original.text = textValue(element);
-      original.authored = true;
+      original.authored = true; original.toolbarOnly = false;
       if (element.isContentEditable) element.innerText = field.text;
       else element.value = field.text;
       element.dispatchEvent(new Event('input', {bubbles:true}));

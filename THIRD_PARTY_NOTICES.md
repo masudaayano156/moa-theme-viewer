@@ -22,8 +22,10 @@ The following direct application dependencies are resolved by Gradle and are not
 |---|---|
 | androidx.webkit:webkit | 1.12.1 |
 | androidx.swiperefreshlayout:swiperefreshlayout | 1.2.0 |
+| androidx.exifinterface:exifinterface | 1.4.2 |
 
 - AndroidX uses Apache License, Version 2.0. See [AndroidX](https://developer.android.com/jetpack/androidx).
+- ExifInterface 1.4.2 is used for image metadata handling beginning with 0.9.2. Its [published Google Maven POM](https://dl.google.com/dl/android/maven2/androidx/exifinterface/exifinterface/1.4.2/exifinterface-1.4.2.pom) declares Apache License, Version 2.0 and identifies the Android Open Source Project.
 - Preserve dependency-provided license/notice resources when distributing the built application. The Apache-2.0 text is included in [licenses/Apache-2.0.txt](licenses/Apache-2.0.txt).
 
 Android Gradle Plugin 8.7.3 is a build tool, separate from the application's runtime dependencies, and is also published under Apache License, Version 2.0. The Android SDK is obtained separately under its own terms and is not included here.

@@ -53,20 +53,25 @@
     var number = Number(value);
     return Number.isSafeInteger(number) && number >= 946684800000 && number <= Date.now() + 300000 ? number : 0;
   }
+  function popupDate(value, date, origin) {
+    var receipt = timestamp(value);
+    return origin === 'site' && receipt && Math.abs(receipt - date) <= 20000 ? receipt : 0;
+  }
   function fingerprint(text) {
     var hash = 2166136261;
     for (var index = 0; index < text.length; index++) hash = Math.imul(hash ^ text.charCodeAt(index), 16777619) >>> 0;
     return ('00000000' + hash.toString(16)).slice(-8) + ':' + text.length;
   }
   function tombstone(item) {
-    return {key:item.key, kind:item.kind, url:item.url, date:item.date, origin:item.origin, stamp:fingerprint(item.text)};
+    return {key:item.key, kind:item.kind, url:item.url, date:item.date, origin:item.origin, popupDate:item.popupDate || 0, stamp:fingerprint(item.text)};
   }
   function deletedRecord(value) {
     if (!value || typeof value !== 'object') return null;
     var type = kind(value.kind), url = safeUrl(value.url), date = timestamp(value.date);
     var stamp = typeof value.stamp === 'string' ? value.stamp : fingerprint(plain(value.text));
     if (!type || !url || !date || !/^[a-f0-9]{8}:[0-9]{1,3}$/.test(stamp)) return null;
-    return {key:type + '|' + url + '|' + date, kind:type, url:url, date:date, origin:value.origin === 'popup' ? 'popup' : 'site', stamp:stamp};
+    var origin = value.origin === 'popup' ? 'popup' : 'site';
+    return {key:type + '|' + url + '|' + date, kind:type, url:url, date:date, origin:origin, popupDate:popupDate(value.popupDate, date, origin), stamp:stamp};
   }
   function record(value, receiving) {
     if (!value || typeof value !== 'object') return null;
@@ -75,7 +80,8 @@
       var text = plain(value.text);
       if (!type || !url || !date || !text) return null;
       if (receiving) lastReceipt = date;
-      return {key:type + '|' + url + '|' + date, kind:type, url:url, text:text, date:date, read:!receiving && value.read === true, origin:receiving || value.origin === 'popup' ? 'popup' : 'site'};
+      var origin = receiving || value.origin === 'popup' ? 'popup' : 'site';
+      return {key:type + '|' + url + '|' + date, kind:type, url:url, text:text, date:date, read:!receiving && value.read === true, origin:origin, popupDate:popupDate(value.popupDate, date, origin)};
     } catch (_) { return null; }
   }
   function decode(raw) {
@@ -94,7 +100,13 @@
   function load(owner) {
     if (!owner) return empty();
     if (dirty.has(owner)) return memory.get(owner) || empty();
-    try { var raw = localStorage.getItem(prefix + owner); return raw === null ? memory.get(owner) || empty() : decode(raw); }
+    try {
+      var raw = localStorage.getItem(prefix + owner);
+      // A successful read of an absent key is an actual storage reset. The
+      // memory cache is only a fallback when storage itself is unavailable.
+      if (raw === null) { memory.delete(owner); return empty(); }
+      return decode(raw);
+    }
     catch (_) { return memory.get(owner) || empty(); }
   }
   function save() {
@@ -121,14 +133,18 @@
       data.deleted.forEach(function (old, index) { if (old.origin === 'popup' && nearby(old)) candidates.push({old:old,index:index,deleted:true}); });
       candidates.sort(function (a, b) { return a.old.date - b.old.date; });
       if (candidates.length) {
-        var match = candidates[0]; item.read = match.old.read;
+        var match = candidates[0]; item.read = match.old.read; item.popupDate = match.old.date;
         if (match.deleted || item.date <= data.clearedBefore) {
           if (match.deleted) data.deleted.splice(match.index, 1, tombstone(item));
           else { data.items.splice(match.index, 1); data.deleted.unshift(tombstone(item)); data.deleted = data.deleted.slice(0, 200); }
         } else data.items.splice(match.index, 1, item);
         data.items.sort(function (a, b) { return b.date - a.date; }); return true;
       }
-    } else if (data.items.some(function (old) { return !old.read && nearby(old); })) return false;
+    } else if (data.items.some(nearby) || data.deleted.some(nearby)) {
+      // The source history can precede its popup. A local read/delete during
+      // that delay still belongs to this occurrence and must not be undone.
+      return false;
+    }
     if (item.date <= data.clearedBefore) return false;
     data.items.push(item); data.items.sort(function (a, b) { return b.date - a.date; }); data.items = data.items.slice(0, 100); return true;
   }
@@ -173,16 +189,30 @@
   }
   function close() { var wasOpen = detach(true); refresh(); notify(); return wasOpen; }
   function allowed() {
-    if (!active() || panelAccount !== account() || panelPage !== location.href) { detach(false); refresh(); return false; }
-    return true;
+    if (!panel || !active() || panelAccount !== account() || panelPage !== location.href) { detach(false); refresh(); return false; }
+    // Storage events arrive asynchronously. An action on an already-rendered
+    // row must use the latest shared state, including another pane's arrivals,
+    // read flags and deletions, before it writes this document's change.
+    refresh();
+    return !!panel;
   }
   function button(text, label, action, cls) {
     var node = document.createElement('button'); node.type = 'button'; node.className = cls || ''; node.textContent = text;
     if (label) node.setAttribute('aria-label', label); node.addEventListener('click', action); return node;
   }
-  function removeItem(key) {
+  function currentItem(item) {
+    var exact = data.items.find(function (current) { return current.key === item.key; });
+    if (exact || item.origin !== 'popup') return exact;
+    // A source import in either pane can replace the popup's receipt key.
+    // Keep that one receipt alias so a rendered row cannot target a later event.
+    return data.items.find(function (current) {
+      return current.popupDate === item.date && current.kind === item.kind && current.url === item.url && current.text === item.text;
+    });
+  }
+  function removeItem(item) {
     if (!allowed()) return;
-    var removed = data.items.find(function (item) { return item.key === key; });
+    var removed = currentItem(item); if (!removed) return;
+    var key = removed.key;
     data.items = data.items.filter(function (item) { return item.key !== key; });
     if (removed && !data.deleted.some(function (item) { return item.key === key; })) data.deleted.unshift(tombstone(removed)); data.deleted = data.deleted.slice(0, 200);
     save(); render(); notify();
@@ -208,11 +238,12 @@
       link.append(badge, title, date);
       link.addEventListener('click', function (event) {
         event.preventDefault(); if (!allowed()) return;
-        var url = safeUrl(item.url); if (!url) return;
-        data.items.forEach(function (current) { if (current.key === item.key) current.read = true; });
+        var current = currentItem(item); if (!current) return;
+        var url = safeUrl(current.url); if (!url) return;
+        current.read = true;
         save(); detach(false); notify(); location.assign(url);
       });
-      var remove = button('×', '이 알림 삭제', function () { removeItem(item.key); }, 'moa-inbox-remove');
+      var remove = button('×', '이 알림 삭제', function () { removeItem(item); }, 'moa-inbox-remove');
       row.append(link, remove); list.append(row);
     });
   }

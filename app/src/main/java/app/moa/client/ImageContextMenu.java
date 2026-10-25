@@ -95,9 +95,14 @@ final class ImageContextMenu {
 
     static AlertDialog create(Activity activity, ThemeSpec.Palette colors, boolean dark, float fontScale,
                               java.util.function.IntConsumer action) {
-        AlertDialog dialog = new AlertDialog.Builder(activity, dark ? android.R.style.Theme_Material_Dialog_Alert
-                : android.R.style.Theme_Material_Light_Dialog_Alert)
-                .setTitle("이미지").setItems(new String[]{"이미지 저장", "이미지 주소 복사", "브라우저에서 이미지 열기"},
+        AlertDialog.Builder builder = new AlertDialog.Builder(activity, dark ? android.R.style.Theme_Material_Dialog_Alert
+                : android.R.style.Theme_Material_Light_Dialog_Alert);
+        TextView title = new TextView(builder.getContext(), null, android.R.attr.windowTitleStyle);
+        title.setText("이미지"); title.setTextColor(colors.text); title.setTextSize(20 * fontScale);
+        float density = activity.getResources().getDisplayMetrics().density;
+        title.setPaddingRelative(Math.round(24 * density), Math.round(18 * density), Math.round(24 * density), 0);
+        AlertDialog dialog = builder.setCustomTitle(title)
+                .setItems(new String[]{"이미지 저장", "이미지 주소 복사", "브라우저에서 이미지 열기"},
                         (ignored, index) -> action.accept(index)).setNegativeButton("닫기", null).create();
         dialog.setOnShowListener(ignored -> {
             if (dialog.getWindow() != null) {
@@ -116,9 +121,6 @@ final class ImageContextMenu {
             };
             dialog.getListView().addOnLayoutChangeListener((view, l, t, r, b, ol, ot, or, ob) -> decorateRows.run());
             decorateRows.run();
-            int titleId = activity.getResources().getIdentifier("alertTitle", "id", "android");
-            if (titleId != 0 && dialog.findViewById(titleId) instanceof TextView)
-                ((TextView)dialog.findViewById(titleId)).setTextColor(colors.text);
         });
         return dialog;
     }

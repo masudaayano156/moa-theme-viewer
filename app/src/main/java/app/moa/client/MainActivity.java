@@ -284,11 +284,14 @@ public final class MainActivity extends Activity implements BrowserController.Li
         if (source == null || isDestroyed()) return;
         BrowserController peer = source == browser ? detailBrowser : source == detailBrowser ? browser : null;
         if (peer == null || !source.profileName().equals(peer.profileName())) return;
-        if (starting) peer.beginPeerAuthentication(); else peer.finishPeerAuthentication();
+        if (starting) peer.beginPeerAuthentication();
+        else if (peer.hasPendingAuthentication()) source.beginPeerAuthentication();
+        else peer.finishPeerAuthentication();
     }
 
     private void discardDetailBrowser() {
         BrowserController closing = detailBrowser;
+        if (closing != null && closing.hasPendingAuthentication()) forwardAuthentication(closing, false);
         detailBrowser = null; detailOpen = false; detailResumed = false; detailLoading = false;
         if (closing != null) { browserPanes.removeView(closing.getView()); closing.destroy(); }
         applyPaneLayout();
@@ -1150,8 +1153,9 @@ public final class MainActivity extends Activity implements BrowserController.Li
                 return;
             }
             if (matchLauncher && !LauncherIdentity.setTheme(this, selected, true)) {
-                preferences.edit().putString("theme", previousTheme.id).commit();
-                toast("홈 화면 아이콘을 바꾸지 못했어요. 테마를 다시 선택해 주세요.");
+                boolean restored = preferences.edit().putString("theme", previousTheme.id).commit();
+                toast(restored ? "홈 화면 아이콘을 바꾸지 못했어요. 테마를 다시 선택해 주세요."
+                        : "이전 테마 설정을 복구하지 못했어요. 환경 설정에서 테마를 다시 선택해 주세요.");
                 return;
             }
             theme = selected;
@@ -1187,7 +1191,7 @@ public final class MainActivity extends Activity implements BrowserController.Li
         });
         panel.addView(darkSwitch);
         panel.addView(line(), new LinearLayout.LayoutParams(-1, dp(1)));
-        TextView sizeLabel = text("글자 크기  " + Math.round(fontScale * 100) + "%", 14, colors.text, true);
+        TextView sizeLabel = text(getString(R.string.font_scale_percent, Math.round(fontScale * 100)), 14, colors.text, true);
         sizeLabel.setPadding(0, dp(20), 0, dp(7));
         panel.addView(sizeLabel);
         SeekBar size = new SeekBar(this);
@@ -1199,7 +1203,7 @@ public final class MainActivity extends Activity implements BrowserController.Li
         size.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override public void onProgressChanged(SeekBar bar, int value, boolean fromUser) {
                 fontScale = (85 + value) / 100f;
-                sizeLabel.setText("글자 크기  " + (85 + value) + "%");
+                sizeLabel.setText(getString(R.string.font_scale_percent, 85 + value));
                 if (fromUser) {
                     preferences.edit().putFloat("fontScale", fontScale).apply();
                     browser.setFontScale(fontScale);
@@ -1243,8 +1247,9 @@ public final class MainActivity extends Activity implements BrowserController.Li
                     matchLauncher = checked;
                     toast("홈 화면 반영에 잠시 시간이 걸릴 수 있어요");
                 } else {
-                    preferences.edit().putBoolean("matchLauncher", matchLauncher).commit();
-                    toast("아이콘을 변경하지 못했어요. 설정을 다시 열어 시도해 주세요.");
+                    boolean restored = preferences.edit().putBoolean("matchLauncher", matchLauncher).commit();
+                    toast(restored ? "아이콘을 변경하지 못했어요. 설정을 다시 열어 시도해 주세요."
+                            : "이전 아이콘 설정을 복구하지 못했어요. 환경 설정에서 다시 선택해 주세요.");
                 }
                 finishLauncherChange(button);
             });
@@ -1435,7 +1440,9 @@ public final class MainActivity extends Activity implements BrowserController.Li
         guardAllPanesAndSnapshot(() -> {
             if (request != accountSwitchGeneration || isFinishing() || isDestroyed()) return;
             if (!AccountProfiles.activate(this, profile)) { toast("계정을 전환하지 못했어요."); return; }
-            if (loginAfterSwitch) preferences.edit().putString("profile.loginPending", profile).commit();
+            // This hint is read by the same process after Activity recreation;
+            // apply updates memory immediately without a synchronous disk write.
+            if (loginAfterSwitch) preferences.edit().putString("profile.loginPending", profile).apply();
             recreate();
         });
     }

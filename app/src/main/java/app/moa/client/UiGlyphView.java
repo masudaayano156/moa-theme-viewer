@@ -1,16 +1,19 @@
 package app.moa.client;
 
+import android.annotation.SuppressLint;
 import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.Path;
-import android.graphics.RectF;
 import android.view.View;
 
 /** Small original navigation glyphs, drawn at any density without font dependencies. */
+// Created programmatically with an explicit glyph and palette color; never inflated from XML.
+@SuppressLint("ViewConstructor")
 final class UiGlyphView extends View {
     private final String kind;
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Path path = new Path();
     UiGlyphView(Context context, String kind, int color) {
         super(context);
         this.kind = kind;
@@ -25,13 +28,13 @@ final class UiGlyphView extends View {
         super.onDraw(canvas);
         canvas.save();
         canvas.scale(getWidth() / 24f, getHeight() / 24f);
-        Path path = new Path();
+        path.reset();
         switch (kind) {
             case "bell":
                 path.moveTo(5, 17); path.lineTo(7, 14); path.lineTo(7, 9);
                 path.cubicTo(7, 2, 17, 2, 17, 9); path.lineTo(17, 14); path.lineTo(19, 17); path.close();
                 canvas.drawPath(path, paint);
-                canvas.drawArc(new RectF(10, 17, 14, 22), 0, 180, false, paint);
+                canvas.drawArc(10, 17, 14, 22, 0, 180, false, paint);
                 canvas.drawLine(12, 2, 12, 4, paint);
                 break;
             case "x-mark":
@@ -73,11 +76,11 @@ final class UiGlyphView extends View {
                 canvas.drawLine(9, 3, 9, 21, paint); canvas.drawLine(15, 3, 15, 21, paint);
                 break;
             case "refresh":
-                canvas.drawArc(new RectF(4, 4, 20, 20), 25, 300, false, paint);
+                canvas.drawArc(4, 4, 20, 20, 25, 300, false, paint);
                 path.moveTo(15, 3); path.lineTo(21, 4); path.lineTo(20, 10); canvas.drawPath(path, paint);
                 break;
             case "page":
-                canvas.drawRoundRect(new RectF(5, 2, 19, 22), 2, 2, paint);
+                canvas.drawRoundRect(5, 2, 19, 22, 2, 2, paint);
                 canvas.drawLine(8, 7, 16, 7, paint); canvas.drawLine(8, 12, 16, 12, paint);
                 canvas.drawLine(8, 17, 14, 17, paint);
                 break;
@@ -106,7 +109,7 @@ final class UiGlyphView extends View {
                 canvas.drawPath(path, paint);
                 break;
             case "add":
-                canvas.drawRoundRect(new RectF(3, 3, 21, 21), 4, 4, paint);
+                canvas.drawRoundRect(3, 3, 21, 21, 4, 4, paint);
                 canvas.drawLine(7, 12, 17, 12, paint);
                 canvas.drawLine(12, 7, 12, 17, paint);
                 break;
@@ -143,7 +146,7 @@ final class UiGlyphView extends View {
                 canvas.drawLine(18, 6, 6, 18, paint);
                 break;
             case "edit":
-                canvas.drawRoundRect(new RectF(3, 5, 19, 21), 3, 3, paint);
+                canvas.drawRoundRect(3, 5, 19, 21, 3, 3, paint);
                 path.moveTo(10, 14); path.lineTo(11, 10); path.lineTo(19, 2);
                 path.lineTo(22, 5); path.lineTo(14, 13); path.close();
                 canvas.drawPath(path, paint);

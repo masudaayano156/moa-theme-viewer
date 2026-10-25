@@ -61,6 +61,7 @@ public final class MediaToolsActivity extends Activity {
     private Button previous, next, earlier, later, rotate, reset, photoOutput, gifOutput;
     private ThemeSpec.Palette colors;
     private File pendingOutput;
+    private volatile File copyingOutput;
     private String pendingMime;
 
     public static Intent createIntent(Context context, ArrayList<Uri> images, boolean allowGif) {
@@ -306,7 +307,7 @@ public final class MediaToolsActivity extends Activity {
                     edited = MediaImageOps.transform(decoded, settings.get(i), 640, true);
                     if (encoder == null) { width = edited.getWidth(); height = edited.getHeight(); pixels = new int[width * height]; encoder = new LocalGifEncoder(stream, width, height, interval, repeat); }
                     frame = MediaImageOps.frame(edited, width, height); frame.getPixels(pixels, 0, width, 0, 0, width, height); encoder.addFrame(pixels);
-                    int count = i + 1; runOnUiThread(() -> { if (!destroyed && generation == id) status.setText("움짤 처리 중 · " + count + " / " + inputs.size()); });
+                    int count = i + 1; runOnUiThread(() -> { if (!destroyed && generation == id) status.setText(getString(R.string.media_gif_progress, count, inputs.size())); });
                 } finally { if (decoded != null) decoded.recycle(); if (edited != null) edited.recycle(); if (frame != null) frame.recycle(); }
             }
             if (encoder == null) throw new IOException("No frames"); encoder.finish();
@@ -336,7 +337,7 @@ public final class MediaToolsActivity extends Activity {
     }
     private void copySavedDocument(Uri destination) {
         if (!MediaImageOps.validInput(destination) || pendingOutput == null || !MediaImageOps.ownedFile(this, pendingOutput)) { status.setText("저장 위치를 확인하지 못했어요."); return; }
-        File source = pendingOutput; pendingOutput = null; int id = newOperation(); busy = true; refreshControls(); status.setText("새 파일로 저장하고 있어요.");
+        File source = pendingOutput; pendingOutput = null; copyingOutput = source; int id = newOperation(); busy = true; refreshControls(); status.setText("새 파일로 저장하고 있어요.");
         task = worker.submit(() -> {
             try {
                 checkCanceled(id);
@@ -347,8 +348,14 @@ public final class MediaToolsActivity extends Activity {
                 }
                 runOnUiThread(() -> { if (!destroyed && generation == id) { busy = false; refreshControls(); status.setText("새 파일로 저장했어요. 원본은 그대로입니다."); } });
             } catch (IOException | RuntimeException exception) { showError(id, "저장하지 못했어요. 저장 공간과 선택한 위치를 확인해주세요."); }
-            finally { if (MediaImageOps.ownedFile(this, source)) source.delete(); }
+            finally { if (MediaImageOps.ownedFile(this, source)) source.delete(); if (copyingOutput == source) copyingOutput = null; }
         });
+    }
+
+    private void discardCopyingOutput() {
+        // A queued Future can be canceled before its runnable reaches finally.
+        File source = copyingOutput; copyingOutput = null;
+        if (MediaImageOps.ownedFile(this, source)) source.delete();
     }
 
     private void showError(int id, String message) { runOnUiThread(() -> { if (!destroyed && generation == id) { busy = false; refreshControls(); status.setText(message); } }); }
@@ -363,7 +370,7 @@ public final class MediaToolsActivity extends Activity {
         if (request != PICK_IMAGES || result != RESULT_OK || data == null) return;
         ArrayList<Uri> chosen = new ArrayList<>(); ClipData clip = data.getClipData();
         if (clip != null) {
-            if (clip.getItemCount() > MediaImageOps.MAX_SELECTION) { status.setText("사진은 최대 20장까지 선택해주세요."); return; }
+            if (clip.getItemCount() > MediaImageOps.MAX_SELECTION) { status.setText(getString(R.string.media_selection_limit, MediaImageOps.MAX_SELECTION)); return; }
             for (int i = 0; i < clip.getItemCount(); i++) chosen.add(clip.getItemAt(i).getUri());
         } else if (data.getData() != null) chosen.add(data.getData());
         if (chosen.isEmpty()) return;
@@ -382,13 +389,13 @@ public final class MediaToolsActivity extends Activity {
         super.onSaveInstanceState(state);
     }
     @Override protected void onDestroy() {
-        destroyed = true; generation++; if (task != null) task.cancel(true); worker.shutdownNow();
+        destroyed = true; generation++; if (task != null) task.cancel(true); worker.shutdownNow(); discardCopyingOutput();
         if (preview != null) preview.setImageDrawable(null); if (previewBitmap != null) { previewBitmap.recycle(); previewBitmap = null; }
         super.onDestroy();
     }
 
     @Override public void finish() {
-        generation++; if (task != null) task.cancel(true);
+        generation++; if (task != null) task.cancel(true); discardCopyingOutput();
         super.finish();
     }
 }

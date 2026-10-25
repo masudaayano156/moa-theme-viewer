@@ -95,11 +95,12 @@ public final class BrowserController {
     private final java.util.concurrent.ScheduledExecutorService imageSaveTimeouts = Executors.newSingleThreadScheduledExecutor();
     private final Map<WebView, Dialog> popups = new HashMap<>();
     private final Map<WebView, SiteDialog> siteDialogs = new HashMap<>();
+    private final LinkedHashSet<WebView> authenticationDocuments = new LinkedHashSet<>();
     private ThemeSpec theme = ThemeSpec.MAIL;
     private boolean dark, original, loading;
     private volatile boolean destroyed;
     private boolean openFavoritesPending, authNavigationPending;
-    private int favoritesGeneration, documentGeneration, accountGeneration, authenticationGeneration, navigationIntentGeneration;
+    private int favoritesGeneration, documentGeneration, accountGeneration, authenticationGeneration, navigationIntentGeneration, foregroundGeneration;
     private float fontScale = 1f;
     private String css = "", script = "", favoritesScript = "", draftScript = "", cleanupScript = "", recoveryUrl = "", draftOwner = "";
     private String communityScript = "", communityCss = "", commentNotificationScript = "", notificationHistoryScript = "";
@@ -170,7 +171,7 @@ public final class BrowserController {
 
     public View getView() { return container; }
     private void attachWebSurface() {
-        if (swipeRefresh != null) { swipeRefresh.finish(); container.removeView(swipeRefresh); }
+        if (swipeRefresh != null) { swipeRefresh.finishRefresh(); container.removeView(swipeRefresh); }
         swipeRefresh = new ListSwipeRefreshLayout(activity, this::canPullRefresh, this::checkPullRefreshDocument, this::pullRefresh);
         swipeRefresh.colors(CommunityOptions.accentColor(activity, theme.palette(dark).accent), theme.palette(dark).surface);
         swipeRefresh.addView(web, new ViewGroup.LayoutParams(-1, -1));
@@ -190,13 +191,13 @@ public final class BrowserController {
     }
 
     private void pullRefresh() {
-        swipeRefresh.finish();
+        swipeRefresh.finishRefresh();
         if (!canPullRefresh()) return;
         guardNavigation(() -> {
             if (!canPullRefresh()) return;
             swipeRefresh.beginLoading();
             reload();
-        }, () -> swipeRefresh.finish());
+        }, () -> swipeRefresh.finishRefresh());
     }
 
     private void checkPullRefreshDocument(java.util.function.Consumer<Boolean> result) {
@@ -208,6 +209,7 @@ public final class BrowserController {
         catch (RuntimeException unavailableRenderer) { result.accept(false); }
     }
     public String profileName() { return profileName; }
+    public boolean hasPendingAuthentication() { return !destroyed && !authenticationDocuments.isEmpty(); }
     /** True only after the origin-scoped, main-frame message listener was actually installed. */
     private WebView createWebView() {
         WebView created = new WebView(activity);
@@ -215,7 +217,6 @@ public final class BrowserController {
         catch (RuntimeException | LinkageError error) { created.destroy(); throw error; }
         return created;
     }
-
     public void openAccountFavorites() {
         navigationIntentGeneration++;
         openFavoritesPending = true;
@@ -550,6 +551,7 @@ public final class BrowserController {
                 return;
             }
             if ("user".equals(action)) {
+                if (browserPaused || peerPageStale || peerIdentityWaiting) return;
                 String name = safeIdentity(value.optString("nickname")), id = safeIdentity(value.optString("id")), ip = safeIdentity(value.optString("ip"));
                 if (!name.isEmpty() || !id.isEmpty() || !ip.isEmpty()) listener.onUserActions(name,id,ip);
             }
@@ -561,6 +563,14 @@ public final class BrowserController {
     }
 
     private final class Client extends WebViewClient {
+        private String pendingDocumentUrl;
+
+        private boolean matchesActiveDocument(WebView view, String url) {
+            String active = pendingDocumentUrl == null
+                    ? presentationUrl(view == web ? getUrl() : view.getUrl()) : pendingDocumentUrl;
+            return active.equals(presentationUrl(url));
+        }
+
         @Override public android.webkit.WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
             if (view != web || destroyed || request.isForMainFrame() || !"GET".equals(request.getMethod())) return null;
             android.webkit.WebResourceResponse ad = adPolicy.intercept(request.getUrl().toString());
@@ -597,11 +607,14 @@ public final class BrowserController {
         }
         @Override public void onPageStarted(WebView view, String url, Bitmap favicon) {
             if (!isLive(view)) return;
+            // getUrl may still identify the previously committed document here.
+            pendingDocumentUrl = presentationUrl(url);
             cancelPageRequests(view);
             if (view == web) { peerPageStale = false; notificationInboxOpen = false; }
             if (UrlPolicy.isAuthenticationPage(url)) {
                 cancelImageSelection();
                 if (!authNavigationPending) listener.onAuthenticationChanged();
+                authenticationDocuments.add(view);
                 if (view != web) beginPeerAuthentication();
                 invalidatePendingDownload("로그인 상태가 변경되어 저장을 취소했습니다. 파일을 다시 선택해 주세요.");
                 authenticationGeneration++;
@@ -642,15 +655,17 @@ public final class BrowserController {
         }
         @Override public void onPageFinished(WebView view, String url) {
             if (!isLive(view)) return;
-            if (view == web && !documentKey(url).equals(documentKey(getUrl()))) return;
+            if (!matchesActiveDocument(view, url)
+                    || !presentationUrl(url).equals(presentationUrl(view == web ? getUrl() : view.getUrl()))) return;
+            pendingDocumentUrl = null;
             cookies.flush();
             if (view != web) {
                 if (UrlPolicy.canTheme(url) && !cleanupScript.isEmpty()) view.evaluateJavascript(cleanupScript, null);
-                if (authNavigationPending && !UrlPolicy.isAuthenticationPage(url)) settleAuthentication();
+                if (!UrlPolicy.isAuthenticationPage(url)) settleAuthentication(view);
                 return;
             }
             loading = false;
-            swipeRefresh.finish();
+            swipeRefresh.finishRefresh();
             if (UrlPolicy.canTheme(url)) {
                 view.evaluateJavascript(draftScript, null);
                 if (!commentNotificationScript.isEmpty())
@@ -679,28 +694,37 @@ public final class BrowserController {
                 });
             }
             if (isFavoritesPage(url) || (url != null && authNavigationPending && !UrlPolicy.isAuthenticationPage(url))) {
-                if (authNavigationPending) settleAuthentication(); else refreshAccountFavorites();
+                if (authNavigationPending) settleAuthentication(view); else refreshAccountFavorites();
             }
         }
         @Override public void doUpdateVisitedHistory(WebView view, String url, boolean reload) {
             if (view == web) listener.onPageState(view.getTitle(), url, loading);
         }
         @Override public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
-            if (isLive(view) && request.isForMainFrame() && view == web) {
+            if (isLive(view) && request.isForMainFrame() && view == web
+                    && matchesActiveDocument(view, request.getUrl().toString())) {
+                if (!presentationUrl(request.getUrl().toString()).equals(presentationUrl(view.getUrl())))
+                    recoveryUrl = request.getUrl().toString();
                 loading = false;
-                swipeRefresh.finish();
+                swipeRefresh.finishRefresh();
                 if (presentation != null && presentation.url.equals(presentationUrl(request.getUrl().toString())))
                     failPresentation("페이지 연결을 완료하지 못했습니다. 인터넷 연결을 확인해 주세요.");
                 listener.onError("페이지를 열지 못했습니다. 인터넷 연결을 확인한 뒤 새로고침해 주세요.");
-                listener.onPageState(view.getTitle(), view.getUrl(), false);
+                listener.onPageState(view.getTitle(), request.getUrl().toString(), false);
             }
         }
         @Override public void onReceivedSslError(WebView view, SslErrorHandler sslHandler, SslError error) {
             sslHandler.cancel();
-            if (view == web && isLive(view)) { loading = false; swipeRefresh.finish(); }
-            if (view == web && isLive(view) && presentation != null && error != null
-                    && presentation.url.equals(presentationUrl(error.getUrl()))) failPresentation("사이트의 보안 연결을 확인하지 못했습니다.");
-            if (isLive(view)) listener.onError("사이트의 보안 연결을 확인할 수 없어 열기를 중단했습니다.");
+            if (!isLive(view) || error == null
+                    || !matchesActiveDocument(view, error.getUrl())) return;
+            if (view == web) {
+                if (!presentationUrl(error.getUrl()).equals(presentationUrl(view.getUrl()))) recoveryUrl = error.getUrl();
+                loading = false; swipeRefresh.finishRefresh();
+                if (presentation != null && presentation.url.equals(presentationUrl(error.getUrl())))
+                    failPresentation("사이트의 보안 연결을 확인하지 못했습니다.");
+            }
+            listener.onError("사이트의 보안 연결을 확인할 수 없어 열기를 중단했습니다.");
+            if (view == web) listener.onPageState(view.getTitle(), error.getUrl(), false);
         }
         @Override public boolean onRenderProcessGone(WebView view, android.webkit.RenderProcessGoneDetail detail) {
             if (!isLive(view)) return true;
@@ -714,8 +738,8 @@ public final class BrowserController {
             documentGeneration++;
             dismissDraftDialog();
             hideFullscreen();
-            if (documentScript != null) { try { documentScript.remove(); } catch (RuntimeException ignored) { } documentScript = null; }
-            swipeRefresh.finish(); swipeRefresh.removeView(view);
+            clearDocumentScript();
+            swipeRefresh.finishRefresh(); swipeRefresh.removeView(view);
             view.destroy();
             web = createWebView();
             configure(web);
@@ -725,6 +749,7 @@ public final class BrowserController {
             web.setBackgroundColor(theme.palette(dark).background);
             refreshDocumentScript();
             loading = false;
+            settleAuthentication(view);
             listener.onError("웹 화면을 다시 준비했습니다. 새로고침을 눌러 페이지를 다시 열어 주세요.");
             listener.onPageState("", recoveryUrl, false);
             return true;
@@ -797,7 +822,10 @@ public final class BrowserController {
             configure(child);
             Dialog dialog = new Dialog(activity);
             dialog.setContentView(child);
-            dialog.setOnDismissListener(ignored -> { cancelPageRequests(child); popups.remove(child); child.destroy(); });
+            dialog.setOnDismissListener(ignored -> {
+                cancelPageRequests(child); popups.remove(child); child.destroy();
+                settleAuthentication(child);
+            });
             popups.put(child, dialog);
             dialog.show();
             if (dialog.getWindow() != null) dialog.getWindow().setLayout(-1, -1);
@@ -990,6 +1018,16 @@ public final class BrowserController {
                 + "\nwindow.MoaSkin&&window.MoaSkin.apply(" + config + ");}";
         } catch (Exception ex) { return ""; }
     }
+    private void clearDocumentScript() {
+        ScriptHandler previous = documentScript;
+        documentScript = null;
+        if (previous == null) return;
+        try {
+            if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) previous.remove();
+        } catch (RuntimeException | LinkageError unavailableProvider) {
+            // Renderer recovery and teardown must finish even if the provider disappeared.
+        }
+    }
     private void refreshDocumentScript() {
         if (destroyed) return;
         try {
@@ -1099,7 +1137,8 @@ public final class BrowserController {
         if (peerPageStale && isListPage(getUrl())) guardNavigation(this::reload);
     }
 
-    private void settleAuthentication() {
+    private void settleAuthentication(WebView owner) {
+        if (!authenticationDocuments.remove(owner) || !authenticationDocuments.isEmpty() || destroyed) return;
         authNavigationPending = false;
         finishPeerAuthentication();
         listener.onAuthenticationSettled();
@@ -1285,7 +1324,7 @@ public final class BrowserController {
     }
 
     private void failPresentation(String message) {
-        swipeRefresh.finish();
+        swipeRefresh.finishRefresh();
         PresentationGate gate = presentation;
         if (gate == null || !gate.isCurrent()) return;
         gate.suspend();
@@ -1651,6 +1690,10 @@ public final class BrowserController {
         // The old OS picker retains SAVE_FILE until its result is consumed.
     }
 
+    private void requestDownload(String url, String disposition, String mime) {
+        requestDownload(web, url, web.getSettings().getUserAgentString(), disposition, mime);
+    }
+
     private void requestDownload(WebView source, String url, String userAgent, String disposition, String mime) {
         requestDownload(source, url, userAgent, disposition, mime, false);
     }
@@ -1841,12 +1884,14 @@ public final class BrowserController {
         if (peerPageStale) { if(after!=null)after.run(); return; }
         if (!UrlPolicy.canTheme(getUrl()) || draftOwner.isEmpty()) { if (after != null) after.run(); return; }
         PageContext context = new PageContext();
+        final int intent = navigationIntentGeneration, foreground = foregroundGeneration;
         boolean allowTimedNavigation = after != null && approvedNavigationContext != null && approvedNavigationContext.isCurrent();
         boolean[] completed = {false};
         Runnable proceed = () -> {
             if (completed[0]) return;
             completed[0] = true;
-            if (after != null && context.isCurrent()) after.run();
+            if (after != null && context.isCurrent()
+                    && intent == navigationIntentGeneration && foreground == foregroundGeneration) after.run();
         };
         // Only an explicit discard/move confirmation may proceed when the renderer
         // stops answering. Ordinary background snapshots never get that permission.
@@ -1863,8 +1908,14 @@ public final class BrowserController {
                 JSONArray fields = snapshot.optJSONArray("fields");
                 String key = draftKey(context.url, context.owner);
                 if (snapshot.optBoolean("eligible", false) && fields != null) {
-                    if (fields.length() > 0) drafts.edit().putString(key, fields.toString()).commit();
-                    else drafts.edit().remove(key).commit();
+                    SharedPreferences.Editor editor = drafts.edit();
+                    boolean hasText = fields.length() > 0;
+                    if (hasText) editor.putString(key, fields.toString()); else editor.remove(key);
+                    // Finish the disk write before a continuation can discard this document.
+                    // A cleared draft must also be durably removed before moving away.
+                    if (!editor.commit()) listener.onError(hasText
+                            ? "작성 중인 내용의 저장을 확인하지 못했습니다."
+                            : "작성 중인 내용의 삭제를 확인하지 못했습니다.");
                 }
             } catch (Exception ignored) { }
             proceed.run();
@@ -1927,12 +1978,13 @@ public final class BrowserController {
     public void onPause() {
         if (!destroyed) {
             if (permissionImageSelection == null && grantedImageSelection == null) cancelImageSelection();
+            foregroundGeneration++;
             browserPaused = true;
             draftRestoreProbeGeneration++;
             notificationInboxOpen = false;
             refreshDocumentScript();
             updateForegroundAlertState();
-            swipeRefresh.finish();
+            swipeRefresh.finishRefresh();
             if (presentation != null) presentation.suspend();
             cancelNavigationGuard();
             hideFullscreen(); snapshotDraft(null); cookies.flush(); web.onPause();
@@ -1968,8 +2020,8 @@ public final class BrowserController {
         finishFileSelection(null);
         for (Dialog dialog : new ArrayList<>(popups.values())) dialog.dismiss();
         popups.clear();
-        if (documentScript != null) documentScript.remove();
-        swipeRefresh.finish(); web.stopLoading(); swipeRefresh.removeView(web); container.removeView(swipeRefresh); web.destroy();
+        clearDocumentScript();
+        swipeRefresh.finishRefresh(); web.stopLoading(); swipeRefresh.removeView(web); container.removeView(swipeRefresh); web.destroy();
         downloadExecutor.shutdownNow();
         imageSaveTimeouts.shutdownNow();
     }

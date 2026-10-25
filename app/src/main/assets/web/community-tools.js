@@ -286,7 +286,10 @@
       wrap.className = 'moa-community-tools'; wrap.setAttribute(owned, 'tools');
       button.type = 'button'; button.className = 'moa-community-affix'; button.textContent = '머리말·꼬리말 넣기';
       button.addEventListener('mousedown', function (event) { event.preventDefault(); });
-      button.addEventListener('click', function (event) { event.preventDefault(); insert(editor, kind, status); });
+      button.addEventListener('click', function (event) {
+        event.preventDefault();
+        if (event.isTrusted) insert(editor, kind, status);
+      });
       status.className = 'moa-community-status'; status.setAttribute('role', 'status');
       wrap.append(button, status); editor.insertAdjacentElement('afterend', wrap); tools.set(editor, wrap);
     });

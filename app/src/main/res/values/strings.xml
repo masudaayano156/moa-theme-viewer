@@ -8,4 +8,9 @@
     <string name="theme_cafe">네이버 카페</string>
     <string name="theme_ebook">E-book</string>
     <string name="theme_magazine">매거진</string>
+    <string name="font_scale_percent">"글자 크기  %1$d%%"</string>
+    <string name="community_rule_limit">값을 확인해주세요. 최대 120자, 차단은 200개까지 저장할 수 있어요.</string>
+    <string name="community_note_limit">이용자 값과 메모를 확인해주세요. 메모는 200자, 총 200개까지 저장할 수 있어요.</string>
+    <string name="media_gif_progress">움짤 처리 중 · %1$d / %2$d</string>
+    <string name="media_selection_limit">사진은 최대 %1$d장까지 선택해주세요.</string>
 </resources>

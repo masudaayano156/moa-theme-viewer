@@ -1,18 +1,18 @@
 # 모아 — 커뮤니티 테마 뷰어
 
-**[Android APK 다운로드 · 0.9.1 미리보기](https://github.com/masudaayano156/moa-theme-viewer/releases/download/v0.9.1/moa-0.9.1.apk)** · [릴리스와 체크섬](https://github.com/masudaayano156/moa-theme-viewer/releases/tag/v0.9.1)
+**[Android APK 다운로드 · 0.9.2 미리보기](https://github.com/masudaayano156/moa-theme-viewer/releases/download/v0.9.2/moa-0.9.2.apk)** · [릴리스와 체크섬](https://github.com/masudaayano156/moa-theme-viewer/releases/tag/v0.9.2)
 
 Android 8.0 이상. 기존 0.3.2 이상은 삭제하지 않고 업데이트 설치할 수 있습니다. 이름·테마·아이콘은 유지합니다.
 
 연결한 웹 커뮤니티의 화면 배치를 선택한 스타일로 바꾸는 비공식 Android 앱입니다. 연결 서비스는 디시인사이드이며, 원본 글·댓글·작성 기능을 이용합니다. 디시인사이드 및 화면 구성에 참고한 서비스의 공식 앱이나 제휴 앱이 아닙니다.
 
-**0.9.1 변경:** 글을 읽기만 해도 뜨던 초안 복원창, 좁은 댓글 영역의 더블콘 줄바꿈, 본문 아래 목록의 작성자 표시를 수정했습니다. 상단 알림 버튼에 읽지 않은 알림 배지를 표시하고, 계정별 기록·읽음·삭제·해당 댓글 이동을 제공합니다. 백그라운드 푸시와 Firebase는 계속 사용하지 않습니다. 기존 이름·아이콘·계정 설정은 유지합니다.
+**0.9.2 변경:** 로그인·분할 화면·페이지 이동과 오류 재시도, 초안과 문구 삽입, 여러 화면의 알림 읽음·삭제·중복 처리, 작성자·광고 영역 갱신, 이미지 저장 취소를 수정했습니다. 두 차례 점검에서 재현한 17개 문제 묶음과 Android lint 41개 경고를 정리했습니다. 백그라운드 푸시와 Firebase는 계속 사용하지 않습니다. 기존 이름·아이콘·테마·계정 설정과 권한 범위는 유지합니다.
 
 **설치 전 확인:** [검증 방법](VERIFY.md) · [권한과 용도](PERMISSIONS.md) · [검사 결과](verification/README.md) · [개인정보 안내](PRIVACY.md) · [보안 신고](SECURITY.md)
 
-0.9.1의 [VirusTotal 검사](https://www.virustotal.com/gui/file/c06b27d0f8f806d681640462f2fe5f8269c1c79bd37091dd3cecacc581988cce)는 **66개 엔진 미탐지, 8개 형식 미지원, 1개 시간 초과**입니다(2026-10-25 18:45:17 KST). [검사 시점 기록](verification/reports/v0.9.1-virustotal.json)을 함께 공개합니다. 미지원·시간 초과는 미탐지 판정에 포함하지 않으며 무악성 인증이 아닙니다.
+0.9.2 최종 APK의 VirusTotal·서명·재빌드·공개 CI 검사는 발행 준비 중입니다. 완료한 실제 결과는 [버전별 검사 자료](verification/README.md)에 기록하며, 0.9.1의 검사 결과를 새 APK에 적용하지 않습니다.
 
-**AI 보안 검토용:** [0.9.1 소스·권한·검사 결과를 모은 텍스트 파일 1개](https://github.com/masudaayano156/moa-theme-viewer/releases/download/v0.9.1/moa-0.9.1-ai-security-review.txt)를 제공합니다(약 0.98MB, UTF-8). AI에 이 파일을 첨부해 검토를 요청할 수 있습니다. 앱 설치에는 APK만 필요합니다.
+**AI 보안 검토용:** 0.9.2 최종 APK에 맞는 소스·평문 Manifest·권한·실제 검사 결과를 UTF-8 텍스트 파일 하나로 준비합니다. 자료 생성·첨부가 끝나면 다운로드와 해시를 기록합니다. 앱 설치에는 APK만 필요합니다.
 
 배포 APK의 SHA-256·서명 인증서와 실제 검사 범위를 구분해 제공합니다. 이전 버전의 백신 결과를 새 APK의 검사 결과로 표시하지 않습니다. 키·사용자 자료는 공개하지 않습니다.
 

@@ -145,7 +145,7 @@ public final class CommunityToolsDialog {
             boolean accepted;
             if (editing == null) accepted = CommunityStore.addRule(activity, selected, entered);
             else accepted = CommunityStore.replaceRule(activity, editing.kind, editing.value, selected, entered);
-            if (!accepted) { status.setText("값을 확인해주세요. 최대 120자, 차단은 200개까지 저장할 수 있어요."); return; }
+            if (!accepted) { status.setText(R.string.community_rule_limit); return; }
             host.onOptionsChanged(); showRules(null);
         });
         if (editing != null) button("수정 취소", "rule_cancel", () -> showRules(null));
@@ -177,7 +177,7 @@ public final class CommunityToolsDialog {
             String entered = value.getText().toString();
             boolean accepted = editing == null ? CommunityStore.putNote(activity, selected, entered, text.getText().toString())
                     : CommunityStore.replaceNote(activity, editing.kind, editing.value, selected, entered, text.getText().toString());
-            if (!accepted) { status.setText("이용자 값과 메모를 확인해주세요. 메모는 200자, 총 200개까지 저장할 수 있어요."); return; }
+            if (!accepted) { status.setText(R.string.community_note_limit); return; }
             host.onOptionsChanged(); showNotes(null);
         });
         if (editing != null) button("수정 취소", "note_cancel", () -> showNotes(null));

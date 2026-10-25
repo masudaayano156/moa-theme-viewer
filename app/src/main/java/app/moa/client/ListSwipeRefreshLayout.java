@@ -1,5 +1,6 @@
 package app.moa.client;
 
+import android.annotation.SuppressLint;
 import android.content.Context;
 import android.content.res.Configuration;
 import android.view.MotionEvent;
@@ -7,6 +8,8 @@ import android.view.ViewConfiguration;
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
 
 /** Standard refresh indicator with a single-finger, predominantly vertical gesture gate. */
+// Created by BrowserController with document-specific callbacks; never inflated from XML.
+@SuppressLint("ViewConstructor")
 final class ListSwipeRefreshLayout extends SwipeRefreshLayout {
     interface Eligibility { boolean allowed(); }
     interface DocumentProbe { void check(java.util.function.Consumer<Boolean> result); }
@@ -26,12 +29,12 @@ final class ListSwipeRefreshLayout extends SwipeRefreshLayout {
         setOnChildScrollUpCallback((parent, child) -> !eligibility.allowed());
         setOnRefreshListener(() -> {
             if (!blocked && vertical && documentAllowed && eligibility.allowed()) refresh.run();
-            else finish();
+            else finishRefresh();
         });
     }
 
     void beginLoading() { removeCallbacks(loadingTimeout); setRefreshing(true); postDelayed(loadingTimeout, 20_000); }
-    void finish() { removeCallbacks(loadingTimeout); setRefreshing(false); }
+    void finishRefresh() { removeCallbacks(loadingTimeout); setRefreshing(false); }
 
     void colors(int accent, int surface) {
         setColorSchemeColors(accent);
@@ -70,6 +73,9 @@ final class ListSwipeRefreshLayout extends SwipeRefreshLayout {
         return true;
     }
 
+    // This container only filters swipe gestures; taps remain with its child. The browser's
+    // labeled refresh menu/drawer action supplies the equivalent accessibility action.
+    @SuppressLint("ClickableViewAccessibility")
     @Override public boolean onTouchEvent(MotionEvent event) {
         if (blocked || event.getPointerCount() != 1 || event.getActionMasked() == MotionEvent.ACTION_POINTER_DOWN
                 || !eligibility.allowed()) { cancelGesture(event); return false; }
@@ -89,11 +95,11 @@ final class ListSwipeRefreshLayout extends SwipeRefreshLayout {
         if (!isRefreshing()) setRefreshing(false);
     }
 
-    @Override protected void onDetachedFromWindow() { finish(); super.onDetachedFromWindow(); }
+    @Override protected void onDetachedFromWindow() { finishRefresh(); super.onDetachedFromWindow(); }
 
     @Override protected void onConfigurationChanged(Configuration configuration) {
         super.onConfigurationChanged(configuration);
-        finish();
+        finishRefresh();
         slop = ViewConfiguration.get(getContext()).getScaledTouchSlop();
         float density = getResources().getDisplayMetrics().density;
         setSize(DEFAULT);

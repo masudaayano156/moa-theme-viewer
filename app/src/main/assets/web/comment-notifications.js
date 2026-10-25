@@ -15,6 +15,7 @@
   var owned = 'data-moa-foreground-owned';
   var excluded = '.thum-txt,.thum-txtin,.all-comment-lst,.moa-entry,form,[contenteditable],#textbox';
   var sources = new Set(), seen = new Set(), observer = null, style = null, panel = null, timer = null;
+  var occurrences = new WeakMap(), nextOccurrence = 0;
   var sitePoll = null, pollWrapper = null, pollStarted = false, pollRunning = false, lastPoll = 0;
   var scheduled = false, gone = false, lastActive = active(), lastAccount = null, lastPage = location.href;
   var names = {mail:'메일함',post:'X',photogram:'인스타그램',sheet:'엑셀',cafe:'네이버 카페',ebook:'E-book',magazine:'매거진'};
@@ -110,7 +111,11 @@
       text += part.nodeValue || '';
     }
     text = plain(text); if (!text) return null;
-    return {kind:label, url:url, text:text, key:label + '|' + url + '|' + text};
+    // The original R/RR branch replaces this badge with .html() for every
+    // arrival, including separate comments with the same fallback URL/title.
+    // Its fade callbacks and our reinjection keep the existing badge node.
+    if (!occurrences.has(badge)) occurrences.set(badge, ++nextOccurrence);
+    return {kind:label, url:url, text:text, key:label + '|' + url + '|' + text + '|' + occurrences.get(badge)};
   }
   function displayed(node) {
     // Ignore visibility: our own marker hides the source without changing the

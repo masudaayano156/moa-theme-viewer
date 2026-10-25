@@ -85,13 +85,28 @@ public final class AccountProfiles {
     }
     public static void attach(WebView web,String profile) {
         if(DEFAULT.equals(profile))return;
-        if(!validId(profile)||!supported())throw new IllegalStateException("Separate WebView profiles are unavailable");
-        WebViewCompat.setProfile(web,profile);
+        if(!validId(profile))throw new IllegalStateException("Separate WebView profiles are unavailable");
+        try {
+            if(WebViewFeature.isFeatureSupported(WebViewFeature.MULTI_PROFILE)) {
+                WebViewCompat.setProfile(web,profile);
+                return;
+            }
+        } catch(RuntimeException | LinkageError unavailable) {
+            throw new IllegalStateException("Separate WebView profiles are unavailable",unavailable);
+        }
+        throw new IllegalStateException("Separate WebView profiles are unavailable");
     }
     public static CookieManager cookies(String profile) {
         if(DEFAULT.equals(profile))return CookieManager.getInstance();
-        if(!validId(profile)||!supported())throw new IllegalStateException("Separate WebView profiles are unavailable");
-        Profile selected=ProfileStore.getInstance().getOrCreateProfile(profile);
-        return selected.getCookieManager();
+        if(!validId(profile))throw new IllegalStateException("Separate WebView profiles are unavailable");
+        try {
+            if(WebViewFeature.isFeatureSupported(WebViewFeature.MULTI_PROFILE)) {
+                Profile selected=ProfileStore.getInstance().getOrCreateProfile(profile);
+                return selected.getCookieManager();
+            }
+        } catch(RuntimeException | LinkageError unavailable) {
+            throw new IllegalStateException("Separate WebView profiles are unavailable",unavailable);
+        }
+        throw new IllegalStateException("Separate WebView profiles are unavailable");
     }
 }

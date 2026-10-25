@@ -668,10 +668,12 @@
         suppressSourceDarkMode();
         updateUiLabels();
         updatePresentation();
-        observer.observe(root, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['class','id','src','data-src','href','alt','data-moa-cleanup-active','data-moa-cleanup-hidden'] });
+        observe();
       });
     });
-    observer.observe(root, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['class','id','src','data-src','href','alt','data-moa-cleanup-active','data-moa-cleanup-hidden'] });
+    // Public writer metadata may be hidden or restored without replacing its
+    // node. Re-read those source visibility changes before projecting a name.
+    observer.observe(root, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['class','id','style','hidden','aria-hidden','src','data-src','href','alt','data-moa-cleanup-active','data-moa-cleanup-hidden'] });
   }
 
   function suppressSourceDarkMode() {
