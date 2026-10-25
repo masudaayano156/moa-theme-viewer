@@ -70,6 +70,7 @@ public final class BrowserController {
         default void onUserActions(String nickname, String id, String ip) { }
         default void onAuthenticationChanged() { }
         default void onAuthenticationSettled() { }
+        default void onNotificationStateChanged() { }
     }
     public static final class FavoriteEntry {
         public final String name, url;
@@ -101,9 +102,12 @@ public final class BrowserController {
     private int favoritesGeneration, documentGeneration, accountGeneration, authenticationGeneration, navigationIntentGeneration;
     private float fontScale = 1f;
     private String css = "", script = "", favoritesScript = "", draftScript = "", cleanupScript = "", recoveryUrl = "", draftOwner = "";
-    private String communityScript = "", communityCss = "", commentNotificationScript = "";
+    private String communityScript = "", communityCss = "", commentNotificationScript = "", notificationHistoryScript = "";
+    private int notificationUnreadCount;
+    private boolean notificationInboxOpen;
     private int lastDraftPromptGeneration = -1;
     private AlertDialog draftDialog;
+    private long draftRestoreProbeGeneration;
     private AlertDialog imageMenu;
     private ImageSelection imageSelection;
     private ImageSelection permissionImageSelection, grantedImageSelection;
@@ -154,6 +158,7 @@ public final class BrowserController {
             cleanupScript = readAsset("web/page-cleanup.js");
             communityScript = readAsset("web/community-tools.js");
             commentNotificationScript = readAsset("web/comment-notifications.js");
+            notificationHistoryScript = readAsset("web/notification-history.js");
             communityCss = readAsset("web/community-tools.css");
         } catch (Exception exception) {
             listener.onError("테마 파일을 읽지 못했습니다. 원본 화면으로 이용할 수 있습니다.");
@@ -174,7 +179,7 @@ public final class BrowserController {
     }
 
     private boolean canPullRefresh() {
-        return !destroyed && !browserPaused && !loading && presentation == null && navigationCheck == null
+        return !destroyed && !browserPaused && !loading && !notificationInboxOpen && presentation == null && navigationCheck == null
                 && !peerIdentityWaiting && !peerPageStale && !authNavigationPending
                 && fullscreenView == null && popups.isEmpty() && siteDialogs.isEmpty()
                 && (draftDialog == null || !draftDialog.isShowing())
@@ -196,7 +201,7 @@ public final class BrowserController {
 
     private void checkPullRefreshDocument(java.util.function.Consumer<Boolean> result) {
         PageContext context = new PageContext();
-        String query = "(()=>{const active=document.activeElement;if(active&&(active.isContentEditable||/^(INPUT|TEXTAREA|SELECT)$/.test(active.tagName)))return false;"
+        String query = "(()=>{if(document.getElementById('moa-notification-inbox'))return false;const active=document.activeElement;if(active&&(active.isContentEditable||/^(INPUT|TEXTAREA|SELECT)$/.test(active.tagName)))return false;"
                 + "return !Array.from(document.querySelectorAll('#galleryConfig,.layer-center-popup,.layer-zoom-popup,[role=dialog],.modal')).some(el=>{"
                 + "const style=getComputedStyle(el);return el.getClientRects().length&&style.display!=='none'&&style.visibility!=='hidden';});})()";
         try { web.evaluateJavascript(query, value -> result.accept(context.isCurrent() && "true".equals(value))); }
@@ -509,21 +514,46 @@ public final class BrowserController {
             if (!WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) return;
             WebViewCompat.addWebMessageListener(target,"MoaLocalActions",Collections.singleton("https://m.dcinside.com"),
                 (view,message,origin,mainFrame,reply) -> {
-                    if (destroyed || view != web || !mainFrame || !"https".equals(origin.getScheme())
-                            || !"m.dcinside.com".equals(origin.getHost()) || origin.getPort() != -1 && origin.getPort() != 443
-                            || !UrlPolicy.canTheme(getUrl())) return;
                     String raw;
                     try { raw = message.getData(); } catch (RuntimeException unsupportedMessage) { return; }
-                    if (raw == null || raw.length() > 2048) return;
-                    try {
-                        JSONObject value = new JSONObject(raw);
-                        if ("user".equals(value.optString("action"))) {
-                            String name = safeIdentity(value.optString("nickname")), id = safeIdentity(value.optString("id")), ip = safeIdentity(value.optString("ip"));
-                            if (!name.isEmpty() || !id.isEmpty() || !ip.isEmpty()) listener.onUserActions(name,id,ip);
-                        }
-                    } catch (Exception invalid) { }
+                    handleLocalAction(view, raw, origin, mainFrame);
                 });
         } catch (RuntimeException | LinkageError unavailable) { /* Native tools remain available in settings. */ }
+    }
+
+    /** Accept only bounded messages from this pane's current top-level DC document. */
+    private void handleLocalAction(WebView view, String raw, Uri origin, boolean mainFrame) {
+        if (destroyed || view != web || !mainFrame || origin == null || !"https".equals(origin.getScheme())
+                || !"m.dcinside.com".equals(origin.getHost()) || origin.getPort() != -1 && origin.getPort() != 443
+                || !UrlPolicy.canTheme(getUrl()) || raw == null || raw.length() > 2048) return;
+        try {
+            JSONObject value = new JSONObject(raw);
+            String action = value.optString("action");
+            if ("draft-editor".equals(action)) {
+                if (!browserPaused && !peerPageStale && !peerIdentityWaiting && UrlPolicy.canTheme(value.optString("url"))
+                        && documentKey(value.optString("url")).equals(documentKey(getUrl()))) offerDraftRestore(getUrl());
+                return;
+            }
+            if ("notification-state".equals(action)) {
+                Object count = value.opt("unread"), openValue = value.opt("open");
+                if (!loading && !browserPaused && foregroundAlertOwner && !peerPageStale && !peerIdentityWaiting
+                        && Objects.equals(value.optString("url"), getUrl()) && count instanceof Number && openValue instanceof Boolean) {
+                    double number = ((Number)count).doubleValue();
+                    if (number >= 0 && number <= 100 && number == (int)number) {
+                        boolean open = (Boolean)openValue;
+                        boolean changed = notificationInboxOpen != open;
+                        notificationInboxOpen = open;
+                        if (changed && notificationUnreadCount == (int)number) listener.onNotificationStateChanged();
+                        setNotificationUnreadCount((int)number);
+                    }
+                }
+                return;
+            }
+            if ("user".equals(action)) {
+                String name = safeIdentity(value.optString("nickname")), id = safeIdentity(value.optString("id")), ip = safeIdentity(value.optString("ip"));
+                if (!name.isEmpty() || !id.isEmpty() || !ip.isEmpty()) listener.onUserActions(name,id,ip);
+            }
+        } catch (Exception invalid) { }
     }
 
     private static String safeIdentity(String value) {
@@ -568,7 +598,7 @@ public final class BrowserController {
         @Override public void onPageStarted(WebView view, String url, Bitmap favicon) {
             if (!isLive(view)) return;
             cancelPageRequests(view);
-            if (view == web) { peerPageStale = false; }
+            if (view == web) { peerPageStale = false; notificationInboxOpen = false; }
             if (UrlPolicy.isAuthenticationPage(url)) {
                 cancelImageSelection();
                 if (!authNavigationPending) listener.onAuthenticationChanged();
@@ -991,20 +1021,46 @@ public final class BrowserController {
 
     private String foregroundAlertState() {
         boolean enabled = CommunityOptions.inAppAlertsEnabled(activity);
-        boolean active = foregroundAlertOwner && !browserPaused && !peerPageStale && !peerIdentityWaiting;
+        boolean active = foregroundAlertOwner && !loading && !browserPaused && !peerPageStale && !peerIdentityWaiting;
         return "window.__moaInAppAlertsEnabled=" + enabled + ";window.__moaForegroundActive=" + active + ";"
                 + "window.dispatchEvent(new CustomEvent('moa-in-app-alerts-state',{detail:{enabled:window.__moaInAppAlertsEnabled,active:window.__moaForegroundActive}}));";
     }
 
     private String commentSource() {
-        return "if(window.top===window){" + foregroundAlertState() + "\n" + commentNotificationScript
-                + ";window.MoaForegroundNotifications&&window.MoaForegroundNotifications.refresh();}";
+        return "if(window.top===window){" + foregroundAlertState() + "\n" + notificationHistoryScript + "\n" + commentNotificationScript
+                + ";window.MoaForegroundNotifications&&window.MoaForegroundNotifications.refresh();"
+                + "window.MoaNotificationInbox&&window.MoaNotificationInbox.refresh(true);}";
+    }
+
+    public int notificationUnreadCount() { return peerPageStale || peerIdentityWaiting ? 0 : notificationUnreadCount; }
+
+    private void setNotificationUnreadCount(int unread) {
+        if (notificationUnreadCount == unread) return;
+        notificationUnreadCount = unread;
+        listener.onNotificationStateChanged();
+    }
+
+    public boolean openNotificationInbox() {
+        if (destroyed || loading || browserPaused || !foregroundAlertOwner || peerPageStale || peerIdentityWaiting
+                || !UrlPolicy.canTheme(getUrl()) || notificationHistoryScript.isEmpty()) return false;
+        web.evaluateJavascript(commentSource() + ";window.MoaNotificationInbox&&window.MoaNotificationInbox.open();", null);
+        return true;
+    }
+
+    public boolean closeNotificationInbox() {
+        if (!notificationInboxOpen) return false;
+        notificationInboxOpen = false;
+        if (!destroyed && UrlPolicy.canTheme(getUrl()))
+            web.evaluateJavascript("window.MoaNotificationInbox&&window.MoaNotificationInbox.close();", null);
+        return true;
     }
 
     /** A split layout may resume both panes, but exactly one owns account popups. */
     public void setForegroundAlertOwner(boolean owner) {
         if (destroyed || foregroundAlertOwner == owner) return;
         foregroundAlertOwner = owner;
+        draftRestoreProbeGeneration++;
+        if (!owner) notificationInboxOpen = false;
         refreshDocumentScript();
         updateForegroundAlertState();
     }
@@ -1681,10 +1737,14 @@ public final class BrowserController {
         cancelNavigationGuard();
         invalidatePendingDownload("계정 정보가 변경되어 저장을 취소했습니다. 파일을 다시 선택해 주세요.");
         draftOwner = owner;
+        notificationInboxOpen = false;
+        setNotificationUnreadCount(0);
         accountGeneration++;
         restartCoveredPresentation();
         lastDraftPromptGeneration = -1;
         dismissDraftDialog();
+        if (!owner.isEmpty() && !destroyed && !browserPaused && !loading && UrlPolicy.canTheme(getUrl()))
+            web.evaluateJavascript("window.MoaNotificationInbox&&window.MoaNotificationInbox.refresh(true);", null);
         if (!owner.isEmpty() && !destroyed && !loading) offerDraftRestore(getUrl());
     }
 
@@ -1811,14 +1871,16 @@ public final class BrowserController {
         });
     }
     private void offerDraftRestore(String url) {
-        if (destroyed || peerPageStale || draftOwner.isEmpty() || !UrlPolicy.canTheme(url) || lastDraftPromptGeneration == documentGeneration
+        if (destroyed || browserPaused || peerPageStale || peerIdentityWaiting || draftOwner.isEmpty() || !UrlPolicy.canTheme(url) || lastDraftPromptGeneration == documentGeneration
                 || !documentKey(url).equals(documentKey(getUrl()))) return;
         PageContext context = new PageContext();
         String stored = drafts.getString(draftKey(url, context.owner), null);
         if (stored == null) return;
         try { new JSONArray(stored); } catch (Exception invalidDraft) { return; }
+        final long probe = ++draftRestoreProbeGeneration;
         context.source.evaluateJavascript(draftScript + ";!!(window.MoaDrafts&&window.MoaDrafts.canRestore(" + stored + "," + JSONObject.quote(context.url) + "))", exists -> {
-            if (!"true".equals(exists) || !context.isCurrent() || activity.isFinishing() || activity.isDestroyed()) return;
+            if (probe != draftRestoreProbeGeneration || !"true".equals(exists) || browserPaused || peerPageStale || peerIdentityWaiting
+                    || !context.isCurrent() || activity.isFinishing() || activity.isDestroyed()) return;
             lastDraftPromptGeneration = documentGeneration;
             dismissDraftDialog();
             draftDialog = new AlertDialog.Builder(activity).setTitle("작성 중인 내용 복원")
@@ -1866,6 +1928,8 @@ public final class BrowserController {
         if (!destroyed) {
             if (permissionImageSelection == null && grantedImageSelection == null) cancelImageSelection();
             browserPaused = true;
+            draftRestoreProbeGeneration++;
+            notificationInboxOpen = false;
             refreshDocumentScript();
             updateForegroundAlertState();
             swipeRefresh.finish();

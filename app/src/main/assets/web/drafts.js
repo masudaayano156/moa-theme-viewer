@@ -2,9 +2,41 @@
   'use strict';
   if (window.top !== window || location.protocol !== 'https:' || location.hostname !== 'm.dcinside.com') return;
   // Re-injection on a theme change must not turn the current draft into its own baseline.
-  if (window.MoaDrafts && window.MoaDrafts.version === 2) return;
+  if (window.MoaDrafts && window.MoaDrafts.version === 3) return;
   var selectors = ['#writeForm #subject', '#writeForm #textbox', '#comment_write #comment_memo'];
   var baseline = null, interacted = false, startedEarly = document.readyState === 'loading';
+  var originals = new WeakMap(), activeComment = null, requestedComment = '', keyboardFocus = null;
+  function textValue(element) {
+    return String(element.isContentEditable ? element.innerText : element.value || '');
+  }
+  function editorTarget(target) {
+    if (!target || !target.closest) return null;
+    return target.closest(selectors.join(','));
+  }
+  function originalFor(element, refresh) {
+    var context = fieldContext(element), original = originals.get(element);
+    if (!original || original.context !== context) {
+      if (original && activeComment && activeComment.element === element) { activeComment = null; requestedComment = ''; }
+      original = {context:context, text:textValue(element), authored:false};
+      originals.set(element, original);
+    } else if (refresh && !original.authored) original.text = textValue(element);
+    return original;
+  }
+  function activateComment(element, recheck) {
+    if (!element || element.id !== 'comment_memo' || !element.getClientRects().length) return;
+    var context = fieldContext(element);
+    activeComment = {element:element, context:context};
+    // Reading a post is not an invitation to restore its comment. Ask the native
+    // host to recheck only when the user actually enters this comment editor.
+    if (!recheck && requestedComment === context) return;
+    requestedComment = context;
+    setTimeout(function () {
+      if (!element.isConnected || fieldContext(element) !== context) return;
+      try {
+        if (window.MoaLocalActions) window.MoaLocalActions.postMessage(JSON.stringify({action:'draft-editor',url:location.href}));
+      } catch (_) { }
+    }, 0);
+  }
   function editorSnapshot() {
     var fields = [], present = false;
     selectors.forEach(function (selector) {
@@ -26,25 +58,68 @@
   }
   function establishBaseline() {
     if (!interacted) baseline = editorSnapshot();
+    selectors.forEach(function (selector) {
+      var element = document.querySelector(selector);
+      if (element) originalFor(element, true);
+    });
   }
   function trackInteraction(event) {
     var target = event.target;
+    // Site initialization and synthetic input events must not claim ownership of
+    // prefilled article text, a template, or the site's own comment state.
+    if (!event.isTrusted) return;
+    var editor = editorTarget(target);
+    if (event.type === 'keydown') {
+      keyboardFocus = event.key === 'Tab' ? event : null;
+      if (keyboardFocus) {
+        var navigation = keyboardFocus;
+        setTimeout(function () { if (keyboardFocus === navigation) keyboardFocus = null; }, 0);
+      } else if (editor) activateComment(editor);
+      return;
+    }
+    var tab = null;
+    // Consume keyboard authorization on the very next focus transition, even
+    // outside a form. A modal's trapped Tab must not authorize its later focus
+    // restoration into a comment editor.
+    if (event.type === 'focusin') { tab = keyboardFocus; keyboardFocus = null; }
+    if (event.type === 'pointerdown') keyboardFocus = null;
     if (!target || !target.closest || !target.closest('#writeForm, #comment_write') && target.type !== 'file') return;
     if (event.type === 'focusin') {
       if (!interacted && startedEarly) baseline = editorSnapshot();
+      if (editor) {
+        originalFor(editor, true);
+        if (tab) {
+          var context = fieldContext(editor);
+          setTimeout(function () {
+            if (!tab.defaultPrevented && document.activeElement === editor && editor.isConnected && fieldContext(editor) === context) activateComment(editor, true);
+          }, 0);
+        }
+      }
       return;
     }
+    if (event.type === 'pointerdown') {
+      if (editor) originalFor(editor, true);
+      return;
+    }
+    // A previous request may have raced an Activity pause. Explicit new entry
+    // can retry; native code suppresses only a prompt actually shown here.
+    if (event.type === 'click' && editor) { activateComment(editor, true); return; }
     if (event.type === 'click' && !target.closest('button,a,[role="button"],input[type="button"],input[type="submit"],input[type="file"]')) return;
     // Capture the settled original immediately before the user's first edit or
     // toolbar action. The site's late initialization is not an unsaved change.
     if (!interacted) {
       if (/^(beforeinput|paste|drop|click)$/.test(event.type)) baseline = editorSnapshot();
-      else if (!event.isTrusted && startedEarly) return;
       else if (!baseline) baseline = editorSnapshot();
     }
     interacted = true;
+    if (editor && /^(beforeinput|input|change|paste|drop)$/.test(event.type)) {
+      originalFor(editor, /^(beforeinput|paste|drop)$/.test(event.type)).authored = true;
+    } else if (event.type === 'click' && target.closest('#writeForm') && !target.closest('input[type="submit"],button[type="submit"]')) {
+      var body = document.querySelector('#writeForm #textbox');
+      if (body) originalFor(body, true).authored = true;
+    }
   }
-  ['focusin', 'beforeinput', 'input', 'change', 'paste', 'drop', 'click'].forEach(function (name) {
+  ['focusin', 'pointerdown', 'keydown', 'beforeinput', 'input', 'change', 'paste', 'drop', 'click'].forEach(function (name) {
     document.addEventListener(name, trackInteraction, true);
   });
   if (startedEarly) document.addEventListener('DOMContentLoaded', establishBaseline, {once:true});
@@ -68,6 +143,12 @@
     if (text.fields.length || current.files) return {state:'dirty'};
     var body = document.querySelector('#writeForm #textbox');
     if (body && body.querySelector('img,video,audio,iframe,canvas,object')) return {state:'dirty'};
+    // Older WebView providers may install this helper after the user could type.
+    // Do not call pre-existing text user-authored, but retain the navigation guard.
+    if (!startedEarly && !text.eligible && /^\/(?:write|modify)\//.test(location.pathname) && selectors.some(function (selector) {
+      var element = document.querySelector(selector);
+      return element && element.getClientRects().length && textValue(element).trim();
+    })) return {state:'unknown'};
     return {state:'clean'};
   }
   function pageKey(value) {
@@ -92,23 +173,27 @@
   }
   function capture(expected) {
     if (!onExpectedPage(expected)) return {eligible:false, fields:[]};
-    var present = false, fields = [];
+    var authored = false, fields = [];
     selectors.forEach(function (selector) {
       var element = document.querySelector(selector);
       if (!element || element.getAttribute('type') === 'password' || !element.getClientRects().length) return;
-      present = true;
-      var value = element.isContentEditable ? element.innerText : element.value;
-      if (typeof value === 'string' && value.trim()) fields.push({selector:selector,text:value.slice(0,100000),context:fieldContext(element)});
+      var original = originalFor(element, false), value = textValue(element);
+      if (!original.authored) return;
+      authored = true;
+      if (value.trim() && value !== original.text) fields.push({selector:selector,text:value.slice(0,100000),context:original.context});
     });
-    return {eligible:present, fields:fields};
+    // An untouched empty editor must preserve a pending saved draft. A user who
+    // clears their own text instead produces an eligible empty snapshot, removing it.
+    return {eligible:authored, fields:fields};
   }
   function restorable(fields, expected) {
     if (!onExpectedPage(expected) || !Array.isArray(fields)) return [];
     return fields.filter(function (field) {
-      if (!field || selectors.indexOf(field.selector) < 0 || typeof field.text !== 'string') return false;
+      if (!field || selectors.indexOf(field.selector) < 0 || typeof field.text !== 'string' || !field.text.trim()) return false;
       var element = document.querySelector(field.selector);
       if (!element || !element.getClientRects().length || element.getAttribute('type') === 'password') return false;
       if (field.context !== fieldContext(element)) return false;
+      if (element.id === 'comment_memo' && (!activeComment || activeComment.element !== element || activeComment.context !== field.context)) return false;
       var current = element.isContentEditable ? element.innerText : element.value;
       if (current && String(current).trim()) return false;
       return !element.isContentEditable || !element.querySelector('img,video,audio,iframe,canvas,object,input');
@@ -119,12 +204,15 @@
     if (ready.length && !interacted) { baseline = editorSnapshot(); interacted = true; }
     ready.forEach(function (field) {
       var element = document.querySelector(field.selector);
+      var original = originalFor(element, false);
+      original.text = textValue(element);
+      original.authored = true;
       if (element.isContentEditable) element.innerText = field.text;
       else element.value = field.text;
       element.dispatchEvent(new Event('input', {bubbles:true}));
     });
     return ready.length;
   }
-  window.MoaDrafts = {version:2,capture:capture,canRestore:function(fields,expected){return restorable(fields,expected).length>0;},restore:restore,
+  window.MoaDrafts = {version:3,capture:capture,canRestore:function(fields,expected){return restorable(fields,expected).length>0;},restore:restore,
     navigationState:navigationState};
 })();

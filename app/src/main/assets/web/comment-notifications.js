@@ -1,7 +1,8 @@
 /* Present DC's own foreground comment/reply popup in the selected theme.
  * The service's own notification function and single 90-second interval are
  * reused only while this pane is active. No custom HTTP, confirmation, comment
- * capture, account credentials or native notification messages are introduced.
+ * capture, account credentials or system notifications are introduced. The
+ * optional local inbox receives only eligible foreground popup records.
  */
 (function () {
   'use strict';
@@ -119,9 +120,12 @@
     }
     return true;
   }
-  function remember(key) {
+  function remember(item, saveHistory) {
+    var key = item.key;
     seen.add(key);
     if (seen.size > 100) seen.delete(seen.values().next().value);
+    if (saveHistory && window.MoaNotificationInbox && typeof window.MoaNotificationInbox.receive === 'function')
+      window.MoaNotificationInbox.receive(item);
   }
   function dismiss() {
     if (timer !== null) clearTimeout(timer); timer = null;
@@ -206,7 +210,7 @@
       wanted.add(node); sources.add(node);
       if (node.getAttribute(sourceMark) !== '1') node.setAttribute(sourceMark, '1');
       if (!displayed(node) || seen.has(item.key)) return;
-      remember(item.key);
+      remember(item, !baseline && nowActive);
       if (!baseline && nowActive) show(item);
     });
     sources.forEach(function (node) {
@@ -235,6 +239,6 @@
   window.addEventListener('hashchange', function () { scan(true); });
   window.addEventListener('pagehide', function () { gone = true; dismiss(); stopSitePoll(); observer.disconnect(); });
   window.addEventListener('pageshow', function () { gone = false; observe(); scan(true); });
-  window.MoaForegroundNotifications = Object.freeze({version:'1.0.0',refresh:refresh});
+  window.MoaForegroundNotifications = Object.freeze({version:'1.1.0',refresh:refresh});
   observe(); scan(false);
 })();

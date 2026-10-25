@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   if (window.top !== window) return;
-  if (window.MoaPageCleanup && window.MoaPageCleanup.version === '1.0.4') {
+  if (window.MoaPageCleanup && window.MoaPageCleanup.version === '1.0.5') {
     window.MoaPageCleanup.apply();
     return;
   }
@@ -80,6 +80,29 @@
        /^[0-9]{1,20}$/.test(node.getAttribute('data-ad-slot') || ''));
   }
 
+  function commentPromotion(node) {
+    // Public common.js reple_dori() inserts this dedicated row between real
+    // comment_cnt_* rows. The comment list itself remains a protected region.
+    if (!node || node.nodeType !== 1 || node.ownerDocument !== document ||
+        !node.isConnected || !node.matches('#comment_box .all-comment-lst > li.comment') || node.id ||
+        node.closest(editorSelector + ',.thum-txt,.thum-txtin,.gallview-tit-box,' +
+          '#auto_picture_area,.gall-detail-lnktb,.moa-entry') ||
+        node.querySelector(editorSelector + ',.all-comment-lst')) return false;
+    var list = node.parentElement;
+    if (list.parentElement.closest('.all-comment-lst')) return false;
+    var nick = node.querySelector(':scope > a.nick');
+    var box = node.querySelector(':scope > div.dori-box');
+    if (!nick || !box || !/^reple_dori_txt_[0-9]+$/.test(box.id) ||
+        nick.getAttribute('href') !== 'javascript:;' ||
+        !nick.querySelector(':scope > .sp-icon.dori-icon') ||
+        !nick.querySelector(':scope > .dori-icon-txt') ||
+        nick.querySelector(':scope > .dori-icon-txt').textContent.trim() !== '댓글돌이') return false;
+    // Refuse mixed rows if the source later adds actual comment content here.
+    return Array.prototype.every.call(node.childNodes, function (child) {
+      return inert(child) || child === nick || child === box;
+    });
+  }
+
   function discoveryModule(node) {
     if (!node || node.nodeType !== 1 || node.ownerDocument !== document ||
         !node.isConnected || !node.matches('.view-btm-con') ||
@@ -120,6 +143,7 @@
     return kind === 'external' ? externalSection(node) :
       kind === 'discovery' ? discoveryModule(node) :
       kind === 'discovery-wrapper' ? discoverySection(node) :
+      kind === 'comment-promotion' ? commentPromotion(node) :
       kind === 'embedded-ad' ? embeddedAd(node) : safe(node);
   }
 
@@ -226,6 +250,9 @@
       document.querySelectorAll(embeddedAdSelector).forEach(function (node) {
         hide(node, 'embedded-ad');
       });
+      document.querySelectorAll('#comment_box .all-comment-lst > li.comment').forEach(function (node) {
+        hide(node, 'comment-promotion');
+      });
       document.querySelectorAll('#notice_list.detail-top-lst > li').forEach(function (row) {
         if (row.querySelector('.detail-top-lnk > a > .ntc-line-ad')) hide(row);
       });
@@ -308,6 +335,6 @@
     if (document.documentElement) document.documentElement.removeAttribute(rootMarker);
   }
 
-  window.MoaPageCleanup = Object.freeze({ version: '1.0.4', apply: apply, disable: disable });
+  window.MoaPageCleanup = Object.freeze({ version: '1.0.5', apply: apply, disable: disable });
   apply();
 })();

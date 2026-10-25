@@ -133,6 +133,30 @@ html[data-moa-theme] .all-comment-lst > li.comment .txt { color:var(--moa-ink); 
 html[data-moa-theme] .all-comment-lst .date { color:var(--moa-muted); }
 html[data-moa-theme] .all-comment-lst > li.reply { margin-left:18px; border-left:3px solid var(--moa-line); }
 
+/* Mobile double DCcon starts as adjacent written_dccon media. The source then
+   wraps each image in dccon-view-box and toggles .double above 350px. Both
+   source shapes must share the available avatar/reply gutter at every width.
+   Single DCcon and authored article layouts retain their original sizing. */
+html[data-moa-theme] .all-comment-lst .txt:has(> :is(.written_dccon,.dccon-view-box):first-child + :is(.written_dccon,.dccon-view-box):last-child, > .mention:first-child + :is(.written_dccon,.dccon-view-box) + :is(.written_dccon,.dccon-view-box):last-child) {
+  display:grid; grid-template-columns:repeat(2,minmax(0,max-content)); align-items:start;
+  justify-content:start; gap:0; min-width:0; max-width:100%;
+}
+html[data-moa-theme] .all-comment-lst .txt:has(> :is(.written_dccon,.dccon-view-box):first-child + :is(.written_dccon,.dccon-view-box):last-child, > .mention:first-child + :is(.written_dccon,.dccon-view-box) + :is(.written_dccon,.dccon-view-box):last-child) :is(img,video).written_dccon {
+  display:block; float:none; margin:0 !important; width:100px !important; height:auto !important;
+  min-width:0; max-width:100%; aspect-ratio:1; object-fit:contain;
+}
+html[data-moa-theme] .all-comment-lst .txt:has(> :is(.written_dccon,.dccon-view-box):first-child + :is(.written_dccon,.dccon-view-box):last-child, > .mention:first-child + :is(.written_dccon,.dccon-view-box) + :is(.written_dccon,.dccon-view-box):last-child) :is(img,video).written_dccon.bigdccon { width:150px !important; }
+html[data-moa-theme] .all-comment-lst .txt:has(> :is(.written_dccon,.dccon-view-box):first-child + :is(.written_dccon,.dccon-view-box):last-child, > .mention:first-child + :is(.written_dccon,.dccon-view-box) + :is(.written_dccon,.dccon-view-box):last-child) > .mention { grid-column:1 / -1; }
+html[data-moa-theme] .all-comment-lst .txt:has(> :is(.written_dccon,.dccon-view-box):first-child + :is(.written_dccon,.dccon-view-box):last-child, > .mention:first-child + :is(.written_dccon,.dccon-view-box) + :is(.written_dccon,.dccon-view-box):last-child) > .dccon-view-box { min-width:0; max-width:100%; overflow:visible; }
+html[data-moa-theme] .all-comment-lst .txt:has(> :is(.written_dccon,.dccon-view-box):first-child + :is(.written_dccon,.dccon-view-box):last-child, > .mention:first-child + :is(.written_dccon,.dccon-view-box) + :is(.written_dccon,.dccon-view-box):last-child) .dccon-hover {
+  display:flex; flex-wrap:wrap; gap:4px; float:none; position:static;
+  width:auto; max-width:100%; height:auto; margin-top:5px;
+}
+html[data-moa-theme] .all-comment-lst .txt:has(> :is(.written_dccon,.dccon-view-box):first-child + :is(.written_dccon,.dccon-view-box):last-child, > .mention:first-child + :is(.written_dccon,.dccon-view-box) + :is(.written_dccon,.dccon-view-box):last-child) .dccon-hover .btn-dccon-round {
+  position:static; box-sizing:border-box; width:auto; max-width:100%; margin:0;
+  padding:7px 4px; white-space:normal; overflow-wrap:anywhere;
+}
+
 /* The native site owns captcha, editor serialization, attachment and submit. */
 html[data-moa-theme] .wrt-box,
 html[data-moa-theme] .wrt-form-box,

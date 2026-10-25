@@ -27,6 +27,13 @@ final class UiGlyphView extends View {
         canvas.scale(getWidth() / 24f, getHeight() / 24f);
         Path path = new Path();
         switch (kind) {
+            case "bell":
+                path.moveTo(5, 17); path.lineTo(7, 14); path.lineTo(7, 9);
+                path.cubicTo(7, 2, 17, 2, 17, 9); path.lineTo(17, 14); path.lineTo(19, 17); path.close();
+                canvas.drawPath(path, paint);
+                canvas.drawArc(new RectF(10, 17, 14, 22), 0, 180, false, paint);
+                canvas.drawLine(12, 2, 12, 4, paint);
+                break;
             case "x-mark":
                 paint.setStyle(Paint.Style.FILL);
                 path.moveTo(3, 2); path.lineTo(8, 2); path.lineTo(14, 10);

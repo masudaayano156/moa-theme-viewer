@@ -63,6 +63,7 @@ public final class MainActivity extends Activity implements BrowserController.Li
     private TextView errorText;
     private LinearLayout bottomNavigation;
     private View composeFloatingAction;
+    private FrameLayout notificationButton;
     private boolean browserVisible;
     private boolean loading;
     private String latestError;
@@ -265,6 +266,7 @@ public final class MainActivity extends Activity implements BrowserController.Li
             @Override public void onUserActions(String nickname, String id, String ip) {
                 if (owner[0] == detailBrowser) MainActivity.this.onUserActions(nickname, id, ip);
             }
+            @Override public void onNotificationStateChanged() { MainActivity.this.onNotificationStateChanged(); }
             @Override public void onAuthenticationChanged() { forwardAuthentication(owner[0], true); }
             @Override public void onAuthenticationSettled() { forwardAuthentication(owner[0], false); }
         });
@@ -342,13 +344,16 @@ public final class MainActivity extends Activity implements BrowserController.Li
             search.setMinHeight(dp(48));
             search.setOnClickListener(v -> showExplore());
             searchBar.addView(search, new LinearLayout.LayoutParams(0, -2, 1));
+            searchBar.addView(notificationAction(), new LinearLayout.LayoutParams(dp(48), dp(48)));
             FrameLayout account = headerAction("account", theme.displayName + " 홈", v -> showHome());
             searchBar.addView(account, new LinearLayout.LayoutParams(dp(48), dp(48)));
             header.addView(searchBar, new LinearLayout.LayoutParams(-1, -2));
         } else if (theme == ThemeSpec.POST) {
             FrameLayout home = headerAction("account", "메뉴", this::showMenu);
             home.setBackground(round(colors.tint, 24, Color.TRANSPARENT));
-            header.addView(home, new LinearLayout.LayoutParams(dp(48), dp(48)));
+            FrameLayout leading = new FrameLayout(this);
+            leading.addView(home, new FrameLayout.LayoutParams(dp(48), dp(48), Gravity.START | Gravity.CENTER_VERTICAL));
+            header.addView(leading, new LinearLayout.LayoutParams(dp(96), dp(48)));
             FrameLayout center = new FrameLayout(this);
             center.setTag("post-centered-mark");
             UiGlyphView mark = new UiGlyphView(this, "x-mark", colors.text);
@@ -357,6 +362,7 @@ public final class MainActivity extends Activity implements BrowserController.Li
             center.setOnClickListener(v -> showHome());
             center.addView(mark, new FrameLayout.LayoutParams(dp(30), dp(30), Gravity.CENTER));
             header.addView(center, new LinearLayout.LayoutParams(0, dp(48), 1));
+            header.addView(notificationAction(), new LinearLayout.LayoutParams(dp(48), dp(48)));
             header.addView(headerAction("settings", "설정", v -> showSettings()), new LinearLayout.LayoutParams(dp(48), dp(48)));
         } else {
             TextView title = text(theme == ThemeSpec.PHOTOGRAM ? "Instagram" : theme == ThemeSpec.CAFE ? "Café" : theme.displayName,
@@ -374,6 +380,7 @@ public final class MainActivity extends Activity implements BrowserController.Li
             title.setContentDescription(theme.displayName + " 홈");
             title.setOnClickListener(v -> showHome());
             header.addView(title, new LinearLayout.LayoutParams(0, -2, 1));
+            header.addView(notificationAction(), new LinearLayout.LayoutParams(dp(48), dp(48)));
             if (theme == ThemeSpec.CAFE) header.addView(headerAction("plus", "글쓰기", v -> compose()), new LinearLayout.LayoutParams(dp(48), dp(48)));
             header.addView(headerAction(theme == ThemeSpec.PHOTOGRAM ? "add" : "search", theme == ThemeSpec.PHOTOGRAM ? "글쓰기" : theme.searchHint, v -> { if (theme == ThemeSpec.PHOTOGRAM) compose(); else showExplore(); }), new LinearLayout.LayoutParams(dp(48), dp(48)));
             header.addView(headerAction("menu", "메뉴", this::showMenu), new LinearLayout.LayoutParams(dp(48), dp(48)));
@@ -390,6 +397,49 @@ public final class MainActivity extends Activity implements BrowserController.Li
                 ? (CommunityOptions.accentIndex(this) >= 0 ? colors.onAccent : Color.WHITE) : colors.text);
         action.addView(icon, new FrameLayout.LayoutParams(dp(24), dp(24), Gravity.CENTER));
         return action;
+    }
+
+    private FrameLayout notificationAction() {
+        notificationButton = headerAction("bell", "알림", v -> showNotificationInbox());
+        notificationButton.setTag("notification-inbox-button");
+        updateNotificationBadge();
+        return notificationButton;
+    }
+
+    @Override public void onNotificationStateChanged() {
+        runOnUiThread(this::updateNotificationBadge);
+    }
+
+    private void updateNotificationBadge() {
+        if (notificationButton == null) return;
+        BrowserController selected = currentBrowser();
+        int count = selected == null ? 0 : selected.notificationUnreadCount();
+        boolean unread = count > 0;
+        notificationButton.setSelected(unread);
+        notificationButton.setContentDescription(unread ? "알림, 읽지 않은 알림 " + count + "개" : "알림");
+        notificationButton.removeAllViews();
+        int tint = theme == ThemeSpec.SHEET ? CommunityOptions.accentIndex(this) >= 0 ? colors.onAccent : Color.WHITE
+                : unread ? colors.accent : colors.mutedText;
+        notificationButton.addView(new UiGlyphView(this, "bell", tint), new FrameLayout.LayoutParams(dp(24), dp(24), Gravity.CENTER));
+        if (unread) {
+            TextView badge = text(count > 99 ? "99+" : Integer.toString(count), 9, colors.onAccent, true);
+            badge.setTag("notification-unread-badge"); badge.setGravity(Gravity.CENTER);
+            badge.setMinWidth(dp(17)); badge.setPadding(dp(3), 0, dp(3), 0);
+            badge.setBackground(round(colors.accent, 9, theme == ThemeSpec.SHEET ? colors.onAccent : colors.surface));
+            badge.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+            FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(-2, dp(17), Gravity.TOP | Gravity.END);
+            params.topMargin = dp(3); params.rightMargin = dp(1);
+            notificationButton.addView(badge, params);
+        }
+    }
+
+    private void showNotificationInbox() {
+        BrowserController target = currentBrowser();
+        if (target == null || !UrlPolicy.canTheme(target.getUrl())) {
+            toast("게시판을 한 번 열면 계정의 알림을 확인할 수 있어요."); return;
+        }
+        if (!browserVisible) setBrowserVisible(true);
+        if (!target.openNotificationInbox()) toast("페이지를 불러온 뒤 알림을 다시 열어 주세요.");
     }
 
     private View buildNavigation() {
@@ -1402,7 +1452,7 @@ public final class MainActivity extends Activity implements BrowserController.Li
             refreshCommunityOptions();
         });
         panel.addView(enabled);
-        TextView description = text("앱을 열어 사용하는 동안 디시 웹사이트에서 받은 댓글·답글 알림을 현재 테마의 팝업으로 보여줘요. 디시 웹사이트에서 로그인이 필요하며, 앱을 닫거나 다른 앱으로 이동하면 알림을 확인하지 않아요.", 13, colors.mutedText, false);
+        TextView description = text("앱을 열어 사용하는 동안 디시 웹에서 받은 댓글·답글 알림을 테마 팝업으로 보여줘요. 상단 알림 버튼에서 받은 기록을 확인하고 해당 댓글로 이동할 수 있어요. 로그인한 계정별로 기기에 보관하며, 앱을 닫거나 다른 앱으로 이동하면 새 알림을 확인하지 않아요.", 13, colors.mutedText, false);
         description.setPadding(0, dp(12), 0, dp(12));
         description.setLineSpacing(dp(3), 1f);
         panel.addView(description);
@@ -1734,6 +1784,7 @@ public final class MainActivity extends Activity implements BrowserController.Li
     }
 
     private void updateHeader() {
+        updateNotificationBadge();
         // Community titles belong to the compact web page header. Native
         // chrome retains only the selected app identity and real actions.
         setTitle(theme.displayName);
@@ -1771,6 +1822,7 @@ public final class MainActivity extends Activity implements BrowserController.Li
     }
 
     private void navigateBack() {
+        if (browserVisible && currentBrowser().closeNotificationInbox()) return;
         if (browserVisible) {
             if (detailOpen && detailBrowser != null) {
                 BrowserController detail = detailBrowser;

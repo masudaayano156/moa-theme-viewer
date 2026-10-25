@@ -7,7 +7,7 @@
 (function () {
   'use strict';
   if (window.top !== window) return;
-  if (window.MoaSkin && window.MoaSkin.version === '3.0.7') return;
+  if (window.MoaSkin && window.MoaSkin.version === '3.0.8') return;
   if (window.MoaSkin && typeof window.MoaSkin.disable === 'function') window.MoaSkin.disable();
 
   var themes = {
@@ -248,6 +248,80 @@
     return link;
   }
 
+  var authorMarkerSelector = '.sp-nick,.sp_hitnickcon';
+  function entryDate(value) {
+    return /^(?:(?:\d{2,4}[./-])?\d{1,2}[./-]\d{1,2}|\d{1,2}:\d{2})(?:\s|$)/.test(value);
+  }
+  function displayedMetadata(element, original) {
+    for (var parent = element; parent && parent !== original; parent = parent.parentElement) {
+      if (parent.matches('.blockInfo,[hidden],[aria-hidden="true"]') || parent.style.display === 'none' || parent.style.visibility === 'hidden') return false;
+    }
+    return true;
+  }
+  function readAuthor(original, info, parts) {
+    // The list below an article omits list-nick, even though the standalone
+    // board list uses it. Read only this row's displayed metadata; blockInfo's
+    // hidden account IDs and the article/comment author are never fallbacks.
+    var authorNode = info && Array.from(info.querySelectorAll('.list-nick,.gall-writer,.writer,.nickname,.nick')).find(function (candidate) {
+      return displayedMetadata(candidate,original);
+    });
+    if (!authorNode) {
+      var marker = info && Array.from(info.querySelectorAll(authorMarkerSelector)).find(function (candidate) {
+        return displayedMetadata(candidate,original);
+      });
+      if (marker) authorNode = parts.find(function (part) { return part.contains(marker); });
+    }
+    if (!authorNode && parts.length >= 4 && entryDate(words(parts[2])) &&
+        parts.slice(3).some(function (part) { return /^(?:조회|추천)\s/.test(words(part)); })) {
+      // Native mobile anonymous rows have category, author, time, and counts.
+      // Require that complete structure instead of mistaking a category or
+      // count for an author when a source row has incomplete metadata.
+      authorNode = parts[1];
+    }
+    if (!authorNode) {
+      authorNode = Array.from(original.querySelectorAll('.list-nick,.gall-writer')).find(function (candidate) {
+        return !candidate.closest('.subjectin') && displayedMetadata(candidate,original);
+      }) || null;
+    }
+    if (authorNode && !displayedMetadata(authorNode,original)) authorNode = null;
+    var markers = authorNode ? Array.from(authorNode.querySelectorAll(authorMarkerSelector)).filter(function (marker) {
+      return displayedMetadata(marker,original);
+    }) : [];
+    var name = '';
+    if (authorNode) {
+      var copy = authorNode.cloneNode(true);
+      copy.querySelectorAll(authorMarkerSelector + ',.blockInfo,[hidden],script,style').forEach(function (child) { child.remove(); });
+      copy.querySelectorAll('[aria-hidden="true"],[style]').forEach(function (child) {
+        if (child.getAttribute('aria-hidden') === 'true' || child.style.display === 'none' || child.style.visibility === 'hidden') child.remove();
+      });
+      name = words(copy);
+    }
+    // Project only public marker appearance, never IDs, inline handlers, or
+    // private dataset fields from the source writer/account node.
+    var markerData = markers.map(function (marker) {
+      return { className: marker.className, label: words(marker) };
+    });
+    var target = authorNode && (authorNode.matches('a,[onclick],[role="button"]') ? authorNode : authorNode.querySelector('a,[onclick],[role="button"]'));
+    return { node: authorNode, name: name, markers: markerData, target: target };
+  }
+
+  function entryAuthor(data, className) {
+    var name = node('span',className,data.author);
+    data.authorMarkers.forEach(function (marker) {
+      name.appendChild(node('span',marker.className,marker.label));
+    });
+    // Preserve writer/profile interaction on layouts that supply one, including
+    // mail rows whose surrounding main link delegates to the source title.
+    var target = data.authorTarget;
+    if (target) {
+      name.addEventListener('click',function (event) {
+        if (!target.isConnected) return;
+        event.preventDefault(); event.stopPropagation(); target.click();
+      });
+    }
+    return name;
+  }
+
   function readEntry(row, index) {
     var original = Array.from(row.children).find(function (child) { return child.classList.contains('gall-detail-lnktb'); });
     if (!original || row.matches(adSelector) || row.querySelector(adSelector)) return null;
@@ -256,10 +330,9 @@
     if (!titleLink || !titleNode) return null;
     var info = original.querySelector('.ginfo');
     var parts = info ? Array.from(info.children) : [];
-    var authorNode = original.querySelector('.list-nick');
-    var author = words(authorNode) || '작성자';
-    var date = parts.map(words).find(function (part) { return /^(?:\d{1,4}[.:/-])?\d{1,2}[.:/-]\d{1,2}(?:\s|$)/.test(part); }) || '';
-    var category = parts.length && parts[0] !== authorNode ? words(parts[0]) : '';
+    var writer = readAuthor(original,info,parts);
+    var date = parts.map(words).find(entryDate) || '';
+    var category = parts.length && !(writer.node && parts[0].contains(writer.node)) ? words(parts[0]) : '';
     if (/^(조회|추천)|^\d/.test(category)) category = '';
     var count = function (prefix) {
       var part = parts.map(words).find(function (value) { return value.startsWith(prefix); });
@@ -277,7 +350,7 @@
     }
     var commentLink = original.querySelector('a.rt');
     var comments = words(commentLink && commentLink.querySelector('.ct'));
-    return {original:original,titleLink:titleLink,title:words(titleNode),author:author,date:date,category:category,
+    return {original:original,titleLink:titleLink,title:words(titleNode),author:writer.name,authorNode:writer.node,authorTarget:writer.target,authorMarkers:writer.markers,date:date,category:category,
       views:count('조회'),recommend:count('추천'),commentLink:commentLink,comments:comments,
       imageSource:imageSource,imageUrl:imageUrl,imageAlt:imageSource ? imageSource.alt : '',index:index};
   }
@@ -285,7 +358,7 @@
   function entryParts(data) {
     var avatar = node('span', 'moa-entry-avatar', Array.from(data.author)[0] || '·');
     avatar.setAttribute('aria-hidden','true');
-    var name = node('span','moa-entry-name',data.author);
+    var name = entryAuthor(data,'moa-entry-name');
     var date = node('time','moa-entry-date',data.date);
     var category = node('span','moa-entry-category',data.category);
     var title = sourceLink('moa-entry-title',data.titleLink,data.title);
@@ -322,7 +395,7 @@
     },
     photogram: function (d,p) {
       var profile = append(region('moa-entry-header'),p.avatar,p.name,p.date);
-      var caption = append(region('moa-entry-caption'),node('span','moa-entry-caption-author',d.author),p.title,append(region('moa-entry-meta'),p.category));
+      var caption = append(region('moa-entry-caption'),entryAuthor(d,'moa-entry-caption-author'),p.title,append(region('moa-entry-meta'),p.category));
       return append(entryRoot('moa-photo-entry',d),profile,p.media,caption,append(region('moa-entry-actions'),p.recommend,p.comments,p.views));
     },
     cafe: function (d,p) {
@@ -409,15 +482,16 @@
         return;
       }
       index++;
-      var signature = JSON.stringify([current.theme,data.title,data.author,data.date,data.category,data.views,data.recommend,data.comments,data.imageUrl,data.imageAlt,data.index,
+      var signature = JSON.stringify([current.theme,data.title,data.author,data.authorMarkers,data.date,data.category,data.views,data.recommend,data.comments,data.imageUrl,data.imageAlt,data.index,
         data.titleLink.getAttribute('href'),data.commentLink && data.commentLink.getAttribute('href')]);
       if (previous && previous.signature === signature && previous.original === data.original
-          && previous.titleLink === data.titleLink && previous.commentLink === data.commentLink) return;
+          && previous.titleLink === data.titleLink && previous.commentLink === data.commentLink && previous.authorNode === data.authorNode
+          && previous.authorTarget === data.authorTarget) return;
       var wasSelected = previous && previous.entry.querySelector('[data-moa-cell-selected="true"]');
       var previousScroll = row.scrollLeft;
       if (previous) restoreRow(row,previous);
       var entry = entryTemplates[current.theme](data,entryParts(data));
-      var state = {entry:entry,original:data.original,titleLink:data.titleLink,commentLink:data.commentLink,signature:signature,
+      var state = {entry:entry,original:data.original,titleLink:data.titleLink,commentLink:data.commentLink,authorNode:data.authorNode,authorTarget:data.authorTarget,signature:signature,
         rowAttribute:row.getAttribute('data-moa-row'),rendererAttribute:row.getAttribute('data-moa-renderer'),sourceAttribute:data.original.getAttribute('data-moa-list-source')};
       row.setAttribute('data-moa-row','true'); row.setAttribute('data-moa-renderer','3');
       data.original.setAttribute('data-moa-list-source','true'); row.appendChild(entry); rows.set(row,state);
@@ -692,7 +766,7 @@
   }
 
   window.MoaSkin = Object.freeze({
-    version: '3.0.7', apply: apply, disable: disable,
+    version: '3.0.8', apply: apply, disable: disable,
     presentationState: function () {
       var currentRoot = document.documentElement;
       var style = document.getElementById('moa-skin-style');
