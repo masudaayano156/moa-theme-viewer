@@ -2,6 +2,8 @@
 
 **[Android APK 다운로드 · 0.9.2 미리보기](https://github.com/masudaayano156/moa-theme-viewer/releases/download/v0.9.2/moa-0.9.2.apk)** · [릴리스와 체크섬](https://github.com/masudaayano156/moa-theme-viewer/releases/tag/v0.9.2)
 
+**버전별 변경점:** [전체 변경 이력](CHANGELOG.md) · [0.9.1](https://github.com/masudaayano156/moa-theme-viewer/releases/tag/v0.9.1) · [0.9.2](https://github.com/masudaayano156/moa-theme-viewer/releases/tag/v0.9.2)
+
 Android 8.0 이상. 기존 0.3.2 이상은 삭제하지 않고 업데이트 설치할 수 있습니다. 이름·테마·아이콘은 유지합니다.
 
 연결한 웹 커뮤니티의 화면 배치를 선택한 스타일로 바꾸는 비공식 Android 앱입니다. 연결 서비스는 디시인사이드이며, 원본 글·댓글·작성 기능을 이용합니다. 디시인사이드 및 화면 구성에 참고한 서비스의 공식 앱이나 제휴 앱이 아닙니다.

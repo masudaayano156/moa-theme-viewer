@@ -22,6 +22,7 @@
 !/.gitattributes
 !/.gitignore
 !/README.md
+!/CHANGELOG.md
 !/THIRD_PARTY_NOTICES.md
 !/app/build.gradle
 !/app/src/main/AndroidManifest.xml
