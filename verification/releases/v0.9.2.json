@@ -49,5 +49,20 @@
     "scope": "All packaged entry content and release identity; raw ZIP container differs. Not original build provenance.",
     "bit_exact_reproduction": false
   },
-  "foreground_notification_inbox": true
+  "foreground_notification_inbox": true,
+  "ai_review_bundle": {
+    "filename": "moa-0.9.2-ai-security-review.txt",
+    "format": "UTF-8 plain text",
+    "bytes": 1025238,
+    "sha256": "3403c681298f2284840fb7d14b4ae765b738e617c540d35cf9e983266d2be52b",
+    "url": "https://github.com/masudaayano156/moa-theme-viewer/releases/download/v0.9.2/moa-0.9.2-ai-security-review.txt",
+    "code_commit": "bb006ed7f30ed48e50f86606fc679e14112c6f8f",
+    "evidence_commit": "c4ed68393a69baef54b26587e7a06818821348d1",
+    "first_party_app_files": 68,
+    "embedded_sections": 106,
+    "decoded_apk_manifest_included": true,
+    "third_party_full_sources_included": false,
+    "full_dex_decompilation_included": false,
+    "scope": "AI-readable review aid, not security certification; fixed public source and separately identified public evidence, no private user data or credentials."
+  }
 }
