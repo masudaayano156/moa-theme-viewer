@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "checked_at_utc": "2026-10-25T09:40:56.286824+00:00",
+  "checked_at_utc": "2026-10-25T09:54:40.551919+00:00",
   "database": "OSV",
   "endpoint": "https://api.osv.dev/v1/querybatch",
   "inventory_sha256": "4298379678df7d7146caa0f7f92fe393425fd2306392c301a36a6545b62f71da",
