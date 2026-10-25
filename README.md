@@ -12,7 +12,7 @@ Android 8.0 이상. 기존 0.3.2 이상은 삭제하지 않고 업데이트 설�
 
 0.9.1의 [VirusTotal 검사](https://www.virustotal.com/gui/file/c06b27d0f8f806d681640462f2fe5f8269c1c79bd37091dd3cecacc581988cce)는 **66개 엔진 미탐지, 8개 형식 미지원, 1개 시간 초과**입니다(2026-10-25 18:45:17 KST). [검사 시점 기록](verification/reports/v0.9.1-virustotal.json)을 함께 공개합니다. 미지원·시간 초과는 미탐지 판정에 포함하지 않으며 무악성 인증이 아닙니다.
 
-**0.9.0 보관 자료:** [소스·권한·검사 결과를 모은 텍스트 파일 1개](https://github.com/masudaayano156/moa-theme-viewer/releases/download/v0.9.0/moa-0.9.0-ai-security-review.txt)를 제공합니다(약 0.91MB, UTF-8). AI에 이 파일을 첨부해 검토를 요청할 수 있습니다. 앱 설치에는 APK만 필요합니다.
+**AI 보안 검토용:** [0.9.1 소스·권한·검사 결과를 모은 텍스트 파일 1개](https://github.com/masudaayano156/moa-theme-viewer/releases/download/v0.9.1/moa-0.9.1-ai-security-review.txt)를 제공합니다(약 0.98MB, UTF-8). AI에 이 파일을 첨부해 검토를 요청할 수 있습니다. 앱 설치에는 APK만 필요합니다.
 
 배포 APK의 SHA-256·서명 인증서와 실제 검사 범위를 구분해 제공합니다. 이전 버전의 백신 결과를 새 APK의 검사 결과로 표시하지 않습니다. 키·사용자 자료는 공개하지 않습니다.
 
